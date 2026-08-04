@@ -117,7 +117,7 @@ class Game {
 
     const mentions = this.mentionsIn(text).filter(m => m.id !== userId);
     this.chat.push({
-      channel: ch, from: userId, name: p.name, seat: p.seat, text, ts: t,
+      channel: ch, from: userId, name: p.name, seat: p.seat, text, ts: t, day: this.day,
       mentions: mentions.map(m => m.id),
       mentionNames: mentions.map(m => m.name)
     });

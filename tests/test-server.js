@@ -53,6 +53,9 @@ async function api(pathname, opts = {}) {
 
     const created = await api('/api/rooms/create', { token: host.token, body: { size: 8, autoStart: false } });
     const roomId = created.json.room.id;
+    /* В комнату теперь пускают только по ссылке-приглашению: общего списка
+       столов нет, четырёхзначного кода нет. */
+    const invite = created.json.room.invite;
     ok(!!roomId, 'комната создана');
     ok(created.json.room.members.length === 1, 'хозяин сразу в комнате');
 
@@ -66,7 +69,7 @@ async function api(pathname, opts = {}) {
     const strangerInvite = await api('/api/rooms/invite', { token: guests[1].token, body: { roomId, userId: guests[2].id } });
     ok(strangerInvite.status === 403, 'приглашать может только хозяин');
 
-    for (const g of guests) await api('/api/rooms/join', { token: g.token, body: { roomId } });
+    for (const g of guests) await api('/api/rooms/join', { token: g.token, body: { invite } });
     const st = await api('/api/rooms/state', { token: host.token, body: null });
     ok(st.json.room.members.length === 8, 'в комнате 8 игроков');
     ok(st.json.room.canStart === true, 'кнопка старта активна');
@@ -138,7 +141,7 @@ async function api(pathname, opts = {}) {
     const big = [];
     for (let i = 0; i < 20; i++) big.push(await mk('Смена' + stamp.slice(-3) + i));
     const bigRoom = (await api('/api/rooms/create', { token: big[0].token, body: { size: 20, autoStart: true, scenarioId: 'shift' } })).json.room;
-    for (let i = 1; i < 20; i++) await api('/api/rooms/join', { token: big[i].token, body: { roomId: bigRoom.id } });
+    for (let i = 1; i < 20; i++) await api('/api/rooms/join', { token: big[i].token, body: { invite: bigRoom.invite } });
     await sleep(1500);
     const bigState = (await api('/api/rooms/state', { token: big[0].token })).json.room;
     ok(bigState.started === true, 'автостарт при 20 игроках сработал');
@@ -146,7 +149,7 @@ async function api(pathname, opts = {}) {
     ok(bigState.game.scenario.id === 'shift', 'выбран сюжет «Ночная смена»');
     ok(bigState.game.compositionLabel.includes('11 мирных'), 'состав на 20: ' + bigState.game.compositionLabel);
 
-    const c21 = await api('/api/rooms/join', { token: guests[0].token, body: { roomId: bigRoom.id } });
+    const c21 = await api('/api/rooms/join', { token: guests[0].token, body: { invite: bigRoom.invite } });
     ok(c21.status === 409, '21-го игрока в идущую партию не пускает');
 
     /* --- SSE --- */

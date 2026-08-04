@@ -112,7 +112,38 @@ PAGES.forEach(f => {
     (naked.length ? ' (' + naked.length + ' без подписи)' : ''));
 });
 
-/* ---- 11. сцена общая для обоих режимов ---- */
+/* ---- 11. партия не может замолчать на середине ----
+   Дневной цикл зовёт UI.armInterject: если функции нет, на первом же ходе
+   бота вылетает TypeError и партия молча встаёт. Проверяем, что она
+   объявлена, экспортирована и что отказы промисов больше не глушатся. */
+const bots = read('public/bots.html');
+ok(bots.indexOf('function armInterject') > 0, 'реплика вне очереди действительно реализована');
+ok(bots.indexOf('function disarmInterject') > 0, 'снятие реплики вне очереди реализовано');
+ok(/return \{[^}]*armInterject/s.test(bots) || bots.indexOf('armInterject, disarmInterject') > 0,
+  'armInterject виден снаружи модуля UI');
+ok(!/unhandledrejection['"]?\s*,\s*\(\)\s*=>\s*\{\}\s*\)/.test(bots),
+  'отказы промисов больше не глушатся пустой заглушкой');
+ok(bots.indexOf('const Watch') > 0, 'у партии есть сторож против зависаний');
+
+/* ---- 12. комната только по приглашению ---- */
+const onlineHtml = read('public/online.html');
+const onlineJs = read('public/js/online.js');
+ok(onlineHtml.indexOf('inviteLink') > 0, 'в комнате есть ссылка-приглашение');
+ok(onlineHtml.indexOf('joinCode') < 0, 'ввода четырёхзначного кода больше нет');
+ok(onlineJs.indexOf("q.get('join')") > 0, 'клиент понимает ссылку ?join=');
+ok(onlineHtml.indexOf('btnBots') > 0, 'в комнате есть кнопка добора ботами');
+ok(fs.existsSync(path.join(root, 'server/bots.js')), 'соседи-боты живут в server/bots.js');
+
+/* ---- 13. одна линейка на всю сцену ----
+   Стол, стул и фигура должны мериться одними числами: иначе руки снова
+   окажутся в воздухе. */
+const models = read('public/js/models3d.js');
+ok(models.indexOf('METRICS') > 0, 'в мастерской моделей объявлена общая метрика сцены');
+ok(models.indexOf('tableRadiusFor') > 0, 'радиус стола считается от числа игроков');
+ok(models.indexOf('function loft') > 0, 'торс собирается лофтом, а не сплющенной капсулой');
+ok(models.indexOf('function buildHand') > 0, 'кисть собирается отдельно: ладонь, пальцы, большой');
+
+/* ---- 14. сцена общая для обоих режимов ---- */
 ok(read('public/bots.html').indexOf("from '/js/models3d.js'") >= 0, 'бот-режим берёт модели из общего модуля');
 ok(read('public/js/stage3d.js').indexOf("from './models3d.js'") >= 0, 'сетевая сцена берёт модели оттуда же');
 ok(read('public/js/online.js').indexOf('/js/stage3d.js') >= 0, 'сетевой режим поднимает 3D-сцену');

@@ -10,6 +10,7 @@ const path = require('path');
 const crypto = require('crypto');
 const C = require('./shared/game-config.js');
 const { Game } = require('./server/game.js');
+const Bots = require('./server/bots.js');
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const ROOT = __dirname;
@@ -46,17 +47,49 @@ function saveUsers() {
 }
 
 /* ============================= помощники ============================= */
-function isOnline(u) { return Date.now() - (u.lastSeen || 0) < ONLINE_MS; }
+/* Бот всегда на связи: его хода ждать не страшно, и он никогда не
+   «теряет соединение», из-за которого фаза висела бы до таймаута. */
+function isOnline(u) { return !!u.bot || Date.now() - (u.lastSeen || 0) < ONLINE_MS; }
 
 function publicUser(u) {
-  return { id: u.id, name: u.name, online: isOnline(u), roomId: u.roomId || null };
+  return { id: u.id, name: u.name, online: isOnline(u), bot: !!u.bot, roomId: u.roomId || null };
+}
+
+/* Сколько живых людей в комнате: по этому числу решаем, жива ли она. */
+function humansIn(room) { return room.members.filter(id => !Bots.isBotId(id)); }
+
+function addBots(room, upTo) {
+  const want = Math.max(0, Math.min(C.MAX_PLAYERS, upTo) - room.members.length);
+  const taken = room.members.map(id => (users.get(id) || {}).name).filter(Boolean);
+  for (let i = 0; i < want; i++) {
+    const b = Bots.makeBot(taken);
+    taken.push(b.name);
+    users.set(b.id, { id: b.id, name: b.name, bot: true, trait: b.trait, createdAt: Date.now(), lastSeen: Date.now(), roomId: room.id });
+    room.members.push(b.id);
+    room.bots.push(b);
+  }
+  return want;
+}
+
+function dropBots(room, count) {
+  const ids = room.members.filter(Bots.isBotId);
+  const kill = count === undefined ? ids : ids.slice(0, count);
+  kill.forEach(id => {
+    room.members = room.members.filter(x => x !== id);
+    room.bots = room.bots.filter(b => b.id !== id);
+    users.delete(id);
+  });
+  return kill.length;
 }
 
 function roomView(room, forUserId) {
   const g = room.game;
   return {
     id: room.id,
-    code: room.code,
+    /* Одна ссылка — одна дверь. Общего списка комнат больше нет: войти
+       можно только по приглашению, и токен видят лишь те, кто уже внутри. */
+    invite: room.invite,
+    inviteLink: '/online.html?join=' + room.invite,
     title: room.title,
     hostId: room.hostId,
     hostName: (users.get(room.hostId) || {}).name || '—',
@@ -70,11 +103,15 @@ function roomView(room, forUserId) {
       return {
         id, name: u ? u.name : '—', online: u ? isOnline(u) : false,
         host: id === room.hostId,
+        bot: Bots.isBotId(id),
         voice: !!(u && u.voice)          // микрофон включён — остальные это видят
       };
     }),
     invites: room.invites.map(id => ({ id, name: (users.get(id) || {}).name || '—' })),
     canStart: !g && room.members.length >= C.MIN_PLAYERS,
+    bots: room.members.filter(Bots.isBotId).length,
+    humans: humansIn(room).length,
+    freeSeats: Math.max(0, room.size - room.members.length),
     scenarios: C.scenariosFor(Math.max(C.MIN_PLAYERS, room.members.length))
       .map(s => ({ id: s.id, title: s.title, place: s.place, min: s.min, max: s.max, prologue: s.prologue })),
     composition: C.composition(Math.max(C.MIN_PLAYERS, room.members.length)),
@@ -89,21 +126,15 @@ function lobbyView(userId) {
   return {
     me: me ? publicUser(me) : null,
     users: [...users.values()]
-      .filter(u => u.id !== userId)
+      .filter(u => u.id !== userId && !u.bot)
       .sort((a, b) => (isOnline(b) - isOnline(a)) || a.name.localeCompare(b.name, 'ru'))
       .slice(0, 200)
       .map(publicUser),
-    rooms: [...rooms.values()].map(r => ({
-      id: r.id, code: r.code, title: r.title,
-      hostName: (users.get(r.hostId) || {}).name || '—',
-      players: r.members.length, size: r.size,
-      started: !!r.game,
-      scenario: (C.scenarioById(r.scenarioId) || {}).title || 'Случайный',
-      invited: r.invites.indexOf(userId) >= 0,
-      mine: r.members.indexOf(userId) >= 0
-    })),
+    /* Открытых столов в списке больше нет: чужая комната — не проходной
+       двор. Игрок видит только те, куда его позвали. */
+    rooms: [],
     invites: [...rooms.values()].filter(r => r.invites.indexOf(userId) >= 0).map(r => ({
-      roomId: r.id, code: r.code, title: r.title,
+      roomId: r.id, invite: r.invite, title: r.title,
       from: (users.get(r.hostId) || {}).name || '—', players: r.members.length, size: r.size
     }))
   };
@@ -140,12 +171,15 @@ setInterval(() => {
     /* Сначала сообщаем движку, кто пропал со связи: иначе фаза висит до
        полного таймаута из-за одного закрытого ноутбука. */
     const gone = room.members.filter(id => {
+      if (Bots.isBotId(id)) return false;
       const u = users.get(id);
       return !u || !isOnline(u);
     });
     const presenceChanged = room.game.setOffline(gone);
     const before = room.game.phase + '|' + room.game.log.length + '|' + room.game.chat.length;
-    const changed = room.game.tick();
+    /* Боты ходят до движка: иначе их ход опаздывал бы на целый такт. */
+    const botsMoved = Bots.tick(room, Date.now());
+    const changed = room.game.tick() || botsMoved;
     if (presenceChanged || changed ||
         before !== room.game.phase + '|' + room.game.log.length + '|' + room.game.chat.length) pushRoom(room);
   });
@@ -298,11 +332,14 @@ const server = http.createServer(async (req, res) => {
       const size = Math.max(C.MIN_PLAYERS, Math.min(C.MAX_PLAYERS, Number(body.size) || 8));
       const room = {
         id: uid('r'),
-        code: String(Math.floor(1000 + Math.random() * 9000)),
+        /* Длинный токен вместо четырёх цифр: четырёхзначный код перебирается
+           за десять минут, а комната должна оставаться своей. */
+        invite: crypto.randomBytes(12).toString('base64url'),
         title: String(body.title || ('Комната ' + me.name)).slice(0, 40),
         hostId: me.id,
         members: [me.id],
         invites: [],
+        bots: [],
         size,
         autoStart: body.autoStart !== false,
         scenarioId: body.scenarioId || (C.scenariosFor(size)[0] || C.SCENARIOS[0]).id,
@@ -325,12 +362,19 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p === '/api/rooms/join' && req.method === 'POST') {
-      let target = room;
-      if (!target && body.code) target = [...rooms.values()].find(r => r.code === String(body.code).trim());
-      if (!target) return send(res, 404, { error: 'Комната не найдена' });
+      const inviteToken = body.invite ? String(body.invite).trim() : '';
+      let target = inviteToken ? [...rooms.values()].find(r => r.invite === inviteToken) : room;
+      if (!target) return send(res, 404, { error: 'Комната не найдена — попросите ссылку заново' });
+      /* Дверь одна: либо ссылка-приглашение, либо личное приглашение хозяина,
+         либо вы уже за этим столом. */
+      const allowed = !!inviteToken || target.members.indexOf(me.id) >= 0 || target.invites.indexOf(me.id) >= 0;
+      if (!allowed) return send(res, 403, { error: 'В эту комнату пускают только по ссылке-приглашению' });
       if (target.game) return send(res, 409, { error: 'Партия уже идёт' });
-      if (target.members.length >= C.MAX_PLAYERS) return send(res, 409, { error: 'Комната полная (20 человек)' });
       if (target.members.indexOf(me.id) < 0) {
+        /* Место, занятое ботом, освобождается для человека: за этим и нужна
+           ссылка — друг приходит и садится вместо соседа-бота. */
+        if (target.members.length >= Math.min(C.MAX_PLAYERS, target.size)) dropBots(target, 1);
+        if (target.members.length >= C.MAX_PLAYERS) return send(res, 409, { error: 'Комната полная (20 человек)' });
         leaveRoom(me);
         target.members.push(me.id);
         target.invites = target.invites.filter(i => i !== me.id);
@@ -339,6 +383,26 @@ const server = http.createServer(async (req, res) => {
       }
       pushAll(target);
       return send(res, 200, { room: roomView(target, me.id) });
+    }
+
+    /* ---------- соседи-боты ----------
+       Хозяин добирает пустые места ботами. Они играют по тем же правилам:
+       мафия-бот не бьёт своих, доктор-бот не лечит одного и того же две
+       ночи подряд, шериф-бот проверяет и раскрывается, когда припечёт. */
+    if (p === '/api/rooms/bots' && req.method === 'POST') {
+      if (!room || room.hostId !== me.id) return send(res, 403, { error: 'Только хозяин комнаты' });
+      if (room.game) return send(res, 409, { error: 'Партия уже идёт' });
+      if (body.on === false) {
+        const gone = dropBots(room);
+        room.chat.push({ system: true, text: 'Соседей-ботов проводили до двери (' + gone + ').', ts: Date.now() });
+      } else {
+        const want = Math.max(C.MIN_PLAYERS, Math.min(C.MAX_PLAYERS, Number(body.upTo) || room.size));
+        const added = addBots(room, want);
+        if (!added) return send(res, 400, { error: 'Свободных мест нет' });
+        room.chat.push({ system: true, text: 'За стол сели соседи: ' + added + '. Пришедший по ссылке займёт место одного из них.', ts: Date.now() });
+      }
+      pushAll(room);
+      return send(res, 200, { room: roomView(room, me.id) });
     }
 
     if (p === '/api/rooms/invite' && req.method === 'POST') {
@@ -358,7 +422,9 @@ const server = http.createServer(async (req, res) => {
       const target = users.get(body.userId);
       room.members = room.members.filter(i => i !== body.userId);
       room.invites = room.invites.filter(i => i !== body.userId);
-      if (target) target.roomId = null;
+      room.bots = room.bots.filter(b => b.id !== body.userId);
+      if (Bots.isBotId(body.userId)) users.delete(body.userId);
+      else if (target) target.roomId = null;
       pushAll(room);
       return send(res, 200, { ok: true });
     }
@@ -385,6 +451,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/rooms/restart' && req.method === 'POST') {
       if (!room || room.hostId !== me.id) return send(res, 403, { error: 'Только хозяин комнаты' });
       room.game = null;
+      room.botPlan = null;
       room.chat.push({ system: true, text: 'Хозяин собирает новую партию.', ts: Date.now() });
       pushAll(room);
       return send(res, 200, { room: roomView(room, me.id) });
@@ -456,8 +523,13 @@ function leaveRoom(user) {
   if (!room) return;
   room.members = room.members.filter(i => i !== user.id);
   room.chat.push({ system: true, text: user.name + ' вышел из комнаты.', ts: Date.now() });
-  if (!room.members.length) { rooms.delete(room.id); return; }
-  if (room.hostId === user.id) room.hostId = room.members[0];
+  /* Комната без людей закрывается вместе с ботами: сами они играть не будут. */
+  if (!humansIn(room).length) {
+    dropBots(room);
+    rooms.delete(room.id);
+    return;
+  }
+  if (room.hostId === user.id) room.hostId = humansIn(room)[0];
 }
 
 loadUsers();

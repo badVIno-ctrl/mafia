@@ -1524,6 +1524,10 @@ function initModels(){
    SCENE · комната, стол, свет, места, карты, камера
    ========================================================================= */
 const Scene3DGL = (() => {
+  /* Размеры реквизита в тех же метрах, что и стол с фигурами: карта — карта,
+     а не лист картона на полстола, табличка висит над головой, а не в метре
+     от неё. Раньше эти числа стояли вразнобой по всему файлу. */
+  const CARD_W = 0.19, CARD_H = 0.27, PLATE_Y = 1.62;
   let renderer, scene, camera, controls, root;
   let lampLight, lampSpot, lampGlow, ambient, hemi, moon, redGlow, tableLight;
   let lamp = null;            // общая лампа из models3d: качание, мерцание, пыль
@@ -1560,17 +1564,17 @@ const Scene3DGL = (() => {
     scene.fog = new THREE.FogExp2(0x0d0c12, 0.020);
 
     camera = new THREE.PerspectiveCamera(52, 1.6, 0.1, 120);
-    camera.position.set(0, 2.42, 5.25);
+    camera.position.set(0, 2.15, 3.6);
 
     controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, 1.02, 0);
+    controls.target.set(0, 0.95, 0);
     controls.enablePan = false;
     controls.enableDamping = true;
     controls.dampingFactor = 0.075;
     controls.rotateSpeed = 0.55;
     controls.zoomSpeed = 0.7;
-    controls.minDistance = 2.2;
-    controls.maxDistance = 13.5;
+    controls.minDistance = 1.4;
+    controls.maxDistance = 9.0;
     controls.minPolarAngle = 0.16;
     controls.maxPolarAngle = 1.52;
 
@@ -1585,20 +1589,20 @@ const Scene3DGL = (() => {
     moon = new THREE.DirectionalLight(0x5878b8, 0.0);
     moon.position.set(-6, 7, -5);
     redGlow = new THREE.PointLight(0xff2b2b, 0, 9, 2);
-    redGlow.position.set(0, 2.1, 0);
+    redGlow.position.set(0, 1.55, 0);
 
     /* заполняющий свет: лица и карты не должны уходить в чёрное пятно */
     fillLights = [];
-    [[0, 3.4, 4.6, 0xffd7ad, 34], [-4.4, 3.0, -3.0, 0x9db4de, 22], [4.4, 3.0, -3.0, 0xdda98a, 22]].forEach(cfg => {
-      const l = new THREE.PointLight(cfg[3], cfg[4], 16, 2);
+    [[0, 2.6, 3.4, 0xffd7ad, 22], [-3.2, 2.4, -2.2, 0x9db4de, 14], [3.2, 2.4, -2.2, 0xdda98a, 14]].forEach(cfg => {
+      const l = new THREE.PointLight(cfg[3], cfg[4], 12, 2);
       l.position.set(cfg[0], cfg[1], cfg[2]);
       fillLights.push(l);
       scene.add(l);
     });
     /* мягкий вертикальный свет прямо на стол — чтобы читались карты */
-    tableLight = new THREE.SpotLight(0xfff0d6, 46, 9, Math.PI/3.1, 0.9, 1.2);
-    tableLight.position.set(0, 4.2, 0.6);
-    tableLight.target.position.set(0, 0.9, 0);
+    tableLight = new THREE.SpotLight(0xfff0d6, 30, 7, Math.PI/2.8, 0.9, 1.2);
+    tableLight.position.set(0, 3.3, 0.5);
+    tableLight.target.position.set(0, 0.8, 0);
     scene.add(tableLight, tableLight.target);
 
     scene.add(ambient, hemi, moon, redGlow);
@@ -1607,6 +1611,27 @@ const Scene3DGL = (() => {
 
     window.addEventListener('resize', resize, { passive:true });
     resize();
+  }
+
+  /* Сколько нужно отойти, чтобы стол со стульями влез в кадр целиком.
+     На телефоне кадр узкий, и та же дистанция обрезает половину стола —
+     поэтому считаем по меньшему из двух углов обзора. */
+  function fitDistance(radius){
+    const vFov = camera.fov * Math.PI / 180;
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+    const fov = Math.min(vFov, hFov);
+    return Math.min(7, Math.max(1.8, (radius + 0.5) / Math.tan(fov / 2) * 0.92));
+  }
+
+  /* Поставить камеру на заданный азимут и отход, сохранив наклон. */
+  function placeCamera(az, dist){
+    const pol = 1.16;                       // от вертикали: почти на уровне глаз
+    camera.position.set(
+      controls.target.x + Math.sin(az) * Math.sin(pol) * dist,
+      controls.target.y + Math.cos(pol) * dist,
+      controls.target.z + Math.cos(az) * Math.sin(pol) * dist
+    );
+    controls.update();
   }
 
   function resize(){
@@ -1619,6 +1644,15 @@ const Scene3DGL = (() => {
     renderer.domElement.style.height = h + 'px';
     camera.aspect = Math.max(0.2, w / Math.max(1, h));
     camera.updateProjectionMatrix();
+    /* После поворота телефона кадр меняет пропорции: пересчитываем отход,
+       но только если игрок сам не отъехал колесом. */
+    if(tableRig && !topMode){
+      const want = fitDistance(tableRig.seatRadius);
+      const dx = camera.position.x - controls.target.x;
+      const dz = camera.position.z - controls.target.z;
+      const now = Math.hypot(dx, camera.position.y - controls.target.y, dz);
+      if(Math.abs(now - want) > 1.2) placeCamera(Math.atan2(dx, dz), want);
+    }
   }
 
   /* Комната и лампа — общие. Сюда попадают только ссылки, которые нужны
@@ -1629,7 +1663,7 @@ const Scene3DGL = (() => {
   }
 
   function buildLamp(){
-    lamp = buildLampShared(root, { ceilY: 8.3, bulbY: 3.0 });
+    lamp = buildLampShared(root, { ceilY: 4.5, bulbY: 2.2 });
     lampSpot = lamp.spot;
     lampLight = lamp.point;
     lampGlow = lamp.glow;
@@ -1655,11 +1689,11 @@ const Scene3DGL = (() => {
 
 
     deckGroup = new THREE.Group();
-    deckGroup.position.set(0, 0.96, 0);
+    deckGroup.position.set(0, tableRig.surfaceY + 0.006, 0);
     for(let i=0;i<n;i++){
-      const c = new THREE.Mesh(new THREE.BoxGeometry(0.34,0.012,0.48),
+      const c = new THREE.Mesh(new THREE.BoxGeometry(CARD_W, 0.008, CARD_H),
         new THREE.MeshStandardMaterial({ map:backTex, roughness:0.72 }));
-      c.position.y = i*0.014;
+      c.position.y = i*0.009;
       c.rotation.y = (Math.random()-0.5)*0.09;
       deckGroup.add(c);
     }
@@ -1675,33 +1709,33 @@ const Scene3DGL = (() => {
       tableGroup.add(g);
 
       const chair = buildChair(0x2a1c19);
-      chair.position.z = -0.46;
+      chair.position.z = -0.30;
       g.add(chair);
 
-      const fig = buildFigure(p.color, p.hat, i, { sex: p.sex });
+      const fig = buildFigure(p.color, p.hat, i, { sex: p.sex, pose: i % 4 });
       g.add(fig);
 
       const plate = new THREE.Sprite(new THREE.SpriteMaterial({
         map: texFromCanvas(nameCanvas(p.name, { you:p.isHuman })), transparent:true }));
-      plate.scale.set(1.42, 0.39, 1);
-      plate.position.set(sx, 1.94, sz);
+      plate.scale.set(0.66, 0.18, 1);
+      plate.position.set(sx, PLATE_Y, sz);
       tableGroup.add(plate);
 
       const cross = new THREE.Sprite(new THREE.SpriteMaterial({
         map: texFromCanvas(crossCanvas()), transparent:true, opacity:0 }));
-      cross.scale.set(0.5,0.5,1);
-      cross.position.set(sx, 2.3, sz);
+      cross.scale.set(0.26,0.26,1);
+      cross.position.set(sx, PLATE_Y + 0.26, sz);
       tableGroup.add(cross);
 
       const blank = new THREE.MeshStandardMaterial({ color:0x2a1016, roughness:0.8 });
-      const card = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.014, 0.48), [
+      const card = new THREE.Mesh(new THREE.BoxGeometry(CARD_W, 0.009, CARD_H), [
         blank, blank,
         new THREE.MeshStandardMaterial({ map:backTex, roughness:0.7 }),
         new THREE.MeshStandardMaterial({ color:0xf0e7d6, roughness:0.75 }),
         blank, blank
       ]);
-      const cr = tableR - 0.36;
-      card.position.set(Math.sin(a)*cr, 0.963, Math.cos(a)*cr);
+      const cr = Math.max(0.12, tableR - CARD_H * 0.62);
+      card.position.set(Math.sin(a)*cr, tableRig.surfaceY + 0.006, Math.cos(a)*cr);
       card.rotation.y = -a;
       card.castShadow = true;
       card.visible = false;
@@ -1714,9 +1748,13 @@ const Scene3DGL = (() => {
       });
     });
 
-    controls.target.set(0, 1.02, 0);
-    camera.position.set(0, 2.42, seatR + 2.85);
-    controls.update();
+    controls.target.set(0, 0.92, 0);
+    /* Смотрим из-за своего плеча, а не с чужой стороны стола: раньше камера
+       всегда стояла в одной и той же точке, и собственная фигура игрока
+       оказывалась то в центре кадра, то вообще за спиной. Полоборота вбок —
+       и видно и себя, и весь стол. */
+    const meSeat = seats.find(s => s.isHuman);
+    placeCamera((meSeat ? meSeat.angle : 0) + 0.34, fitDistance(seatR));
   }
 
   function armCard(i, role){
@@ -1798,7 +1836,7 @@ const Scene3DGL = (() => {
     const flights = [];
     for(let i=0;i<seats.length;i++){
       const s = seats[i];
-      const from = new THREE.Vector3(0, 1.0 + i*0.014, 0);
+      const from = new THREE.Vector3(0, tableRig.surfaceY + 0.02 + i*0.009, 0);
       const to = s.cardHome.clone();
       s.card.visible = true;
       s.card.position.copy(from);
@@ -1807,7 +1845,7 @@ const Scene3DGL = (() => {
       flights.push(tween(640, t => {
         s.card.position.set(
           lerp(from.x, to.x, t),
-          lerp(from.y, to.y, t) + Math.sin(Math.PI*t)*0.6,
+          lerp(from.y, to.y, t) + Math.sin(Math.PI*t)*0.34,
           lerp(from.z, to.z, t));
         s.card.rotation.y = lerp(0, -s.angle, t) + Math.sin(Math.PI*t)*1.5;
         s.card.rotation.x = Math.sin(Math.PI*t)*0.65;
@@ -1843,8 +1881,8 @@ const Scene3DGL = (() => {
       glow: lamp.glowLevel
     };
     const to = night
-      ? { spot:9,  point:2.2,  amb:0.62, hemi:0.60, moon:1.5, fog:0.044, fill:6,  table:7 }
-      : { spot:62, point:11,   amb:1.35, hemi:1.05, moon:0.0, fog:0.020, fill:26, table:46 };
+      ? { spot:5,  point:1.2,  amb:0.62, hemi:0.60, moon:1.5, fog:0.044, fill:4,  table:5 }
+      : { spot:34, point:6,    amb:1.35, hemi:1.05, moon:0.0, fog:0.020, fill:17, table:30 };
     const cFrom = new THREE.Color(ambient.color.getHex());
     const cTo   = new THREE.Color(night ? 0x3c4c74 : 0x6a6070);
     const hFrom = new THREE.Color(hemi.color.getHex());
@@ -1926,10 +1964,13 @@ const Scene3DGL = (() => {
     shakeUntil = performance.now() + 420;
     const side = (i % 2) ? 1 : -1;
     const dim = new THREE.Color(0x2a2328);
+    /* Оседание: тело валится на спинку стула, а не ложится на стол. При
+       прежних 1,32 радиана на маленьком столе голова выбывшего оказывалась
+       посреди сукна и закрывала половину сцены. */
     await tween(950, t => {
-      s.figure.rotation.z = lerp(0, side*1.32, t);
-      s.figure.rotation.x = 0;
-      s.figure.position.y = lerp(0, -0.14, t);
+      s.figure.rotation.z = lerp(0, side*0.92, t);
+      s.figure.rotation.x = lerp(0, -0.16, t);
+      s.figure.position.y = lerp(0, -0.10, t);
       s.figure.userData.materials.forEach(m => { if(m.color) m.color.lerp(dim, 0.03); });
     }, Ease.outBounce);
     if(s.plate.material.map) s.plate.material.map.dispose();
@@ -1947,7 +1988,7 @@ const Scene3DGL = (() => {
     s.card.visible = true;
     await tween(720, t => {
       s.card.rotation.x = lerp(0, Math.PI, t);
-      s.card.position.y = s.cardHome.y + Math.sin(Math.PI*t)*0.22;
+      s.card.position.y = s.cardHome.y + Math.sin(Math.PI*t)*0.12;
     }, Ease.outCubic);
     s.card.position.y = s.cardHome.y;
   }
@@ -1956,16 +1997,16 @@ const Scene3DGL = (() => {
   async function showVoteArrow(fromIdx, toIdx){
     const a = seats[fromIdx], b = seats[toIdx];
     if(!a || !b) return;
-    const p1 = a.seatPos.clone().multiplyScalar(0.78).setY(1.45);
-    const p2 = b.seatPos.clone().multiplyScalar(0.78).setY(1.45);
+    const p1 = a.seatPos.clone().multiplyScalar(0.72).setY(1.16);
+    const p2 = b.seatPos.clone().multiplyScalar(0.72).setY(1.16);
     const dir = new THREE.Vector3().subVectors(p2, p1);
     const len = dir.length();
     const g = new THREE.Group();
     const mat = new THREE.MeshBasicMaterial({ color:0xe6c766, transparent:true, opacity:0 });
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, Math.max(0.02, len-0.28), 6), mat);
-    shaft.position.y = (len-0.28)/2;
-    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.072, 0.26, 8), mat);
-    tip.position.y = len - 0.14;
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, Math.max(0.02, len-0.2), 6), mat);
+    shaft.position.y = (len-0.2)/2;
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.052, 0.19, 8), mat);
+    tip.position.y = len - 0.1;
     g.add(shaft, tip);
     g.position.copy(p1);
     g.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
@@ -1988,13 +2029,13 @@ const Scene3DGL = (() => {
     for(let i=0;i<seats.length;i++){
       if(!seats[i].flipped){ flipCard(i, roles[i]); await wait(170); }
     }
-    const r = Math.max(4.4, Math.hypot(camera.position.x, camera.position.z));
-    const y = Math.max(2.4, camera.position.y);
+    const r = Math.max(2.6, Math.hypot(camera.position.x, camera.position.z));
+    const y = Math.max(1.7, camera.position.y);
     const a0 = Math.atan2(camera.position.x, camera.position.z);
     await tween(9000, t => {
       const a = a0 + t*Math.PI*2;
-      camera.position.set(Math.sin(a)*r, y + Math.sin(t*Math.PI)*0.9, Math.cos(a)*r);
-      camera.lookAt(0, 1.0, 0);
+      camera.position.set(Math.sin(a)*r, y + Math.sin(t*Math.PI)*0.55, Math.cos(a)*r);
+      camera.lookAt(0, 0.95, 0);
     }, Ease.inOutQuad);
     controls.enabled = true;
     controls.update();
@@ -2003,7 +2044,7 @@ const Scene3DGL = (() => {
   /* ---- экранная проекция для DOM-облачка ---- */
   function project(i, yOff){
     const s = seats[i]; if(!s || !renderer) return null;
-    V.set(s.seatPos.x, (yOff === undefined ? 2.26 : yOff), s.seatPos.z).project(camera);
+    V.set(s.seatPos.x, (yOff === undefined ? PLATE_Y + 0.1 : yOff), s.seatPos.z).project(camera);
     const el = renderer.domElement;
     return { x:(V.x*0.5+0.5)*el.clientWidth, y:(-V.y*0.5+0.5)*el.clientHeight, visible: V.z < 1 };
   }
@@ -2041,11 +2082,11 @@ const Scene3DGL = (() => {
         s.figure.position.y = Math.sin(now*0.006)*0.022;
         s.figure.rotation.z = Math.sin(now*0.0042)*0.035;
       }
-      if(!s.dead) s.plate.position.y = 1.94 + Math.sin(now*0.0013 + s.idx)*0.012;
+      if(!s.dead) s.plate.position.y = PLATE_Y + Math.sin(now*0.0013 + s.idx)*0.01;
     }
     if(now < shakeUntil){
       const k = (shakeUntil - now)/420;
-      root.position.set((Math.random()-0.5)*0.05*k, (Math.random()-0.5)*0.05*k, 0);
+      root.position.set((Math.random()-0.5)*0.028*k, (Math.random()-0.5)*0.028*k, 0);
     } else if(root.position.x !== 0 || root.position.y !== 0){
       root.position.set(0,0,0);
     }
@@ -2090,14 +2131,14 @@ const Scene3DGL = (() => {
   /* Подбираем высоту так, чтобы весь стол со стульями влез в кадр
      при текущем аспекте — и на узком телефоне тоже. */
   function topCamPos(){
-    const need = (seats.length > 6 ? 4.5 : 4.0);           // радиус сцены с местами
+    const need = (tableRig ? tableRig.seatRadius : 1.2) + 0.75;   // радиус сцены с местами
     const vFov = camera.fov * Math.PI / 180;
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
     const fov  = Math.min(vFov, hFov);
-    const dist = Math.min(11.5, Math.max(5.2, need / Math.tan(fov / 2) * 1.06));
+    const dist = Math.min(5.6, Math.max(2.4, need / Math.tan(fov / 2) * 1.06));
     // 68° от горизонтали: почти сверху, но лица и таблички ещё читаются
     const a = 1.19;
-    return new THREE.Vector3(0, 1.0 + Math.sin(a) * dist, Math.cos(a) * dist);
+    return new THREE.Vector3(0, 0.95 + Math.sin(a) * dist, Math.cos(a) * dist);
   }
 
   function enterTop(){
@@ -2108,9 +2149,9 @@ const Scene3DGL = (() => {
     // временно расширяем лимиты орбиты, чтобы камера не «схлопывалась» обратно
     controls.minPolarAngle = 0.05;
     controls.maxPolarAngle = 1.52;
-    controls.maxDistance = 15.0;
+    controls.maxDistance = 9.5;
     document.body.classList.add('topview');
-    flyCam(topCamPos(), new THREE.Vector3(0, 0.95, 0), 820);
+    flyCam(topCamPos(), new THREE.Vector3(0, 0.9, 0), 820);
   }
 
   function exitTop(){
@@ -2119,11 +2160,11 @@ const Scene3DGL = (() => {
     if(ceilMesh) ceilMesh.visible = true;
     controls.minPolarAngle = 0.16;
     controls.maxPolarAngle = 1.52;
-    controls.maxDistance = 13.5;
+    controls.maxDistance = 9.0;
     document.body.classList.remove('topview');
-    const seatR = (seats.length > 6 ? 2.15 : 1.92) + 0.92;
-    const pos = (normalCam && normalCam.pos) || new THREE.Vector3(0, 2.42, seatR + 2.85);
-    const tgt = (normalCam && normalCam.target) || new THREE.Vector3(0, 1.02, 0);
+    const seatR = tableRig ? tableRig.seatRadius : 1.2;
+    const pos = (normalCam && normalCam.pos) || new THREE.Vector3(0, 2.15, fitDistance(seatR));
+    const tgt = (normalCam && normalCam.target) || new THREE.Vector3(0, 0.92, 0);
     flyCam(pos, tgt, 700);
   }
 
@@ -2426,7 +2467,10 @@ async function askHelper(system, user, temperature, budget){
   const models = [HELPER.primary, HELPER.spare];
   for(let attempt = 0; attempt < models.length; attempt++){
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 22000);
+    /* Ждём ответа не больше семи секунд. Двадцать две секунды на две
+       попытки — это почти минута тишины за столом на каждой реплике, и
+       именно так «зависание» выглядело при недоступной сети. */
+    const timer = setTimeout(() => ctrl.abort(), 7000);
     try {
       helperCalls++;
       const r = await fetch(HELPER.url, {
@@ -2455,7 +2499,7 @@ async function askHelper(system, user, temperature, budget){
       helperFails++;
     }
   }
-  if(helperFails >= 3){
+  if(helperFails >= 2){
     helperOff = true;
     if(!helperWarned){
       helperWarned = true;
@@ -3883,6 +3927,7 @@ const UI = (() => {
 
   /* ---- лог ---- */
   function log(kind, text, who){
+    Watch.ping();
     const box = $('log');
     const row = document.createElement('div');
     row.className = 'le ' + kind;
@@ -4001,7 +4046,12 @@ const UI = (() => {
   }
 
   /* ---- контекстная нижняя панель ---- */
+  /* Кто сейчас распоряжается панелью. Нужно ровно для одного случая:
+     реплика вне очереди снимается сама, но не должна затирать панель,
+     которую тем временем открыл кто-то другой. */
+  let barOwner = null;
   function setBar(label, html, note){
+    barOwner = null;
     $('bbLabel').textContent = label || '';
     const body = $('bbBody');
     body.innerHTML = html || '';
@@ -4015,6 +4065,37 @@ const UI = (() => {
     $('bottombar').classList.toggle('on', !!(label || html || note));
   }
   function clearBar(){ stopTimer(); setBar('', '', ''); }
+
+  /* ---- реплика вне очереди ----
+     Пока сосед говорит, игрок может перебить его — как за живым столом.
+     Эти две функции дневной цикл вызывал с самого начала, но в модуле их
+     не было: на первом же ходе бота в «Обсуждении» вылетал TypeError,
+     отказ промиса глушился, и партия молча замирала. */
+  function armInterject(left, onMsg){
+    setBar('Вмешаться в разговор',
+      '<input class="inp" id="interIn" maxlength="180" autocomplete="off" placeholder="Перебить и сказать своё">' +
+      '<button class="gbtn" id="interGo">Перебить</button>',
+      'Реплик вне очереди осталось: ' + left + '. Можно молчать — тогда просто слушайте.');
+    barOwner = 'interject';
+    const inp = $('interIn');
+    /* Фокус намеренно не забираем: иначе на телефоне на каждой чужой
+       реплике выезжала бы клавиатура. */
+    const fire = () => {
+      if(barOwner !== 'interject') return;
+      const v = String(inp.value || '').trim();
+      if(!v) return;
+      disarmInterject();
+      Sound.blip(false);
+      onMsg(v);
+    };
+    $('interGo').addEventListener('click', fire);
+    inp.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); fire(); } });
+  }
+  function disarmInterject(){
+    if(barOwner !== 'interject') return;
+    clearBar();
+  }
+  function barBusy(){ return $('bottombar').classList.contains('on'); }
 
   function startTimer(sec, onEnd){
     stopTimer();
@@ -4170,9 +4251,54 @@ const UI = (() => {
   return { $, esc, setStatus, updateApi, thinking, toast, log, setFilter, clearLog,
            showRole, renderSecret, renderHints, bubble, positionBubbles,
            setBar, clearBar, askTarget, askSpeech, askChoice, applyDread, endScreen, hideEnd, stopTimer,
+           armInterject, disarmInterject, barBusy,
            prologue, hideStory, awaitEnd };
 })();
 
+
+/* =========================================================================
+   WATCHDOG · сторож партии
+
+   Партия — длинная цепочка await'ов. Если одно звено порвётся (ошибка в
+   реплике, отвалившийся ресурс, промах в анимации), цепочка просто
+   перестаёт двигаться: сцена крутится, лампа качается, а игра стоит.
+   Снаружи это выглядит как зависание, и починить его игроку нечем.
+
+   Сторож смотрит на пульс: каждая запись в протокол и каждая смена фазы —
+   это удар. Если удара нет дольше STALL и при этом партия ничего не ждёт
+   от игрока (панель закрыта, пауза не нажата), значит цепочка порвалась —
+   предлагаем продолжить со следующей фазы.
+   ========================================================================= */
+const Watch = (() => {
+  const STALL = 32000;
+  let beat = 0, armed = false, timer = null, offered = false;
+
+  function ping(){ beat = performance.now(); offered = false; }
+
+  function check(){
+    if(!armed || G.over) return;
+    if(performance.now() - beat < STALL) return;
+    if(UI.barBusy() || Pace.pending() || Pace.isPaused()) { return; }
+    if(offered) return;
+    offered = true;
+    UI.log('sys', 'Партия остановилась на середине хода. Можно продолжить со следующей фазы — стол ничего не забудет.');
+    UI.toast('Партия остановилась. Нажмите «Продолжить» внизу.');
+    UI.setBar('Партия остановилась',
+      '<button class="gbtn" id="stallGo">Продолжить</button>' +
+      '<button class="gbtn ghost" id="stallNew">Начать заново</button>',
+      'Мы дошли до конца хода и дальше не двинулись. Продолжим с ближайшей ночи.');
+    UI.$('stallGo').addEventListener('click', () => {
+      UI.clearBar();
+      ping();
+      resumeGame();
+    }, { once:true });
+    UI.$('stallNew').addEventListener('click', () => { UI.clearBar(); startFromSettings(); }, { once:true });
+  }
+
+  function start(){ armed = true; ping(); if(!timer) timer = setInterval(check, 4000); }
+  function stop(){ armed = false; }
+  return { ping, start, stop };
+})();
 
 /* =========================================================================
    MAIN_LOOP · сценарий партии
@@ -4183,7 +4309,34 @@ function observer(){ return !G.humanAlive; }
 function humanRole(){ return ROLES[G.humanIdx]; }
 
 function refreshStatus(phase){
+  Watch.ping();
   UI.setStatus(G.day, phase, alivePlayers().length);
+}
+
+/* Одна оборвавшаяся фаза не должна убивать партию: пишем, что случилось,
+   и идём дальше. Возвращает false, только если партию сменили. */
+async function guarded(token, what, fn){
+  try {
+    await fn();
+  } catch(err){
+    if(token !== gameToken) return false;
+    console.error('Сбой в фазе «' + what + '»:', err);
+    UI.log('sys', 'Сбой на этапе «' + what + '»: ' + ((err && err.message) || err) + '. Партия продолжается.');
+    UI.toast('Сбой на этапе «' + what + '». Партия продолжается.');
+  }
+  Watch.ping();
+  return token === gameToken;
+}
+
+/* Продолжить остановившуюся партию: старый цикл отменяем сменой токена
+   и начинаем с ближайшей ночи. Роли, память стола и протокол на месте. */
+function resumeGame(){
+  if(G.over) return;
+  const token = ++gameToken;
+  UI.log('sys', 'Продолжаем: город снова засыпает.');
+  gameLoop(token).catch(err => {
+    UI.toast('Партию продолжить не удалось: ' + ((err && err.message) || err));
+  });
 }
 
 async function startGame(opts){
@@ -4234,14 +4387,14 @@ async function startGame(opts){
 }
 
 async function gameLoop(token){
+  Watch.start();
   while(!G.over){
     G.day++;
-    await nightPhase(token);
-    if(token !== gameToken) return;
+    if(!await guarded(token, 'ночь ' + G.day, () => nightPhase(token))) return;
     if(G.over) break;
-    await dayPhase(token);
-    if(token !== gameToken) return;
+    if(!await guarded(token, 'день ' + G.day, () => dayPhase(token))) return;
   }
+  Watch.stop();
 }
 
 /* ---------------- НОЧЬ ---------------- */
@@ -4552,6 +4705,9 @@ async function dayPhase(token){
       await humanSpeak(token, text ? String(text).trim() : '');
       if(token !== gameToken) return;
     } else {
+      /* Один сорвавшийся ход бота не должен останавливать весь день:
+         пишем в протокол и передаём слово следующему. */
+      try {
       /* реплика генерируется СЕЙЧАС — с учётом всего, что уже прозвучало сегодня */
       const batch = await aiDiscussion([i]);
       if(token !== gameToken) return;
@@ -4577,6 +4733,13 @@ async function dayPhase(token){
         G.interjectLeft = Math.max(0, G.interjectLeft - 1);
         await humanSpeak(token, msg, { interject:true });
         if(token !== gameToken) return;
+      }
+      } catch(err){
+        if(token !== gameToken) return;
+        UI.disarmInterject();
+        Scene3D.setSpeaking(i, false);
+        console.error('Реплика ' + p.name + ' не удалась:', err);
+        UI.log('sys', p.name + ' сбился с мысли и промолчал(а).');
       }
     }
     UI.renderHints();
@@ -4700,6 +4863,7 @@ async function executePlayer(token, idx){
 async function endGame(token, winner){
   G.over = true;
   G.winner = winner;
+  Watch.stop();
   UI.clearBar();
   refreshStatus('Финал');
   const finLine = winner === 'town'
@@ -5225,10 +5389,20 @@ function frame(now){
 
 /* ---------------- СТАРТ ---------------- */
 function boot(){
+  /* Раньше здесь стояла пустая заглушка: любой оборвавшийся await уходил
+     в тишину, и партия молча замирала. Теперь о сбое узнают и игрок, и
+     протокол, а сторож партии предложит продолжить. */
   window.addEventListener('error', ev => {
-    UI.toast('Сбой: ' + (ev.message || 'неизвестная ошибка') + '. Начните новую партию.');
+    UI.toast('Сбой: ' + (ev.message || 'неизвестная ошибка') + '.');
+    if(!G.over && G.players && G.players.length) UI.log('sys', 'Сбой: ' + (ev.message || 'неизвестная ошибка') + '.');
   });
-  window.addEventListener('unhandledrejection', () => {});
+  window.addEventListener('unhandledrejection', ev => {
+    const r = ev && ev.reason;
+    const msg = (r && r.message) ? r.message : String(r || 'неизвестная ошибка');
+    console.error('Необработанный отказ промиса:', r);
+    UI.toast('Сбой хода: ' + msg + '. Партия попробует продолжить.');
+    if(!G.over && G.players && G.players.length) UI.log('sys', 'Сбой хода: ' + msg + '.');
+  });
   document.body.dataset.sceneMode = USE_2D ? '2d' : '3d';
   if(USE_2D) document.body.classList.add('scene-2d');
   /* Разрисовываем кнопки: знак берётся из общего набора, а не из шрифта

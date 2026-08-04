@@ -74,8 +74,8 @@ function listen(token) {
     const outsider = await mk('Мимо' + stamp);
 
     const room = (await api('/api/rooms/create', { token: a.token, body: { size: 6 } })).json.room;
-    await api('/api/rooms/join', { token: b.token, body: { roomId: room.id } });
-    await api('/api/rooms/join', { token: c.token, body: { roomId: room.id } });
+    await api('/api/rooms/join', { token: b.token, body: { invite: room.invite } });
+    await api('/api/rooms/join', { token: c.token, body: { invite: room.invite } });
 
     const earB = listen(b.token);
     const earC = listen(c.token);
