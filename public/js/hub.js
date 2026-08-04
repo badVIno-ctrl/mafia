@@ -1,4 +1,6 @@
-/* Главная: регистрация по имени + две плашки режимов */
+/* Главная: имя за столом и афиша вечера.
+   Эмодзи здесь больше нет: знаки рисует icons.js, поэтому на любом
+   телефоне они выглядят одинаково и всегда в цвет текста. */
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
@@ -29,8 +31,8 @@
     var invites = lobby.invites || [];
     var html = '';
     invites.forEach(function (i) {
-      html += '<div class="item" style="border-color:rgba(201,162,39,.45)">' +
-        '<span class="avatar">✉</span>' +
+      html += '<div class="item" style="border-color:var(--line-warm)">' +
+        '<span class="avatar">' + Icons.svg('envelope', { size: 18 }) + '</span>' +
         '<span class="nm">' + API.esc(i.from) + ' зовёт в комнату «' + API.esc(i.title) + '» ' +
         '<span class="muted">(' + i.players + '/' + i.size + ')</span></span>' +
         '<a class="btn primary sm" href="/online.html?room=' + encodeURIComponent(i.roomId) + '">Принять</a></div>';
@@ -44,7 +46,7 @@
         '<span class="avatar">' + API.esc(API.initial(u.name)) + '</span>' +
         '<span class="nm">' + API.esc(u.name) + '</span>' +
         '<span class="dot ' + (u.online ? '' : 'off') + '"></span>' +
-        '<span class="tag">' + (u.online ? 'онлайн' : 'офлайн') + '</span></div>';
+        '<span class="pill">' + (u.online ? 'на месте' : 'ушёл') + '</span></div>';
     });
     $('quickList').innerHTML = html;
   }
@@ -74,7 +76,19 @@
       .catch(API.fail);
   }
 
+  /* --- знаки на афише --- */
+  function paintSigns() {
+    if (!window.Icons) return;
+    $('signBots').innerHTML = Icons.svg('cards', { size: 26 });
+    $('signNet').innerHTML = Icons.svg('net', { size: 26 });
+    $('goBots').innerHTML = Icons.svg('chevron', { size: 15 });
+    $('goNet').innerHTML = Icons.svg('chevron', { size: 15 });
+  }
+
   /* --- старт --- */
+  var curtain = window.Curtain ? Curtain.show({ title: 'Мафия', note: 'Поднимаем занавес' }) : null;
+  if (curtain) curtain.progress(0.5);
+  paintSigns();
   API.load();
   $('btnReg').addEventListener('click', register);
   $('regName').addEventListener('keydown', function (e) { if (e.key === 'Enter') register(); });
@@ -83,11 +97,21 @@
     API.call('/api/lobby').then(renderLobby).then(function () { API.toast('Список обновлён'); }).catch(API.fail);
   });
 
+  function done() {
+    if (!curtain) return;
+    curtain.progress(1);
+    curtain.close();
+    curtain = null;
+  }
+
   if (API.user) {
     API.call('/api/me')
       .then(function (r) { API.save(r.user); connect(); })
-      .catch(function () { API.clear(); showAuth(); });
+      .catch(function () { API.clear(); showAuth(); })
+      .then(done);
   } else {
     showAuth();
+    /* Заставке даём договорить строку шёпота, иначе она мигает и исчезает. */
+    setTimeout(done, 900);
   }
 })();

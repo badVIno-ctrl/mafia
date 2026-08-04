@@ -53,6 +53,10 @@ class Game {
     this.votes = {};                // voterId -> targetId | 'skip'
     this.runoffOf = null;           // список id для переголосовки
     this.omenStep = 0;
+    /* Кто сейчас без связи. Такие игроки не должны держать фазу: раньше
+       один закрытый ноутбук растягивал ночь на полный таймаут, и это
+       читалось как «лаги». */
+    this.offline = new Set();
 
     this.pushLog('story', this.scenario.prologue);
     this.pushLog('sys', 'Состав стола: ' + C.compositionLabel(n) + '.');
@@ -183,22 +187,52 @@ class Game {
     } else if (this.phase === 'morning') {
       if (expired) { this.startDay(); changed = true; }
     } else if (this.phase === 'day') {
-      const alive = this.alive();
+      const waiting = this.waiting();
       const ready = this.ready || {};
-      const allReady = alive.length > 0 && alive.every(p => ready[p.id]);
+      const allReady = waiting.length > 0 && waiting.every(p => ready[p.id]);
       if (expired || allReady) { this.startVote(); changed = true; }
     } else if (this.phase === 'vote' || this.phase === 'runoff') {
-      const alive = this.alive();
-      const allVoted = alive.every(p => this.votes[p.id] !== undefined);
+      const waiting = this.waiting();
+      const allVoted = waiting.length > 0 && waiting.every(p => this.votes[p.id] !== undefined);
       if (expired || allVoted) { this.resolveVote(); changed = true; }
     }
     return changed;
   }
 
+  /** Обновить список отключившихся. Возвращает true, если состав изменился. */
+  setOffline(ids) {
+    const next = new Set(ids || []);
+    let changed = next.size !== this.offline.size;
+    if (!changed) for (const id of next) if (!this.offline.has(id)) { changed = true; break; }
+    if (!changed) return false;
+    /* пишем в протокол только про живых: выбывшим связь уже не нужна */
+    for (const id of next) {
+      if (!this.offline.has(id)) {
+        const p = this.p(id);
+        if (p && p.alive && !this.finished) this.pushLog('sys', p.name + ' потерял связь — его хода ждать не будем.');
+      }
+    }
+    for (const id of this.offline) {
+      if (!next.has(id)) {
+        const p = this.p(id);
+        if (p && p.alive && !this.finished) this.pushLog('sys', p.name + ' снова на связи.');
+      }
+    }
+    this.offline = next;
+    return true;
+  }
+
+  /** Живые, от которых имеет смысл ждать хода. */
+  waiting() { return this.alive().filter(p => !this.offline.has(p.id)); }
+
   allNightActionsIn() {
-    const mafiaAlive = this.aliveMafia();
-    const docs = this.alive().filter(p => p.role === ROLE.DOCTOR);
-    const shs = this.alive().filter(p => p.role === ROLE.SHERIFF);
+    const on = p => !this.offline.has(p.id);
+    const mafiaAlive = this.aliveMafia().filter(on);
+    const docs = this.alive().filter(p => p.role === ROLE.DOCTOR && on(p));
+    const shs = this.alive().filter(p => p.role === ROLE.SHERIFF && on(p));
+    /* Если у стола вообще никого нет на связи, ночь всё равно закроется
+       по таймауту — здесь мы только не даём ей закрыться раньше времени. */
+    if (!mafiaAlive.length && !docs.length && !shs.length) return false;
     return mafiaAlive.every(p => this.nightActions.kill[p.id])
       && docs.every(p => this.nightActions.heal[p.id])
       && shs.every(p => this.nightActions.check[p.id]);
@@ -376,7 +410,8 @@ class Game {
         roleRu: showRole ? C.ROLE_INFO[p.role].ru : null,
         roleGlyph: showRole ? C.ROLE_INFO[p.role].glyph : null,
         voted: (this.phase === 'vote' || this.phase === 'runoff') && this.votes[p.id] !== undefined,
-        ready: this.phase === 'day' && !!(this.ready && this.ready[p.id])
+        ready: this.phase === 'day' && !!(this.ready && this.ready[p.id]),
+        offline: this.offline.has(p.id)
       };
     });
 

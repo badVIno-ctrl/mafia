@@ -67,7 +67,11 @@ function roomView(room, forUserId) {
     autoStart: room.autoStart,
     members: room.members.map(id => {
       const u = users.get(id);
-      return { id, name: u ? u.name : '—', online: u ? isOnline(u) : false, host: id === room.hostId };
+      return {
+        id, name: u ? u.name : '—', online: u ? isOnline(u) : false,
+        host: id === room.hostId,
+        voice: !!(u && u.voice)          // микрофон включён — остальные это видят
+      };
     }),
     invites: room.invites.map(id => ({ id, name: (users.get(id) || {}).name || '—' })),
     canStart: !g && room.members.length >= C.MIN_PLAYERS,
@@ -133,9 +137,17 @@ setInterval(() => {
       if (room.autoStart && room.members.length >= room.size) startGame(room);
       return;
     }
+    /* Сначала сообщаем движку, кто пропал со связи: иначе фаза висит до
+       полного таймаута из-за одного закрытого ноутбука. */
+    const gone = room.members.filter(id => {
+      const u = users.get(id);
+      return !u || !isOnline(u);
+    });
+    const presenceChanged = room.game.setOffline(gone);
     const before = room.game.phase + '|' + room.game.log.length + '|' + room.game.chat.length;
     const changed = room.game.tick();
-    if (changed || before !== room.game.phase + '|' + room.game.log.length + '|' + room.game.chat.length) pushRoom(room);
+    if (presenceChanged || changed ||
+        before !== room.game.phase + '|' + room.game.log.length + '|' + room.game.chat.length) pushRoom(room);
   });
 }, 1000);
 
@@ -162,7 +174,9 @@ const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
-  '.webmanifest': 'application/manifest+json'
+  '.webmanifest': 'application/manifest+json',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.woff2': 'font/woff2', '.woff': 'font/woff'
 };
 
 function send(res, code, body, type) {
@@ -396,6 +410,27 @@ const server = http.createServer(async (req, res) => {
       }
       pushRoom(room);
       return send(res, 200, { ok: true });
+    }
+
+    /* ---------- голосовой чат ----------
+       Сервер не трогает звук: он только передаёт участникам служебные
+       записки WebRTC (offer/answer/candidate). Сам голос идёт напрямую
+       между браузерами, поэтому задержка не зависит от сервера. */
+    if (p === '/api/rooms/signal' && req.method === 'POST') {
+      if (!room) return send(res, 404, { error: 'Комната не найдена' });
+      if (room.members.indexOf(me.id) < 0) return send(res, 403, { error: 'Вы не в этой комнате' });
+      const to = String(body.to || '');
+      if (room.members.indexOf(to) < 0) return send(res, 404, { error: 'Такого игрока нет в комнате' });
+      const packet = { from: me.id, name: me.name, kind: String(body.kind || ''), data: body.data };
+      let delivered = 0;
+      clients.forEach(c => { if (c.userId === to) { sseSend(c, 'signal', packet); delivered++; } });
+      return send(res, 200, { ok: true, delivered });
+    }
+
+    if (p === '/api/rooms/voice' && req.method === 'POST') {
+      me.voice = !!body.on;
+      if (room) pushRoom(room);
+      return send(res, 200, { ok: true, voice: me.voice });
     }
 
     if (p === '/api/rooms/action' && req.method === 'POST') {

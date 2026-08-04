@@ -107,7 +107,9 @@ async function api(pathname, opts = {}) {
     ok(phase === 'night', 'через пролог игра перешла в ночь (' + phase + ')');
 
     // ночные действия
-    const victim = all.find(u => !['mafia', 'don'].includes(views[u.id].you.role));
+    /* Жертвой берём именно мирного: если бы это оказался доктор, он же ниже
+       лечит сам себя — и проверка «жертва мертва» падала бы через раз. */
+    const victim = all.find(u => views[u.id].you.role === 'civilian');
     const badKill = await api('/api/rooms/action', { token: victim.token, body: { type: 'kill', target: mafias[0].id } });
     ok(badKill.status === 400, 'мирному нельзя убивать');
     for (const m of mafias) await api('/api/rooms/action', { token: m.token, body: { type: 'kill', target: victim.id } });
@@ -126,7 +128,7 @@ async function api(pathname, opts = {}) {
 
     // чат: мёртвый пишет в «загробный» канал и живые его не видят
     await api('/api/rooms/chat', { token: victim.token, body: { text: 'я всё вижу оттуда', channel: 'town' } });
-    const liveWitness = all.find(u => u.id !== victim.id && !['mafia','don'].includes(views[u.id].you.role));
+    const liveWitness = all.find(u => u.id !== victim.id && views[u.id].you.role === 'civilian');
     const liveView = (await api('/api/rooms/state', { token: liveWitness.token })).json.room.game;
     ok(!liveView.chat.some(m => m.text === 'я всё вижу оттуда'), 'живые не видят чат мёртвых');
     const deadView = (await api('/api/rooms/state', { token: victim.token })).json.room.game;

@@ -13,31 +13,37 @@
 <title>Мафия</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23140d10'/%3E%3Cpath d='M32 15c7.2 0 11.4 5.2 12.2 14.6C49.6 31 53 33 53 35.2 53 38.4 43.6 41 32 41S11 38.4 11 35.2c0-2.2 3.4-4.2 8.8-5.6C20.6 20.2 24.8 15 32 15z' fill='%23c9a227'/%3E%3Cpath d='M20.5 30.4c3.3-1 7.3-1.5 11.5-1.5s8.2.5 11.5 1.5c-.6-8.3-4.4-12.6-11.5-12.6s-10.9 4.3-11.5 12.6z' fill='%23140d10' opacity='.55'/%3E%3Ccircle cx='24' cy='50' r='3.2' fill='%23a8202b'/%3E%3Ccircle cx='32' cy='50' r='3.2' fill='%23e8dcc6'/%3E%3Ccircle cx='40' cy='50' r='3.2' fill='%23a8202b'/%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23140d10'/%3E%3Cpath d='M32 15c7.2 0 11.4 5.2 12.2 14.6C49.6 31 53 33 53 35.2 53 38.4 43.6 41 32 41S11 38.4 11 35.2c0-2.2 3.4-4.2 8.8-5.6C20.6 20.2 24.8 15 32 15z' fill='%23c9a227'/%3E%3Cpath d='M20.5 30.4c3.3-1 7.3-1.5 11.5-1.5s8.2.5 11.5 1.5c-.6-8.3-4.4-12.6-11.5-12.6s-10.9 4.3-11.5 12.6z' fill='%23140d10' opacity='.55'/%3E%3Ccircle cx='24' cy='50' r='3.2' fill='%23a8202b'/%3E%3Ccircle cx='32' cy='50' r='3.2' fill='%23e8dcc6'/%3E%3Ccircle cx='40' cy='50' r='3.2' fill='%23a8202b'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/css/fonts.css">
 <style>
 [hidden]{display:none!important}
 
 /* ============================================================
-   CSS · нуар-палитра, тёмно-бордовый / чёрный / золото
+   CSS · палитра «Вертеп»: извёстка, крашеное дерево, медь и свет
+   сальной свечи. Прежнее «нуар-золото» — самый предсказуемый вид
+   для такой игры, и от него здесь ушли: тёплый свет остался, но
+   лакового золота больше нет.
    ============================================================ */
 :root{
-  --ink:#08060a;
-  --ink-2:#120d11;
-  --bordeaux:#3d0f18;
-  --bordeaux-2:#5a1622;
-  --gold:#c9a227;
-  --gold-soft:#e6c766;
-  --paper:#f5eee1;
-  --paper-dim:rgba(245,238,225,.74);
-  --paper-faint:rgba(245,238,225,.44);
-  --line:rgba(201,162,39,.26);
-  --line-soft:rgba(239,230,214,.12);
-  --red:#c2413a;
-  --green:#6fae7d;
-  --blue:#5f93c4;
+  --ink:#0a0809;
+  --ink-2:#12100f;
+  --bordeaux:#3a1620;
+  --bordeaux-2:#571f2a;
+  --gold:#e2b478;
+  --gold-soft:#eec89a;
+  --paper:#ddd5c7;
+  --paper-dim:#b2a99c;
+  --paper-faint:#8d857a;
+  --line:rgba(226,180,120,.3);
+  --line-soft:rgba(241,236,225,.12);
+  --red:#c4563a;
+  --green:#7ba295;
+  --blue:#6b7fa2;
   --panel:rgba(12,9,12,.82);
   --shadow:0 18px 60px rgba(0,0,0,.62);
-  --serif:Georgia,'Playfair Display','Times New Roman','Liberation Serif',serif;
-  --sans:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI','Golos Text',Roboto,'Helvetica Neue',Arial,'Liberation Sans',sans-serif;
+  /* Свои шрифты из /fonts: ни одного обращения к CDN, кириллица родного
+     рисунка. Georgia и Playfair остаются только запасным вариантом. */
+  --serif:'Bitter','Noto Serif',Georgia,'Liberation Serif',serif;
+  --sans:'Golos Text',system-ui,-apple-system,'Segoe UI',Roboto,'Liberation Sans',sans-serif;
   --mono:ui-monospace,Menlo,Consolas,'JetBrains Mono','Liberation Mono','Courier New',monospace;
 }
 *{box-sizing:border-box}
@@ -71,7 +77,7 @@ body.night #vignette{opacity:1;background:radial-gradient(ellipse at 50% 46%,rgb
   box-shadow:var(--shadow), inset 0 1px 0 rgba(255,255,255,.04);
   backdrop-filter:blur(9px) saturate(1.1);
 }
-.eyebrow{font-family:var(--serif);font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold);opacity:.85}
+.eyebrow{font-family:var(--serif);font-size:13px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold);opacity:.85}
 .hair{height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent);margin:10px 0}
 
 /* ---------- верхняя панель ---------- */
@@ -84,7 +90,7 @@ body.night #vignette{opacity:1;background:radial-gradient(ellipse at 50% 46%,rgb
   text-shadow:0 0 18px rgba(201,162,39,.35)}
 #brand b{color:var(--gold);font-weight:400}
 .stat{display:flex;flex-direction:column;justify-content:center;padding:0 14px;border-left:1px solid var(--line-soft);min-width:74px}
-.stat .k{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--paper-faint)}
+.stat .k{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--paper-faint)}
 .stat .v{font-family:var(--serif);font-size:15px;color:var(--gold-soft);white-space:nowrap}
 .stat .v.warn{color:var(--red)}
 #topspace{flex:1}
@@ -92,7 +98,7 @@ body.night #vignette{opacity:1;background:radial-gradient(ellipse at 50% 46%,rgb
   font-size:15px;color:var(--paper-dim);transition:.18s;margin-left:7px;background:rgba(0,0,0,.3)}
 .tbtn:hover{color:var(--gold);border-color:var(--gold);transform:translateY(-1px)}
 .tbtn.on{color:var(--gold);border-color:var(--gold)}
-.tbtn.wide{width:auto;padding:0 13px;font-size:12.5px;letter-spacing:.12em;text-transform:uppercase}
+.tbtn.wide{width:auto;padding:0 13px;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
 
 /* явный выход из вида сверху — чтобы нельзя было застрять в режиме */
 #topExit{position:fixed;z-index:9;left:50%;transform:translateX(-50%);
@@ -112,21 +118,21 @@ body.topview #bottomBar{opacity:.28;pointer-events:none;transition:opacity .3s e
 #roleCard::after{content:"";position:absolute;inset:4px;border:1px solid rgba(201,162,39,.16);pointer-events:none}
 #roleGlyph{font-size:31px;line-height:1}
 #roleName{font-family:var(--serif);font-size:21px;letter-spacing:.06em;margin-top:6px;color:var(--gold-soft)}
-#roleDesc{font-size:12.5px;color:var(--paper-dim);margin-top:5px}
-#youName{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--paper-faint);margin-top:8px}
+#roleDesc{font-size:13px;color:var(--paper-dim);margin-top:5px}
+#youName{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--paper-faint);margin-top:8px}
 .secretBox{margin-top:12px}
-.secretBox h4{margin:0 0 7px;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);font-weight:600}
-.checkRow{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:4px 0;border-bottom:1px dashed var(--line-soft)}
+.secretBox h4{margin:0 0 7px;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);font-weight:600}
+.checkRow{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--line-soft)}
 .checkRow .m{color:var(--red)}
 .checkRow .c{color:var(--green)}
-.tiny{font-size:11.5px;color:var(--paper-faint)}
-#hintBox{margin-top:12px;padding:10px;border-left:2px solid var(--gold);background:rgba(201,162,39,.07);font-size:12px;color:var(--paper-dim)}
+.tiny{font-size:13px;color:var(--paper-faint)}
+#hintBox{margin-top:12px;padding:10px;border-left:2px solid var(--gold);background:rgba(201,162,39,.07);font-size:13px;color:var(--paper-dim)}
 #hintBox b{color:var(--gold-soft);font-weight:600}
 
 /* ---------- лог ---------- */
 #logHead{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
 #logHead .eyebrow{flex:1}
-.chip{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border:1px solid var(--line-soft);
+.chip{font-size:13px;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border:1px solid var(--line-soft);
   color:var(--paper-faint);border-radius:999px;transition:.16s}
 .chip:hover{color:var(--paper)}
 .chip.on{background:rgba(201,162,39,.16);color:var(--gold-soft);border-color:var(--line)}
@@ -147,7 +153,7 @@ body.topview #bottomBar{opacity:.28;pointer-events:none;transition:opacity .3s e
 .le.story .who{color:var(--gold-soft);letter-spacing:.03em}
 .le.talk{border-color:rgba(239,230,214,.2)}
 .le.you{border-color:var(--gold);background:rgba(201,162,39,.06)}
-.le .day{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--paper-faint);margin-left:auto;padding-left:10px;flex:none;font-family:var(--mono)}
+.le .day{font-size:13px;letter-spacing:.09em;text-transform:uppercase;color:var(--paper-faint);margin-left:auto;padding-left:10px;flex:none;font-family:var(--mono)}
 .le .who{font-weight:600;font-size:13.5px}
 
 /* ---------- нижняя панель ---------- */
@@ -170,18 +176,18 @@ body.topview #bottomBar{opacity:.28;pointer-events:none;transition:opacity .3s e
   border-radius:2px;color:var(--paper);outline:none;resize:none;font-size:14px;transition:.16s}
 #sayInput:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,162,39,.1)}
 .gbtn{padding:0 20px;min-height:44px;border:1px solid var(--gold);border-radius:2px;color:var(--gold-soft);
-  letter-spacing:.14em;text-transform:uppercase;font-size:12px;transition:.18s;position:relative;overflow:hidden;
+  letter-spacing:.14em;text-transform:uppercase;font-size:13px;transition:.18s;position:relative;overflow:hidden;
   background:linear-gradient(180deg,rgba(201,162,39,.12),rgba(201,162,39,.03))}
 .gbtn:hover{color:var(--ink);background:var(--gold);box-shadow:0 0 26px rgba(201,162,39,.35)}
 .gbtn:disabled{opacity:.35;cursor:not-allowed}
 .gbtn.ghost{border-color:var(--line-soft);color:var(--paper-dim);background:none}
 .gbtn.ghost:hover{border-color:var(--gold);color:var(--gold);background:rgba(201,162,39,.08)}
-#waitNote{font-size:12.5px;color:var(--paper-faint);font-style:italic}
+#waitNote{font-size:13px;color:var(--paper-faint);font-style:italic}
 
 /* ---------- индикатор раздумья ---------- */
 #thinking{position:fixed;z-index:6;left:50%;transform:translateX(-50%);bottom:96px;display:none;
   align-items:center;gap:10px;padding:8px 15px;border:1px solid var(--line);border-radius:999px;
-  background:rgba(8,6,9,.86);font-size:12.5px;color:var(--paper-dim);letter-spacing:.05em}
+  background:rgba(8,6,9,.86);font-size:13px;color:var(--paper-dim);letter-spacing:.05em}
 #thinking.on{display:flex}
 .dots{display:inline-flex;gap:4px}
 .dots i{width:5px;height:5px;border-radius:50%;background:var(--gold);animation:bob 1.05s infinite ease-in-out}
@@ -194,7 +200,7 @@ body.topview #bottomBar{opacity:.28;pointer-events:none;transition:opacity .3s e
   background:rgba(10,8,11,.9);border:1px solid var(--line);border-radius:2px;font-size:13px;color:var(--paper);
   box-shadow:0 12px 34px rgba(0,0,0,.6);opacity:0;transition:opacity .3s}
 .bub.in{opacity:1}
-.bub .nm{display:block;font-family:var(--serif);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:3px}
+.bub .nm{display:block;font-family:var(--serif);font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:3px}
 .bub::after{content:"";position:absolute;left:50%;bottom:-6px;width:10px;height:10px;margin-left:-5px;
   background:rgba(10,8,11,.9);border-right:1px solid var(--line);border-bottom:1px solid var(--line);transform:rotate(45deg)}
 .bub .caret{display:inline-block;width:7px;color:var(--gold);animation:pulse .7s steps(1) infinite}
@@ -214,7 +220,7 @@ body.topview #bottomBar{opacity:.28;pointer-events:none;transition:opacity .3s e
 .opt{padding:11px 15px;border:1px solid var(--line-soft);border-radius:2px;color:var(--paper-dim);
   text-align:left;transition:.17s;background:rgba(0,0,0,.3);min-width:132px}
 .opt b{display:block;font-family:var(--serif);font-size:15px;color:var(--paper);letter-spacing:.05em;font-weight:400}
-.opt span{display:block;font-size:11.5px;color:var(--paper-faint);margin-top:3px;max-width:26ch}
+.opt span{display:block;font-size:13px;color:var(--paper-faint);margin-top:3px;max-width:26ch}
 .opt:hover{border-color:var(--gold);transform:translateY(-2px)}
 .opt.on{border-color:var(--gold);background:linear-gradient(180deg,rgba(201,162,39,.16),rgba(90,22,34,.2))}
 .opt.on b{color:var(--gold-soft)}
@@ -237,9 +243,9 @@ select.inp option{background:#120d11}
   font-family:var(--serif);font-size:18px}
 .profileBox .pTxt{flex:1;min-width:180px;font-size:14.5px;line-height:1.35}
 .profileBox .pTxt b{color:var(--gold-soft);font-family:var(--serif);font-size:17px;letter-spacing:.03em}
-.profileBox .pTxt small{display:block;margin-top:3px;font-size:12px;color:var(--paper-faint)}
-.gbtn.sm{padding:7px 13px;font-size:12.5px}
-#apiNote{font-size:12px;color:var(--paper-faint);margin-top:9px}
+.profileBox .pTxt small{display:block;margin-top:3px;font-size:13px;color:var(--paper-faint)}
+.gbtn.sm{padding:7px 13px;font-size:13px}
+#apiNote{font-size:13px;color:var(--paper-faint);margin-top:9px}
 #apiNote.bad{color:var(--red)}
 
 #rulesModal .wrap{max-width:820px}
@@ -249,10 +255,10 @@ select.inp option{background:#120d11}
 #rulesModal li{margin-bottom:6px}
 #rulesModal b{color:var(--paper)}
 #rulesModal ul{padding-left:19px}
-.kbd{font-family:var(--mono);font-size:12px;padding:1px 6px;border:1px solid var(--line-soft);border-radius:3px;color:var(--gold-soft)}
+.kbd{font-family:var(--mono);font-size:13px;padding:1px 6px;border:1px solid var(--line-soft);border-radius:3px;color:var(--gold-soft)}
 .rulesTable{width:100%;border-collapse:collapse;margin-top:10px;font-size:13.5px}
 .rulesTable th,.rulesTable td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line-soft);vertical-align:top}
-.rulesTable th{color:var(--gold);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:600}
+.rulesTable th{color:var(--gold);font-size:13px;letter-spacing:.16em;text-transform:uppercase;font-weight:600}
 .rulesTable td:first-child{color:var(--paper);white-space:nowrap}
 
 /* ---------- финал ---------- */
@@ -263,7 +269,7 @@ select.inp option{background:#120d11}
   width:min(660px,94vw);max-height:88vh;overflow:auto;text-align:left}
 #storyBox h2{font-family:var(--serif);font-size:clamp(22px,5vw,38px);letter-spacing:.1em;
   text-transform:uppercase;margin:6px 0 2px;color:var(--gold-soft)}
-#storyPlace{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--paper-dim);opacity:.8}
+#storyPlace{font-family:var(--mono);font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--paper-dim);opacity:.8}
 #storyText{color:var(--paper);font-size:15px;line-height:1.62;margin:16px 0 6px}
 #storyRule{color:var(--gold-soft);font-family:var(--serif);font-size:15.5px;font-style:italic;margin:12px 0 4px}
 #storyLinks{list-style:none;padding:0;margin:14px 0 20px}
@@ -289,10 +295,10 @@ select.inp option{background:#120d11}
 .endRow:last-child{border-bottom:none}
 .endRow .nm{font-family:var(--serif);font-size:15px;color:var(--paper);letter-spacing:.02em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.endRow .nm em{font-style:normal;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
+.endRow .nm em{font-style:normal;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
 .endRow .rl{display:flex;align-items:center;gap:8px;color:var(--gold-soft);font-size:13.5px}
 .endRow .rl i{font-style:normal;font-size:16px;width:22px;text-align:center;opacity:.95}
-.endRow .st{justify-self:end;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;
+.endRow .st{justify-self:end;font-family:var(--mono);font-size:13px;letter-spacing:.12em;
   text-transform:uppercase;color:var(--green);padding:3px 9px;border:1px solid rgba(111,174,125,.35);
   border-radius:999px;white-space:nowrap}
 .endRow.out .st{color:var(--red);border-color:rgba(194,65,58,.4)}
@@ -345,10 +351,10 @@ body.installed #btnInstall{display:none}
   #rightpanel{bottom:110px}
 }
 @media (max-width:520px){
-  #brand{font-size:11px;letter-spacing:.14em;padding-right:6px}
+  #brand{font-size:13px;letter-spacing:.14em;padding-right:6px}
   #topspace{gap:5px;padding:6px 8px}
   .tbtn{min-width:40px;min-height:40px;font-size:15px}
-  .stat{padding:0 6px;font-size:11px}
+  .stat{padding:0 6px;font-size:13px}
   #leftpanel,#rightpanel{left:8px;right:8px;top:calc(56px + env(safe-area-inset-top,0px));max-height:48vh}
   #bottombar{width:calc(100vw - 16px);bottom:calc(10px + env(safe-area-inset-bottom,0px));padding:10px}
   #bbBody .opt,#bbBody button{min-height:44px;font-size:14px}
@@ -356,13 +362,13 @@ body.installed #btnInstall{display:none}
   #mobTabs .tbtn{min-width:44px;min-height:44px}
   .screen .wrap{padding:22px 12px 44px}
   #roleCard{padding:12px}
-  #bubbles .bubble{font-size:12px;max-width:56vw;padding:7px 10px}
+  #bubbles .bubble{font-size:13px;max-width:56vw;padding:7px 10px}
   #endBox{padding:16px 14px}
 }
 @media (max-width:390px){
   #brand{display:none}
-  .stat{font-size:11.5px;padding:0 4px}
-  #bubbles .bubble{max-width:64vw;font-size:11px}
+  .stat{font-size:13px;padding:0 4px}
+  #bubbles .bubble{max-width:64vw;font-size:13px}
   #bbTitle{font-size:14px}
 }
 /* сенсорный ввод: без задержки и без случайного зума/прокрутки */
@@ -419,7 +425,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
 #chipRow{display:flex;align-items:center;gap:5px;flex:1 1 100%;min-width:0;
   overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;padding-bottom:1px}
 #chipRow::-webkit-scrollbar{display:none}
-.chip{flex:0 0 auto;white-space:nowrap;font-size:11.5px;padding:6px 10px;line-height:1.05}
+.chip{flex:0 0 auto;white-space:nowrap;font-size:13px;padding:6px 10px;line-height:1.05}
 .panelClose{flex:0 0 auto;width:30px;height:30px;border:1px solid var(--line-soft);border-radius:2px;
   color:var(--paper-faint);display:grid;place-items:center;font-size:13px;line-height:1;
   background:rgba(0,0,0,.3);transition:.16s}
@@ -441,7 +447,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
   display:flex;align-items:stretch;gap:7px}
 #paceDock[hidden]{display:none}
 .pdBtn{position:relative;min-height:42px;padding:0 15px;border:1px solid var(--line);border-radius:2px;
-  background:rgba(8,6,9,.9);color:var(--paper-dim);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+  background:rgba(8,6,9,.9);color:var(--paper-dim);font-size:13px;letter-spacing:.12em;text-transform:uppercase;
   backdrop-filter:blur(8px);overflow:hidden;transition:.16s;box-shadow:0 10px 30px rgba(0,0,0,.5)}
 .pdBtn:hover{color:var(--gold);border-color:var(--gold)}
 .pdBtn.icon{width:44px;padding:0;display:grid;place-items:center;font-size:14px;letter-spacing:0}
@@ -465,7 +471,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
   background:rgba(0,0,0,.3);color:var(--paper-dim);text-align:left;font-size:13.5px;line-height:1.3;transition:.16s}
 .mItem:hover{border-color:var(--gold);color:var(--paper)}
 .mItem b{display:block;color:var(--paper);font-weight:500}
-.mItem small{display:block;color:var(--paper-faint);font-size:11px;margin-top:3px}
+.mItem small{display:block;color:var(--paper-faint);font-size:13px;margin-top:3px}
 .mItem.danger{border-color:rgba(194,65,58,.4)}
 .mItem.danger b{color:#e6a49e}
 .mItem.danger:hover{border-color:var(--red);background:rgba(194,65,58,.12)}
@@ -474,7 +480,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
 .paceRow .pc{min-height:48px;padding:8px 10px;border:1px solid var(--line-soft);border-radius:6px;
   background:rgba(0,0,0,.3);color:var(--paper-dim);font-size:13px;transition:.16s;text-align:left}
 .paceRow .pc b{display:block;color:var(--paper);font-weight:500;font-size:13.5px}
-.paceRow .pc small{display:block;color:var(--paper-faint);font-size:11px}
+.paceRow .pc small{display:block;color:var(--paper-faint);font-size:13px}
 .paceRow .pc.on{border-color:var(--gold);background:rgba(201,162,39,.14)}
 .paceRow .pc.on b{color:var(--gold-soft)}
 
@@ -482,7 +488,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
 #endBox{width:min(660px,94vw);max-height:min(88vh,88dvh);text-align:left}
 #endTitle,#endSub{text-align:center}
 #endActions{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;margin-top:6px}
-#endActions .gbtn{flex:1 1 170px;min-height:50px;padding:0 16px;font-size:12px;letter-spacing:.14em}
+#endActions .gbtn{flex:1 1 170px;min-height:50px;padding:0 16px;font-size:13px;letter-spacing:.14em}
 #endStory p{white-space:pre-wrap}
 
 /* ---------- нижняя панель: длинные списки прокручиваются ---------- */
@@ -495,11 +501,11 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
 @media (max-width:860px){
   body{font-size:15px}
   #topbar{height:auto;min-height:52px;padding:calc(4px + var(--sat)) 8px 4px;gap:4px;overflow:hidden}
-  #brand{font-size:12.5px;letter-spacing:.18em;padding-right:8px;margin-right:0}
+  #brand{font-size:13px;letter-spacing:.18em;padding-right:8px;margin-right:0}
   #topStats{display:flex;flex:1 1 auto;min-width:0;overflow-x:auto;scrollbar-width:none}
   #topStats::-webkit-scrollbar{display:none}
   .stat{padding:0 8px;min-width:0}
-  .stat .k{font-size:11px;letter-spacing:.06em}
+  .stat .k{font-size:13px;letter-spacing:.06em}
   .stat .v{font-size:13px}
   #topspace{display:none}
   .tbtn.deskOnly{display:none!important}
@@ -522,11 +528,11 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
   #mobTabs{left:calc(8px + var(--sal));bottom:auto;top:calc(60px + var(--sat));z-index:12}
   #mobTabs .tbtn{width:44px;height:44px}
   #paceDock{right:calc(8px + var(--sar));left:auto;bottom:auto;top:calc(60px + var(--sat));z-index:12}
-  .pdBtn{min-height:44px;font-size:11px;padding:0 11px}
+  .pdBtn{min-height:44px;font-size:13px;padding:0 11px}
   #thinking{left:50%;right:auto;transform:translateX(-50%);top:auto;
-    bottom:calc(78px + var(--sab));font-size:12px;padding:7px 13px}
-  #topExit{bottom:calc(80px + var(--sab));font-size:12px;padding:10px 16px}
-  .bub{max-width:min(66vw,280px);font-size:12.5px;padding:9px 11px}
+    bottom:calc(78px + var(--sab));font-size:13px;padding:7px 13px}
+  #topExit{bottom:calc(80px + var(--sab));font-size:13px;padding:10px 16px}
+  .bub{max-width:min(66vw,280px);font-size:13px;padding:9px 11px}
 
   .screen .wrap{padding:calc(26px + var(--sat)) 16px calc(44px + var(--sab))}
   .opt{flex:1 1 150px;min-width:0}
@@ -536,16 +542,16 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
   #endActions .gbtn{flex:1 1 100%}
   .endRow{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"nm st" "rl st";gap:4px 10px;padding:9px 10px}
   .endRow .nm{grid-area:nm}
-  .endRow .rl{grid-area:rl;font-size:12.5px}
+  .endRow .rl{grid-area:rl;font-size:13px}
   .endRow .st{grid-area:st;align-self:center}
   #rulesModal h2{font-size:24px}
-  .rulesTable{font-size:12.5px}
+  .rulesTable{font-size:13px}
   .rulesTable th,.rulesTable td{padding:7px 6px}
   .rulesTable td:first-child{white-space:normal}
 }
 
 @media (max-width:520px){
-  #brand{font-size:11px;letter-spacing:.12em;padding-right:6px}
+  #brand{font-size:13px;letter-spacing:.12em;padding-right:6px}
   #leftpanel,#rightpanel{max-height:min(54vh,54dvh)}
   .tgt{flex:1 1 calc(50% - 4px);text-align:center}
   .tgt.skip,.tgt.scn{flex:1 1 100%}
@@ -558,7 +564,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
 @media (max-width:380px){
   #brand{display:none}
   .stat{padding:0 6px}
-  .stat .v{font-size:12px}
+  .stat .v{font-size:13px}
 }
 
 @media (max-height:520px) and (max-width:960px){
@@ -585,21 +591,22 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
     <div class="stat" id="statApi" hidden><span class="k">—</span><span class="v" id="stApi"></span></div>
   </div>
   <div id="topspace"></div>
-  <button class="tbtn deskOnly" id="btnMute" title="Звук" aria-label="Звук">♪</button>
-  <button class="tbtn on deskOnly" id="btnLight" title="Яркость сцены" aria-label="Свет">☀</button>
-  <button class="tbtn deskOnly" id="btnTop" title="Вид сверху — весь стол" aria-pressed="false">⍟</button>
-  <button class="tbtn deskOnly" id="btnInstall" title="Установить игру на устройство" hidden>⤓</button>
-  <button class="tbtn deskOnly" id="btnRules" title="Правила">?</button>
-  <button class="tbtn wide deskOnly" id="btnFinish">Завершить партию</button>
-  <button class="tbtn wide deskOnly" id="btnNew">Домой</button>
-  <button class="tbtn" id="btnMenu" title="Меню и выход" aria-label="Меню">☰</button>
+  <button class="tbtn deskOnly" id="btnMute" title="Звук" aria-label="Звук" data-ico="sound"></button>
+  <button class="tbtn deskOnly" id="btnVoice" title="Читать реплики вслух" aria-label="Читать реплики вслух" data-ico="mask"></button>
+  <button class="tbtn on deskOnly" id="btnLight" title="Яркость сцены" aria-label="Свет" data-ico="candle"></button>
+  <button class="tbtn deskOnly" id="btnTop" title="Вид сверху — весь стол" aria-label="Вид сверху — весь стол" aria-pressed="false">⍟</button>
+  <button class="tbtn deskOnly" id="btnInstall" title="Установить игру на устройство" aria-label="Установить игру на устройство" hidden>⤓</button>
+  <button class="tbtn deskOnly" id="btnRules" title="Правила" aria-label="Правила игры">?</button>
+  <button class="tbtn wide deskOnly" id="btnFinish" aria-label="Завершить партию">Завершить партию</button>
+  <button class="tbtn wide deskOnly" id="btnNew" aria-label="Новая партия">Домой</button>
+  <button class="tbtn" id="btnMenu" title="Меню и выход" aria-label="Меню" data-ico="gear"></button>
 </header>
 
 <!-- ================= ЛЕВАЯ ПАНЕЛЬ ================= -->
 <aside id="leftpanel" class="hud plate">
-  <div id="leftHead"><span class="eyebrow">Ваша карта</span><button class="panelClose" id="closeLeft" title="Скрыть панель" aria-label="Скрыть панель">✕</button></div>
+  <div id="leftHead"><span class="eyebrow">Ваша карта</span><button class="panelClose" id="closeLeft" title="Скрыть панель" aria-label="Скрыть панель" data-ico="close"></button></div>
   <div id="roleCard">
-    <div id="roleGlyph">🂠</div>
+    <div id="roleGlyph"></div>
     <div id="roleName">Роль скрыта</div>
     <div id="roleDesc">Карты ещё не розданы.</div>
     <div id="youName"></div>
@@ -613,7 +620,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
   <div id="logHead">
     <span class="eyebrow">Протокол</span>
     <span class="headSpace"></span>
-    <button class="panelClose" id="closeRight" title="Скрыть протокол" aria-label="Скрыть протокол">✕</button>
+    <button class="panelClose" id="closeRight" title="Скрыть протокол" aria-label="Скрыть протокол" data-ico="close"></button>
     <div id="chipRow">
       <button class="chip on" data-f="all">Всё</button>
       <button class="chip" data-f="talk">Речи</button>
@@ -644,11 +651,11 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
   </div>
 </div>
 
-<button id="topExit" hidden>✕&nbsp;Вернуться к столу</button>
+<button id="topExit" hidden data-ico="back">&nbsp;Вернуться к столу</button>
 
 <div id="mobTabs">
-  <button class="tbtn" id="mobLeft" title="Моя роль" aria-label="Моя роль" aria-pressed="true">🂡</button>
-  <button class="tbtn" id="mobRight" title="Протокол" aria-label="Протокол" aria-pressed="true">☰</button>
+  <button class="tbtn" id="mobLeft" title="Моя роль" aria-label="Моя роль" aria-pressed="true" data-ico="scroll"></button>
+  <button class="tbtn" id="mobRight" title="Протокол" aria-label="Протокол" aria-pressed="true" data-ico="hourglass"></button>
 </div>
 
 <!-- ================= ТЕМП ПОВЕСТВОВАНИЯ ================= -->
@@ -662,7 +669,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
   <div class="sheetBox">
     <span class="sheetGrip"></span>
     <div class="sheetHead"><span class="eyebrow">Меню партии</span>
-      <button class="panelClose" id="menuClose" aria-label="Закрыть">✕</button></div>
+      <button class="panelClose" id="menuClose" aria-label="Закрыть" data-ico="close"></button></div>
     <div class="sheetGrid">
       <button class="mItem" id="mRole"><b>Моя роль</b><small>Карта и тайные записи</small></button>
       <button class="mItem" id="mLog"><b>Протокол</b><small>Всё, что сказано за столом</small></button>
@@ -802,16 +809,16 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
     <h3>Роли</h3>
     <table class="rulesTable">
       <tr><th>Роль</th><th>Что умеет</th><th>За кого играет</th></tr>
-      <tr><td>🎩 Мафия</td><td>Ночью выбирает жертву. Знает своих сообщников. Себя убить не может.</td><td>Мафия</td></tr>
-      <tr><td>✚ Доктор</td><td>Ночью лечит одного игрока. Можно себя, но нельзя одного и того же две ночи подряд.</td><td>Город</td></tr>
-      <tr><td>★ Шериф</td><td>Ночью проверяет одного игрока и узнаёт: мафия или нет. Результат видит только он.</td><td>Город</td></tr>
+      <tr><td>Мафия</td><td>Ночью выбирает жертву. Знает своих сообщников. Себя убить не может.</td><td>Мафия</td></tr>
+      <tr><td>Доктор</td><td>Ночью лечит одного игрока. Можно себя, но нельзя одного и того же две ночи подряд.</td><td>Город</td></tr>
+      <tr><td>Шериф</td><td>Ночью проверяет одного игрока и узнаёт: мафия или нет. Результат видит только он.</td><td>Город</td></tr>
       <tr><td>⌂ Мирный</td><td>Особых умений нет — только голос, логика и умение читать людей.</td><td>Город</td></tr>
     </table>
 
     <h3>Порядок фаз</h3>
     <ul>
       <li><b>Ночь.</b> Мафия выбирает жертву → доктор выбирает, кого лечить → шериф проверяет одного игрока.</li>
-      <li><b>Утро.</b> ООбъявляется итог: кто убит и какая у него была роль. Если доктор угадал — «этой ночью все выжили».</li>
+      <li><b>Утро.</b> Объявляется итог: кто убит и какая у него была роль. Если доктор угадал — «этой ночью все выжили».</li>
       <li><b>Обсуждение.</b> Каждый живой по кругу говорит одну реплику. Ваша — в поле внизу.</li>
       <li><b>Голосование.</b> Все живые голосуют за казнь или воздерживаются. Больше всего голосов — казнь и раскрытие роли.</li>
       <li><b>Ничья.</b> Переголосование только между лидерами. Повторная ничья — никого не казнят.</li>
@@ -856,25 +863,28 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
   </div>
 </div>
 
+<script src="/js/icons.js"></script>
+<script src="/js/voice.js"></script>
 <script src="/js/speech.js"></script>
 <script src="/js/scene2d.js"></script>
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    "three": "/vendor/three/three.module.js",
+    "three/addons/": "/vendor/three/"
   }
 }
 </script>
 <script type="module">
 /* =========================================================================
    ЗАГРУЗКА 3D — БЕЗОПАСНАЯ.
-   Было: three.js подключался статическим import с внешнего CDN. Без
-   интернета или на плохой мобильной сети игра вообще не запускалась:
-   пустой экран, фазы не шли.
-   Стало: динамический импорт с таймаутом 9 с + проверка WebGL. Если что-то
-   не сложилось — играем на запасной 2D-сцене. Игра работает всегда.
+   three.js лежит внутри проекта (/vendor/three), поэтому игра открывается
+   и без интернета: ни одного обращения к CDN. Импорт всё равно оставлен
+   динамическим с таймаутом и проверкой WebGL — если библиотека не встала
+   или видеоускорения нет, партия идёт на запасной 2D-сцене.
    ========================================================================= */
+import { createModels } from '/js/models3d.js';
+
 let THREE = null;
 let OrbitControls = null;
 let USE_2D = false;
@@ -900,11 +910,6 @@ function withTimeout(promise, ms, label){
 if(!webglSupported()){
   USE_2D = true;
   SCENE_FALLBACK_REASON = 'no-webgl';
-} else if(navigator.onLine === false){
-  /* Браузер точно знает, что сети нет. Не стучимся на CDN впустую:
-     сразу берём запасную сцену — быстрее старт и чистая консоль. */
-  USE_2D = true;
-  SCENE_FALLBACK_REASON = 'offline';
 } else {
   try {
     const [core, orbit] = await withTimeout(Promise.all([
@@ -965,7 +970,7 @@ const DIFFICULTY = {
   hardcore: {
     label:'Хардкор', temp:0.75, hints:false, sheriffSafeFirstNight:false,
     mafiaSkill:0.95, townSkill:0.85, timers:{ speak:45, vote:20 },
-    style:'УРОВЕНЬ: ХАРДКОР. Всё как на сложном, но жёстче: мафия играетт безупречно и без жалости, давит на человека таймингом и прямыми вопросами, требует отчёта о каждом голосе.'
+    style:'УРОВЕНЬ: ХАРДКОР. Всё как на сложном, но жёстче: мафия играет безупречно и без жалости, давит на человека таймингом и прямыми вопросами, требует отчёта о каждом голосе.'
   }
 };
 
@@ -1029,10 +1034,10 @@ function gw(idx, key){ const pair = GENDERED[key]; return sexOf(idx) === 'f' ? p
 
 const ROLE = { MAFIA:'mafia', DOCTOR:'doctor', SHERIFF:'sheriff', CIVILIAN:'civilian' };
 const ROLE_INFO = {
-  mafia:    { ru:'Мафия',        glyph:'🎩', desc:'Ночью вы выбираете жертву. Днём — говорите как мирный.', color:'#c2413a' },
-  doctor:   { ru:'Доктор',       glyph:'✚', desc:'Ночью спасаете одного. Не дважды подряд одного и того же.', color:'#6fae7d' },
-  sheriff:  { ru:'Шериф',        glyph:'★', desc:'Ночью проверяете одного игрока. Результат видите только вы.', color:'#5f93c4' },
-  civilian: { ru:'Мирный житель', glyph:'⌂', desc:'У вас есть только голос, логика и чутьё.', color:'#efe6d6' }
+  mafia:    { ru:'Мафия',        icon:'hat',   desc:'Ночью вы выбираете жертву. Днём — говорите как мирный.', color:'#c4563a' },
+  doctor:   { ru:'Доктор',       icon:'cross', desc:'Ночью спасаете одного. Не дважды подряд одного и того же.', color:'#7ba295' },
+  sheriff:  { ru:'Шериф',        icon:'star',  desc:'Ночью проверяете одного игрока. Результат видите только вы.', color:'#6b7fa2' },
+  civilian: { ru:'Мирный житель', icon:'roof', desc:'У вас есть только голос, логика и чутьё.', color:'#ddd5c7' }
 };
 
 const SETUPS = {
@@ -1488,504 +1493,31 @@ const Sound = (() => {
 })();
 
 /* =========================================================================
-   MODELS_3D · всё из примитивов и canvas-текстур
+   MODELS_3D · декорации и фигуры берём из общей мастерской.
+
+   Раньше вся геометрия лежала прямо здесь, и сетевой режим не мог ею
+   воспользоваться — там была плоская сетка карточек. Теперь и бот-режим,
+   и игра по сети строят одну и ту же комнату из /js/models3d.js.
+
+   three.js подключается динамически, поэтому мастерскую создаём не на
+   верхнем уровне модуля, а сразу после загрузки библиотеки.
    ========================================================================= */
-const GOLD = 0xc9a227;
+let MODELS = null;
+let LOWQ = false, sg = (hi) => hi;
+let cvs, texFromCanvas, roundRect, disposeTree, feltCanvas, faceCanvas,
+    cardBackCanvas, cardFaceCanvas, nameCanvas, crossCanvas,
+    buildFigure, buildChair, buildRoomShared, buildLampShared, buildTableShared;
 
-function cvs(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
-
-function texFromCanvas(c, renderer){
-  const t = new THREE.CanvasTexture(c);
-  t.anisotropy = 4;
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.needsUpdate = true;
-  return t;
-}
-
-/* рубашка карты */
-function cardBackCanvas(){
-  const c = cvs(256,352), g = c.getContext('2d');
-  const grd = g.createLinearGradient(0,0,0,352);
-  grd.addColorStop(0,'#4b121c'); grd.addColorStop(1,'#26080e');
-  g.fillStyle = grd; g.fillRect(0,0,256,352);
-  g.strokeStyle = 'rgba(201,162,39,.75)'; g.lineWidth = 4;
-  g.strokeRect(12,12,232,328);
-  g.strokeStyle = 'rgba(201,162,39,.35)'; g.lineWidth = 2;
-  g.strokeRect(24,24,208,304);
-  g.save(); g.translate(128,176);
-  g.strokeStyle = 'rgba(201,162,39,.5)';
-  for(let i=0;i<12;i++){
-    g.rotate(Math.PI/6);
-    g.beginPath(); g.ellipse(0,-70,16,44,0,0,Math.PI*2); g.stroke();
-  }
-  g.fillStyle = 'rgba(201,162,39,.85)';
-  g.beginPath(); g.arc(0,0,14,0,Math.PI*2); g.fill();
-  g.restore();
-  return c;
-}
-
-/* лицо карты с символом роли */
-function cardFaceCanvas(role){
-  /* высокое разрешение + контрастный фон: текст на карте читается с камеры */
-  const S = 2;                       // масштаб канваса (512×704)
-  const c = cvs(256*S, 352*S), g = c.getContext('2d');
-  g.scale(S, S);
-  const grd = g.createLinearGradient(0,0,0,352);
-  grd.addColorStop(0,'#fffaf0'); grd.addColorStop(1,'#efe4cd');
-  g.fillStyle = grd; g.fillRect(0,0,256,352);
-  g.strokeStyle = '#3d0f18'; g.lineWidth = 5; g.strokeRect(11,11,234,330);
-  g.strokeStyle = 'rgba(61,15,24,.35)'; g.lineWidth = 1.5; g.strokeRect(19,19,218,314);
-  g.save(); g.translate(128,144);
-  g.strokeStyle = '#1a1013'; g.fillStyle = '#1a1013'; g.lineWidth = 7; g.lineJoin='round';
-  if(role === ROLE.MAFIA){
-    g.beginPath(); g.ellipse(0,42,74,15,0,0,Math.PI*2); g.fill();
-    g.beginPath(); g.moveTo(-40,38); g.quadraticCurveTo(-46,-42,0,-46); g.quadraticCurveTo(46,-42,40,38); g.closePath(); g.fill();
-    g.fillStyle = '#8a2b2b'; g.fillRect(-42,18,84,14);
-  } else if(role === ROLE.DOCTOR){
-    g.fillStyle = '#8f2020';
-    g.fillRect(-19,-58,38,116); g.fillRect(-58,-19,116,38);
-  } else if(role === ROLE.SHERIFF){
-    g.fillStyle = '#b8901f'; g.beginPath();
-    for(let i=0;i<10;i++){
-      const a = -Math.PI/2 + i*Math.PI/5, r = i%2 ? 26 : 62;
-      g[i?'lineTo':'moveTo'](Math.cos(a)*r, Math.sin(a)*r);
-    }
-    g.closePath(); g.fill();
-    g.fillStyle='#f2e9d8'; g.beginPath(); g.arc(0,0,15,0,Math.PI*2); g.fill();
-  } else {
-    g.fillStyle = '#2f5d40';
-    g.beginPath(); g.moveTo(0,-58); g.lineTo(62,-2); g.lineTo(40,-2); g.lineTo(40,56);
-    g.lineTo(-40,56); g.lineTo(-40,-2); g.lineTo(-62,-2); g.closePath(); g.fill();
-    g.fillStyle = '#d9cdb4'; g.fillRect(-13,14,26,42);
-  }
-  g.restore();
-  g.textAlign = 'center';
-  g.textBaseline = 'alphabetic';
-
-  /* тёмная плашка под названием роли — максимальный контраст */
-  const PLATE_X = 22, PLATE_W = 212, PLATE_Y = 256, PLATE_H = 48;
-  g.fillStyle = '#3d0f18';
-  roundRect(g, PLATE_X, PLATE_Y, PLATE_W, PLATE_H, 8); g.fill();
-
-  /* автоподбор кегля: длинные названия («МИРНЫЙ ЖИТЕЛЬ») больше не вылезают за плашку */
-  const title = ROLE_INFO[role].ru.toUpperCase();
-  const maxW = PLATE_W - 26;
-  let size = 34;
-  g.font = 'bold ' + size + 'px Georgia, serif';
-  while(size > 15 && g.measureText(title).width > maxW){
-    size -= 1;
-    g.font = 'bold ' + size + 'px Georgia, serif';
-  }
-  /* если даже минимальный кегль широк — мягко сжимаем по горизонтали */
-  const tw = g.measureText(title).width;
-  const squeeze = tw > maxW ? maxW / tw : 1;
-  g.fillStyle = '#ffeec8';
-  g.save();
-  g.translate(128, PLATE_Y + PLATE_H / 2 + size * 0.35);
-  g.scale(squeeze, 1);
-  g.fillText(title, 0, 0);
-  g.restore();
-
-  /* подпись под плашкой — тоже с автоподбором */
-  const sub = role === ROLE.MAFIA ? 'город против вас' : 'вы за город';
-  let ssize = 17;
-  g.font = 'bold ' + ssize + 'px Georgia, serif';
-  while(ssize > 10 && g.measureText(sub).width > maxW){
-    ssize -= 1;
-    g.font = 'bold ' + ssize + 'px Georgia, serif';
-  }
-  g.fillStyle = '#5a2230';
-  g.fillText(sub, 128, PLATE_Y + PLATE_H + 20);
-  return c;
-}
-
-/* табличка с именем */
-function nameCanvas(name, opts){
-  opts = opts || {};
-  const c = cvs(512,140), g = c.getContext('2d');
-  g.clearRect(0,0,512,140);
-  g.fillStyle = opts.dead ? 'rgba(20,6,8,.82)' : 'rgba(10,8,11,.72)';
-  roundRect(g, 26, 24, 460, 88, 8); g.fill();
-  g.strokeStyle = opts.dead ? 'rgba(194,65,58,.85)'
-              : opts.speaking ? 'rgba(230,199,102,1)' : 'rgba(201,162,39,.45)';
-  g.lineWidth = opts.speaking ? 6 : 3;
-  roundRect(g, 26, 24, 460, 88, 8); g.stroke();
-  g.font = 'bold 46px Georgia, serif';
-  g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillStyle = opts.dead ? 'rgba(239,230,214,.42)' : (opts.you ? '#e6c766' : '#efe6d6');
-  g.fillText(opts.dead ? name + '  †' : name, 256, 66);
-  if(opts.you){
-    g.font = '20px Georgia, serif'; g.fillStyle = 'rgba(230,199,102,.85)';
-    g.fillText('— вы —', 256, 104);
-  }
-  return c;
-}
-function roundRect(g,x,y,w,h,r){
-  g.beginPath();
-  g.moveTo(x+r,y); g.lineTo(x+w-r,y); g.quadraticCurveTo(x+w,y,x+w,y+r);
-  g.lineTo(x+w,y+h-r); g.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
-  g.lineTo(x+r,y+h); g.quadraticCurveTo(x,y+h,x,y+h-r);
-  g.lineTo(x,y+r); g.quadraticCurveTo(x,y,x+r,y); g.closePath();
-}
-
-/* деревянная текстура столешницы */
-function feltCanvas(){
-  const c = cvs(512,512), g = c.getContext('2d');
-  g.fillStyle = '#20313a'; g.fillRect(0,0,512,512);
-  const img = g.getImageData(0,0,512,512), d = img.data;
-  for(let i=0;i<d.length;i+=4){
-    const n = (Math.random()-0.5)*22;
-    d[i]+=n; d[i+1]+=n; d[i+2]+=n;
-  }
-  g.putImageData(img,0,0);
-  g.strokeStyle = 'rgba(201,162,39,.22)'; g.lineWidth = 5;
-  g.beginPath(); g.arc(256,256,196,0,Math.PI*2); g.stroke();
-  g.lineWidth = 2; g.strokeStyle = 'rgba(201,162,39,.12)';
-  g.beginPath(); g.arc(256,256,176,0,Math.PI*2); g.stroke();
-  return c;
-}
-
-/* ---------- качество: на слабых/мобильных устройствах уменьшаем сетку ---------- */
-const LOWQ = (() => {
-  try {
-    if(typeof matchMedia === 'undefined') return false;
-    const small = matchMedia('(max-width: 860px)').matches;
-    const weak = (navigator.hardwareConcurrency || 8) <= 4;
-    return small || weak;
-  } catch(e){ return false; }
-})();
-const sg = (hi, lo) => LOWQ ? lo : hi;
-
-function prng(seed){
-  let s = ((seed|0) * 1664525 + 1013904223) & 0x7fffffff;
-  return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
-}
-
-/* Лицо рисуется в equirect-развёртке сферы: центр лица приходится на u = 0.25,
-   то есть ровно на направление +z, куда фигура смотрит. */
-function faceCanvas(skinHex, hairHex, seed, female){
-  const W = LOWQ ? 512 : 1024, H = W / 2;
-  const c = cvs(W, H), g = c.getContext('2d');
-  const rnd = prng(seed * 31 + 5);
-  const cx = W * 0.25, cy = H * 0.50, f = W * 0.20;
-  const sc = '#' + new THREE.Color(skinHex).getHexString();
-  const hc = '#' + new THREE.Color(hairHex).getHexString();
-
-  g.fillStyle = sc; g.fillRect(0, 0, W, H);
-
-  const sd = g.createLinearGradient(cx - f * 0.85, 0, cx + f * 0.85, 0);
-  sd.addColorStop(0, 'rgba(24,12,10,.34)');
-  sd.addColorStop(0.5, 'rgba(255,238,220,.10)');
-  sd.addColorStop(1, 'rgba(24,12,10,.34)');
-  g.fillStyle = sd; g.fillRect(0, 0, W, H);
-
-  const hairY = cy - f * (female ? 0.30 : 0.40);
-  g.fillStyle = hc; g.fillRect(0, 0, W, hairY);
-  g.beginPath();
-  g.ellipse(cx, hairY + f * 0.05, f * 0.47, f * 0.32, 0, Math.PI, Math.PI * 2);
-  g.fillStyle = sc; g.fill();
-  if(female){
-    g.fillStyle = hc;
-    for(const s of [-1, 1]){
-      g.beginPath();
-      g.ellipse(cx + s * f * 0.48, cy + f * 0.15, f * 0.16, f * 0.62, 0, 0, Math.PI * 2);
-      g.fill();
-    }
-  }
-
-  const ey = cy - f * 0.09, ex = f * 0.20, ew = f * 0.155, eh = f * 0.082;
-  const irises = ['#4a3524', '#3d5a46', '#2f4f6b', '#5a3f2a', '#6b6357'];
-  const iris = irises[Math.floor(rnd() * irises.length)];
-  for(const s of [-1, 1]){
-    const x = cx + s * ex;
-    g.fillStyle = 'rgba(60,34,26,.16)';
-    g.beginPath(); g.ellipse(x, ey, ew * 1.4, eh * 2.0, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#f4ede3';
-    g.beginPath(); g.ellipse(x, ey, ew, eh, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = iris;
-    g.beginPath(); g.arc(x, ey, eh * 0.94, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#0f0b0b';
-    g.beginPath(); g.arc(x, ey, eh * 0.42, 0, Math.PI * 2); g.fill();
-    g.fillStyle = 'rgba(255,255,255,.9)';
-    g.beginPath(); g.arc(x - eh * 0.32, ey - eh * 0.34, eh * 0.22, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = 'rgba(44,26,20,.8)';
-    g.lineWidth = Math.max(1.5, f * 0.024); g.lineCap = 'round';
-    g.beginPath(); g.ellipse(x, ey, ew, eh, 0, Math.PI * 1.03, Math.PI * 1.97); g.stroke();
-    g.strokeStyle = hc;
-    g.lineWidth = f * (female ? 0.032 : 0.052);
-    const outer = x + s * ew * 1.15, inner = x - s * ew * 1.15;
-    g.beginPath();
-    g.moveTo(outer, ey - eh * 2.1);
-    g.quadraticCurveTo(x, ey - eh * 3.3, inner, ey - eh * 2.6);
-    g.stroke();
-  }
-
-  g.strokeStyle = 'rgba(52,26,18,.26)'; g.lineWidth = f * 0.022;
-  g.beginPath();
-  g.moveTo(cx - f * 0.025, ey + eh * 0.9);
-  g.lineTo(cx - f * 0.052, cy + f * 0.095);
-  g.quadraticCurveTo(cx, cy + f * 0.155, cx + f * 0.052, cy + f * 0.095);
-  g.stroke();
-  g.fillStyle = 'rgba(30,16,12,.4)';
-  for(const s of [-1, 1]){
-    g.beginPath();
-    g.ellipse(cx + s * f * 0.046, cy + f * 0.113, f * 0.017, f * 0.011, 0, 0, Math.PI * 2);
-    g.fill();
-  }
-
-  const my = cy + f * 0.255;
-  g.fillStyle = female ? '#a8534f' : '#8c534c';
-  g.beginPath();
-  g.moveTo(cx - f * 0.125, my);
-  g.quadraticCurveTo(cx, my - f * 0.048, cx + f * 0.125, my);
-  g.quadraticCurveTo(cx, my + f * 0.078, cx - f * 0.125, my);
-  g.fill();
-  g.strokeStyle = 'rgba(58,28,24,.55)'; g.lineWidth = f * 0.013;
-  g.beginPath();
-  g.moveTo(cx - f * 0.125, my);
-  g.quadraticCurveTo(cx, my + f * 0.018, cx + f * 0.125, my);
-  g.stroke();
-
-  g.fillStyle = 'rgba(70,36,26,.13)';
-  g.beginPath(); g.ellipse(cx, my + f * 0.20, f * 0.24, f * 0.13, 0, 0, Math.PI * 2); g.fill();
-  g.fillStyle = 'rgba(190,96,80,.13)';
-  for(const s of [-1, 1]){
-    g.beginPath();
-    g.ellipse(cx + s * f * 0.33, cy + f * 0.09, f * 0.12, f * 0.09, 0, 0, Math.PI * 2);
-    g.fill();
-  }
-
-  if(!female && rnd() > 0.45){
-    g.fillStyle = 'rgba(38,28,26,.22)';
-    g.beginPath();
-    g.ellipse(cx, my + f * 0.12, f * 0.31, f * 0.24, 0, 0, Math.PI * 2);
-    g.fill();
-  }
-  return c;
-}
-
-/* Кость: цилиндр между двумя точками — для рук и ног в позе сидя */
-function bone(a, b, r1, r2, mat, segs){
-  const grp = new THREE.Group();
-  grp.position.set(a[0], a[1], a[2]);
-  const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
-  const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.001;
-  grp.lookAt(new THREE.Vector3(b[0], b[1], b[2]));
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, len, segs || sg(14, 8)), mat);
-  m.rotation.x = Math.PI / 2;
-  m.position.z = len / 2;
-  m.castShadow = true;
-  grp.add(m);
-  return grp;
-}
-
-/* Анатомическая фигура человека, сидящего за столом:
-   ноги (бедро-голень-стопа), руки (плечо-предплечье-кисть с пальцами),
-   торс с грудью и плечевым поясом, шея, голова с лицом. */
-function buildFigure(color, hatKind, seed, opts){
-  opts = opts || {};
-  const female = opts.sex === 'f';
-  const rnd = prng(seed * 17 + 3);
-  const grp = new THREE.Group();
-  const base = new THREE.Color(color);
-
-  const skinC = new THREE.Color().setHSL(0.070 + (seed % 3) * 0.006, 0.36, 0.58 + (seed % 4) * 0.045);
-  const hairC = new THREE.Color().setHSL(0.07, 0.42, 0.14 + (seed % 4) * 0.07);
-
-  const cloth = new THREE.MeshStandardMaterial({ color: base.clone().multiplyScalar(1.22), roughness: 0.74, metalness: 0.04 });
-  const dark  = new THREE.MeshStandardMaterial({ color: base.clone().multiplyScalar(0.62), roughness: 0.82, metalness: 0.05 });
-  const skin  = new THREE.MeshStandardMaterial({ color: skinC, roughness: 0.58, metalness: 0.0 });
-  const shirt = new THREE.MeshStandardMaterial({ color: 0xe9e3d6, roughness: 0.64 });
-  const tieM  = new THREE.MeshStandardMaterial({ color: base.clone().multiplyScalar(0.42), roughness: 0.54 });
-  const hairM = new THREE.MeshStandardMaterial({ color: hairC, roughness: 0.88 });
-  const trous = new THREE.MeshStandardMaterial({ color: base.clone().multiplyScalar(0.5), roughness: 0.86 });
-  const shoeM = new THREE.MeshStandardMaterial({ color: 0x1c1517, roughness: 0.62, metalness: 0.12 });
-  const faceM = new THREE.MeshStandardMaterial({
-    map: texFromCanvas(faceCanvas(skinC.getHex(), hairC.getHex(), seed, female)),
-    roughness: 0.6, metalness: 0.0
-  });
-
-  /* ---- таз и ноги (поза сидя) ---- */
-  const hipY = 0.56, hipZ = -0.28;
-  const pelvis = new THREE.Mesh(new THREE.SphereGeometry(0.19, sg(20, 10), sg(14, 8)), trous);
-  pelvis.scale.set(1.12, 0.72, 0.92);
-  pelvis.position.set(0, hipY, hipZ);
-  pelvis.castShadow = true; grp.add(pelvis);
-
-  const kneeY = 0.53, kneeZ = 0.20, ankY = 0.11, ankZ = 0.26;
-  for(const s of [-1, 1]){
-    const hx = s * 0.135, kx = s * 0.155, ax = s * 0.16;
-    grp.add(bone([hx, hipY - 0.02, hipZ], [kx, kneeY, kneeZ], 0.115, 0.093, trous));
-    grp.add(bone([kx, kneeY, kneeZ], [ax, ankY, ankZ], 0.088, 0.062, trous));
-    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.098, sg(14, 8), sg(12, 6)), trous);
-    knee.position.set(kx, kneeY, kneeZ); knee.castShadow = true; grp.add(knee);
-    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.075, 0.27), shoeM);
-    shoe.position.set(ax, 0.045, ankZ + 0.06);
-    shoe.castShadow = true; grp.add(shoe);
-    const toe = new THREE.Mesh(new THREE.SphereGeometry(0.066, sg(12, 6), sg(10, 5)), shoeM);
-    toe.scale.set(1, 0.56, 1.05);
-    toe.position.set(ax, 0.045, ankZ + 0.18); grp.add(toe);
-  }
-
-  /* ---- торс ----
-     Позвоночник строится по одной прямой: таз (hipZ) → грудь (torsoZ) → шея.
-     Раньше таз стоял глубоко сзади, а грудь уезжала вперёд — отсюда горб. */
-  const chestY = 0.99;
-  const lean = -0.045;                 // единый наклон всего корпуса: чуть на спинку стула
-  const torsoZ = hipZ * 0.86;          // грудь почти над тазом, а не перед ним
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(female ? 0.235 : 0.265, female ? 0.20 : 0.215, 0.46, sg(22, 12)), cloth);
-  body.position.set(0, (hipY + chestY) / 2 + 0.02, torsoZ);
-  body.rotation.x = lean;
-  body.castShadow = true; body.receiveShadow = true; grp.add(body);
-
-  const chest = new THREE.Mesh(new THREE.SphereGeometry(0.27, sg(22, 12), sg(16, 9)), cloth);
-  chest.scale.set(1.05, 0.86, 0.74);
-  chest.position.set(0, chestY - 0.09, torsoZ + 0.035);
-  chest.rotation.x = lean;
-  chest.castShadow = true; grp.add(chest);
-
-  /* ровная спина: плоская лопаточная плоскость, которая достаёт до спинки стула */
-  const back = new THREE.Mesh(new THREE.CapsuleGeometry(0.115, female ? 0.30 : 0.34, sg(8, 4), sg(16, 8)), cloth);
-  back.scale.set(female ? 1.75 : 1.95, 1, 0.42);
-  back.position.set(0, (hipY + chestY) / 2 + 0.04, torsoZ - (female ? 0.115 : 0.125));
-  back.rotation.x = lean;
-  back.castShadow = true; grp.add(back);
-
-  const cloak = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.34, 0.5, sg(22, 12), 1, true), dark);
-  cloak.position.set(0, hipY + 0.20, torsoZ * 0.92);
-  cloak.rotation.x = lean;
-  cloak.castShadow = true; grp.add(cloak);
-
-  const shX = female ? 0.235 : 0.275, shY = chestY - 0.02, shZ = torsoZ + 0.055;
-  const yoke = new THREE.Mesh(new THREE.CapsuleGeometry(0.105, shX * 2 - 0.02, sg(8, 4), sg(14, 7)), cloth);
-  yoke.rotation.z = Math.PI / 2;
-  yoke.position.set(0, shY, shZ);
-  yoke.castShadow = true; grp.add(yoke);
-
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.16, 0.13, sg(18, 10)), shirt);
-  collar.position.set(0, chestY + 0.06, shZ + 0.02);
-  collar.rotation.x = lean; grp.add(collar);
-  const tie = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.30, 0.04), tieM);
-  tie.position.set(0, chestY - 0.17, shZ + (female ? 0.175 : 0.195));
-  tie.rotation.x = lean; grp.add(tie);
-
-  /* ---- руки: плечо, локоть, предплечье, кисть с пальцами на столе ---- */
-  const wrY = 0.98, wrZ = 0.42;
-  for(const s of [-1, 1]){
-    const sh = [s * shX, shY, shZ];
-    const eb = [s * (shX + 0.07), 0.74, shZ + 0.16];
-    const wr = [s * 0.205, wrY, wrZ];
-    grp.add(bone(sh, eb, 0.098, 0.078, cloth));
-    grp.add(bone(eb, wr, 0.076, 0.058, cloth));
-    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.105, sg(14, 8), sg(12, 6)), cloth);
-    shoulder.position.set(sh[0], sh[1], sh[2]); shoulder.castShadow = true; grp.add(shoulder);
-    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.079, sg(12, 7), sg(10, 5)), cloth);
-    elbow.position.set(eb[0], eb[1], eb[2]); grp.add(elbow);
-    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.05, sg(12, 7)), shirt);
-    cuff.position.set(wr[0], wr[1] + 0.005, wr[2] - 0.055);
-    cuff.rotation.x = Math.PI / 2.4; grp.add(cuff);
-    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.042, 0.115), skin);
-    palm.position.set(wr[0], wr[1] - 0.012, wr[2] + 0.045);
-    palm.rotation.x = -0.08; palm.castShadow = true; grp.add(palm);
-    const fingerG = new THREE.CapsuleGeometry(0.0155, 0.062, sg(5, 3), sg(8, 4));
-    for(let k = 0; k < 4; k++){
-      const fg = new THREE.Mesh(fingerG, skin);
-      fg.position.set(wr[0] + (k - 1.5) * 0.024, wr[1] - 0.018, wr[2] + 0.135);
-      fg.rotation.x = Math.PI / 2 - 0.1;
-      grp.add(fg);
-    }
-    const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.05, sg(5, 3), sg(8, 4)), skin);
-    thumb.position.set(wr[0] - s * 0.052, wr[1] - 0.016, wr[2] + 0.075);
-    thumb.rotation.set(Math.PI / 2 - 0.25, 0, s * 0.7);
-    grp.add(thumb);
-  }
-
-  /* ---- шея и голова ---- */
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.092, 0.16, sg(14, 8)), skin);
-  neck.position.set(0, chestY + 0.11, shZ + 0.005);
-  neck.rotation.x = lean; grp.add(neck);
-
-  const headY = chestY + 0.32, headZ = shZ + 0.012;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.205, sg(32, 16), sg(24, 12)), faceM);
-  head.scale.set(0.97, 1.09, 0.95);
-  head.position.set(0, headY, headZ);
-  head.castShadow = true; grp.add(head);
-
-  const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.155, sg(20, 10), sg(14, 8)), skin);
-  jaw.scale.set(0.95, 0.78, 0.92);
-  jaw.position.set(0, headY - 0.105, headZ + 0.022);
-  grp.add(jaw);
-
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.031, 0.072, sg(12, 6)), skin);
-  nose.rotation.x = Math.PI / 2;
-  nose.position.set(0, headY - 0.012, headZ + 0.196);
-  grp.add(nose);
-
-  for(const s of [-1, 1]){
-    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.042, sg(12, 6), sg(10, 5)), skin);
-    ear.scale.set(0.42, 1.05, 0.78);
-    ear.position.set(s * 0.196, headY - 0.01, headZ - 0.012);
-    grp.add(ear);
-  }
-
-  /* ---- головной убор или причёска ---- */
-  const hat = new THREE.Group();
-  if(hatKind === 'fedora'){
-    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.36, 0.032, sg(28, 14)), dark);
-    const top  = new THREE.Mesh(new THREE.CylinderGeometry(0.185, 0.21, 0.25, sg(28, 14)), dark);
-    top.position.y = 0.14;
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.216, 0.216, 0.058, sg(28, 14)),
-      new THREE.MeshStandardMaterial({ color: 0x1e181c, roughness: 0.72 }));
-    band.position.y = 0.048;
-    brim.castShadow = top.castShadow = true;
-    hat.add(brim, top, band);
-    hat.position.set(0, headY + 0.15, headZ - 0.01);
-    hat.rotation.z = 0.05;
-  } else if(hatKind === 'cap'){
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.222, sg(24, 12), sg(16, 8), 0, Math.PI * 2, 0, Math.PI / 2), dark);
-    const peak = new THREE.Mesh(new THREE.CylinderGeometry(0.228, 0.228, 0.028, sg(22, 11), 1, false, 0, Math.PI), dark);
-    peak.position.set(0, 0.004, 0.155); peak.rotation.y = Math.PI;
-    dome.castShadow = true;
-    hat.add(dome, peak);
-    hat.position.set(0, headY + 0.04, headZ - 0.01);
-  } else {
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.216, sg(24, 12), sg(18, 9), 0, Math.PI * 2, 0, Math.PI * 0.58), hairM);
-    cap.position.set(0, headY - 0.005, headZ - 0.012);
-    cap.scale.set(1.0, 1.05, 1.0);
-    cap.castShadow = true; hat.add(cap);
-    const back = new THREE.Mesh(new THREE.SphereGeometry(0.208, sg(20, 10), sg(14, 7), 0, Math.PI * 2, Math.PI * 0.3, Math.PI * 0.42), hairM);
-    back.position.set(0, headY - 0.005, headZ - 0.052);
-    hat.add(back);
-    if(female){
-      const bun = new THREE.Mesh(new THREE.SphereGeometry(0.105, sg(18, 9), sg(14, 7)), hairM);
-      bun.position.set(0, headY - 0.03, headZ - 0.215);
-      hat.add(bun);
-      for(const s of [-1, 1]){
-        const lock = new THREE.Mesh(new THREE.CapsuleGeometry(0.048, 0.22, sg(6, 3), sg(12, 6)), hairM);
-        lock.position.set(s * 0.182, headY - 0.13, headZ - 0.01);
-        hat.add(lock);
-      }
-    }
-  }
-  grp.add(hat);
-
-  grp.userData = { body, head, hat, cloak,
-    materials: [cloth, dark, skin, shirt, tieM, hairM, trous, shoeM, faceM],
-    baseColor: base.clone() };
-  return grp;
-}
-function buildChair(color){
-  const g = new THREE.Group();
-  const m = new THREE.MeshStandardMaterial({ color:0x2a1d1a, roughness:0.94, flatShading:true });
-  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.62,0.09,0.6), m);
-  seat.position.y = 0.44; g.add(seat);
-  const back = new THREE.Mesh(new THREE.BoxGeometry(0.62,0.72,0.08), m);
-  back.position.set(0,0.82,-0.27); g.add(back);
-  const legG = new THREE.CylinderGeometry(0.035,0.03,0.44,6);
-  [[-0.25,-0.24],[0.25,-0.24],[-0.25,0.24],[0.25,0.24]].forEach(p => {
-    const l = new THREE.Mesh(legG, m); l.position.set(p[0],0.22,p[1]); g.add(l);
-  });
-  return g;
+function initModels(){
+  MODELS = createModels(THREE, { ROLE, ROLE_INFO });
+  LOWQ = MODELS.LOWQ; sg = MODELS.sg;
+  cvs = MODELS.cvs; texFromCanvas = MODELS.texFromCanvas; roundRect = MODELS.roundRect;
+  disposeTree = MODELS.disposeTree; feltCanvas = MODELS.feltCanvas; faceCanvas = MODELS.faceCanvas;
+  cardBackCanvas = MODELS.cardBackCanvas; cardFaceCanvas = MODELS.cardFaceCanvas;
+  nameCanvas = MODELS.nameCanvas; crossCanvas = MODELS.crossCanvas;
+  buildFigure = MODELS.buildFigure; buildChair = MODELS.buildChair;
+  buildRoomShared = MODELS.buildRoom; buildLampShared = MODELS.buildLamp;
+  buildTableShared = MODELS.buildTable;
 }
 
 /* =========================================================================
@@ -1994,6 +1526,8 @@ function buildChair(color){
 const Scene3DGL = (() => {
   let renderer, scene, camera, controls, root;
   let lampLight, lampSpot, lampGlow, ambient, hemi, moon, redGlow, tableLight;
+  let lamp = null;            // общая лампа из models3d: качание, мерцание, пыль
+  let tableRig = null;        // общий стол: сукно, точёная нога, реквизит
   let ceilMesh = null;
   let topMode = false;        // включён ли режим «весь стол сверху»
   let camFlight = 0;          // поколение полёта камеры: новый отменяет старый
@@ -2087,86 +1621,21 @@ const Scene3DGL = (() => {
     camera.updateProjectionMatrix();
   }
 
+  /* Комната и лампа — общие. Сюда попадают только ссылки, которые нужны
+     сценарию бот-режима: потолок (его убираем в виде сверху) и ручки лампы. */
   function buildRoom(){
-    const floorMat = new THREE.MeshStandardMaterial({ color:0x2b2430, roughness:0.94, metalness:0.03 });
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(16, 40), floorMat);
-    floor.rotation.x = -Math.PI/2;
-    floor.receiveShadow = true;
-    root.add(floor);
-
-    const wallMat = new THREE.MeshStandardMaterial({ color:0x30222a, roughness:0.98, metalness:0, side:THREE.BackSide });
-    const walls = new THREE.Mesh(new THREE.CylinderGeometry(13, 13, 8.5, 24, 1, true), wallMat);
-    walls.position.y = 4.2;
-    root.add(walls);
-
-    const ceil = new THREE.Mesh(new THREE.CircleGeometry(13, 24),
-      new THREE.MeshStandardMaterial({ color:0x120e12, roughness:1, side:THREE.DoubleSide }));
-    ceil.rotation.x = Math.PI/2; ceil.position.y = 8.4;
-    ceilMesh = ceil;
-    root.add(ceil);
-
-    const shadowMat = new THREE.MeshStandardMaterial({ color:0x16111a, roughness:1 });
-    for(let i=0;i<9;i++){
-      const a = (i/9)*Math.PI*2 + 0.4;
-      const r = 8 + (i%3);
-      const h = 1.1 + (i%4)*0.75;
-      const box = new THREE.Mesh(new THREE.BoxGeometry(0.8+(i%3)*0.5, h, 0.6), shadowMat);
-      box.position.set(Math.sin(a)*r, h/2, Math.cos(a)*r);
-      box.rotation.y = a;
-      root.add(box);
-    }
+    const r = buildRoomShared(root);
+    ceilMesh = r.ceiling;
   }
 
   function buildLamp(){
-    const g = new THREE.Group();
-    const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.015,4.6,6),
-      new THREE.MeshStandardMaterial({ color:0x0d0b0d, roughness:1 }));
-    cord.position.y = 5.6; g.add(cord);
-
-    const shade = new THREE.Mesh(new THREE.ConeGeometry(0.86, 0.62, 22, 1, true),
-      new THREE.MeshStandardMaterial({ color:0x2b2124, roughness:0.7, metalness:0.35, side:THREE.DoubleSide }));
-    shade.position.y = 3.28; g.add(shade);
-
-    lampGlow = new THREE.Mesh(new THREE.SphereGeometry(0.19, 14, 10),
-      new THREE.MeshBasicMaterial({ color:0xffd9a0 }));
-    lampGlow.position.y = 3.03; g.add(lampGlow);
-
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.8, 22),
-      new THREE.MeshBasicMaterial({ color:0xffcf92, transparent:true, opacity:0.32, side:THREE.DoubleSide }));
-    disc.rotation.x = Math.PI/2; disc.position.y = 3.0; g.add(disc);
-    lampGlow.userData.disc = disc;
-
-    lampSpot = new THREE.SpotLight(0xffd9a8, 62, 20, Math.PI/3.4, 0.62, 1.1);
-    lampSpot.position.set(0, 3.0, 0);
-    lampSpot.target.position.set(0, 0.9, 0);
-    lampSpot.castShadow = true;
-    lampSpot.shadow.mapSize.set(LOWQ ? 512 : 1024, LOWQ ? 512 : 1024);
-    lampSpot.shadow.bias = -0.0016;
-    g.add(lampSpot, lampSpot.target);
-
-    lampLight = new THREE.PointLight(0xffc891, 11, 17, 2);
-    lampLight.position.set(0, 2.95, 0);
-    g.add(lampLight);
-
-    root.add(g);
+    lamp = buildLampShared(root, { ceilY: 8.3, bulbY: 3.0 });
+    lampSpot = lamp.spot;
+    lampLight = lamp.point;
+    lampGlow = lamp.glow;
+    lampGlow.userData.disc = lamp.disc;
   }
 
-  function crossCanvas(){
-    const c = cvs(128,128), g = c.getContext('2d');
-    g.strokeStyle = '#c2413a'; g.lineWidth = 15; g.lineCap='round';
-    g.shadowColor = '#c2413a'; g.shadowBlur = 18;
-    g.beginPath(); g.moveTo(30,30); g.lineTo(98,98); g.moveTo(98,30); g.lineTo(30,98); g.stroke();
-    return c;
-  }
-
-  function disposeTree(obj){
-    obj.traverse(o => {
-      if(o.geometry) o.geometry.dispose();
-      const m = o.material;
-      if(Array.isArray(m)) m.forEach(x => x && x.dispose && x.dispose());
-      else if(m && m.dispose) m.dispose();
-    });
-  }
 
 
   /* ---- стол и места ---- */
@@ -2178,27 +1647,12 @@ const Scene3DGL = (() => {
     arrowsPool.length = 0;
 
     const n = list.length;
-    const tableR = n > 6 ? 2.15 : 1.92;
-    const seatR  = tableR + 0.92;
+    /* Стол собирает общая мастерская: сукно, медный кант, точёная нога,
+       графин, свеча и пепельница. Здесь остаётся только колода. */
+    tableRig = buildTableShared(tableGroup, n);
+    const tableR = tableRig.radius;
+    const seatR  = tableRig.seatRadius;
 
-    const feltTex = texFromCanvas(feltCanvas());
-    const top = new THREE.Mesh(new THREE.CylinderGeometry(tableR, tableR, 0.11, 48),
-      new THREE.MeshStandardMaterial({ map:feltTex, roughness:0.92, metalness:0.03 }));
-    top.position.y = 0.9; top.receiveShadow = true; top.castShadow = true;
-    tableGroup.add(top);
-
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(tableR, 0.055, 8, 60),
-      new THREE.MeshStandardMaterial({ color:0x4a3320, roughness:0.55, metalness:0.4 }));
-    rim.rotation.x = Math.PI/2; rim.position.y = 0.9;
-    tableGroup.add(rim);
-
-    const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.42, 0.86, 12),
-      new THREE.MeshStandardMaterial({ color:0x2a1d18, roughness:0.9 }));
-    pedestal.position.y = 0.45; pedestal.castShadow = true;
-    tableGroup.add(pedestal);
-    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.78, 0.86, 0.09, 16),
-      new THREE.MeshStandardMaterial({ color:0x241a16, roughness:0.95 }));
-    foot.position.y = 0.05; tableGroup.add(foot);
 
     deckGroup = new THREE.Group();
     deckGroup.position.set(0, 0.96, 0);
@@ -2379,10 +1833,14 @@ const Scene3DGL = (() => {
 
 
   /* ---- свет по фазам ---- */
+  /* Свет по фазам. Яркость лампы задаём через её базовые значения:
+     мерцание накала лампа считает сама в animate(), и если писать прямо
+     в intensity, следующий кадр всё равно перезапишет. */
   function lightsTo(night, dur){
     const from = {
-      spot: lampSpot.intensity, point: lampLight.intensity, amb: ambient.intensity,
-      hemi: hemi.intensity, moon: moon.intensity, fog: scene.fog.density
+      spot: lamp.baseSpot, point: lamp.basePoint, amb: ambient.intensity,
+      hemi: hemi.intensity, moon: moon.intensity, fog: scene.fog.density,
+      glow: lamp.glowLevel
     };
     const to = night
       ? { spot:9,  point:2.2,  amb:0.62, hemi:0.60, moon:1.5, fog:0.044, fill:6,  table:7 }
@@ -2394,8 +1852,8 @@ const Scene3DGL = (() => {
     const fillFrom = fillLights.map(l => l.intensity);
     const tableFrom = tableLight.intensity;
     return tween(dur || 1600, t => {
-      lampSpot.intensity  = lerp(from.spot, to.spot, t);
-      lampLight.intensity = lerp(from.point, to.point, t);
+      lamp.baseSpot  = lerp(from.spot, to.spot, t);
+      lamp.basePoint = lerp(from.point, to.point, t);
       ambient.intensity   = lerp(from.amb, to.amb, t);
       hemi.intensity      = lerp(from.hemi, to.hemi, t);
       moon.intensity      = lerp(from.moon, to.moon, t);
@@ -2404,9 +1862,9 @@ const Scene3DGL = (() => {
       tableLight.intensity = lerp(tableFrom, to.table, t);
       ambient.color.copy(cFrom).lerp(cTo, t);
       hemi.color.copy(hFrom).lerp(hTo, t);
-      const gl = night ? lerp(1, 0.06, t) : lerp(0.06, 1, t);
+      const gl = lerp(from.glow, night ? 0.1 : 1, t);
+      lamp.glowLevel = gl;
       lampGlow.material.color.setRGB(gl, 0.85*gl, 0.63*gl);
-      lampGlow.userData.disc.material.opacity = 0.32 * gl;
     }, Ease.inOutQuad);
   }
 
@@ -2556,6 +2014,7 @@ const Scene3DGL = (() => {
     if(LOWQ){
       if(now - lastFrame < 22) return;
     }
+    const frameDt = lastFrame ? Math.min(60, now - lastFrame) : 16;
     if(lastFrame){
       const dt = now - lastFrame;
       if(dt > 0 && dt < 500){ fpsAcc += 1000 / dt; fpsN++; }
@@ -2574,6 +2033,9 @@ const Scene3DGL = (() => {
       }
     }
     controls.update();
+    /* Живая лампа и живая свеча: качание, мерцание накала, пыль в луче. */
+    if(lamp) lamp.animate(now, frameDt);
+    if(tableRig) tableRig.animate(now);
     for(const s of seats){
       if(s.speaking && !s.dead){
         s.figure.position.y = Math.sin(now*0.006)*0.022;
@@ -2730,10 +2192,18 @@ function byName(n){
 function nameOf(i){ const p = G.players[i]; return p ? p.name : '?'; }
 function jobOf(i){ const p = G.players[i]; return p && p.job ? p.job : 'горожанин'; }
 
-/* Склонение имён: «у Гриши», «похожую на Аню», «Ане» */
+/* Склонение имён: «у Гриши», «похожую на Аню», «Ане».
+   Отдельно стоит «Вы»: по умолчанию игрока зовут именно так, и без этой
+   ветки в историю попадали фразы вида «не отдала долг Вы». */
+const PRONOUN = {
+  'вы': { gen:'вас', dat:'вам', acc:'вас', ins:'вами' },
+  'я':  { gen:'меня', dat:'мне', acc:'меня', ins:'мной' }
+};
 function declName(name, cs){
   if(!name) return '';
   const n = String(name);
+  const pro = PRONOUN[n.toLowerCase()];
+  if(pro) return pro[cs] || n;
   const last = n.slice(-1);
   const stem = n.slice(0, -1);
   const hush = /[шжчщкгх]$/.test(stem);
@@ -4440,7 +3910,7 @@ const UI = (() => {
   /* ---- левая панель ---- */
   function showRole(role, name){
     const info = ROLE_INFO[role];
-    $('roleGlyph').textContent = info.glyph;
+    $('roleGlyph').innerHTML = Icons.svg(info.icon, { size: 30 });
     $('roleGlyph').style.color = info.color;
     $('roleName').textContent = info.ru;
     $('roleName').style.color = info.color;
@@ -4501,6 +3971,9 @@ const UI = (() => {
     bubbles.push(rec);
     positionBubbles();
     requestAnimationFrame(() => el.classList.add('in'));
+    /* Реплика уходит в синтезатор ровно один раз — в момент появления
+       облачка, а не по символу: иначе речь заикается. */
+    Voice.say(text, { from: 'seat' + idx });
     const tx = el.querySelector('.tx');
     const chars = Array.from(text);
     for(let i=0;i<chars.length;i++){
@@ -4640,7 +4113,7 @@ const UI = (() => {
     $('endRoles').innerHTML = G.players.map(p =>
       '<div class="endRow' + (p.idx === G.humanIdx ? ' me' : '') + (p.alive ? '' : ' out') + '">' +
         '<span class="nm">' + esc(p.name) + (p.idx === G.humanIdx ? ' <em>— вы</em>' : '') + '</span>' +
-        '<span class="rl"><i>' + ROLE_INFO[roles[p.idx]].glyph + '</i>' + ROLE_INFO[roles[p.idx]].ru + '</span>' +
+        '<span class="rl"><i>' + Icons.svg(ROLE_INFO[roles[p.idx]].icon, { size: 15 }) + '</i>' + ROLE_INFO[roles[p.idx]].ru + '</span>' +
         '<span class="st">' + (p.alive ? gw(p.idx, 'alive') : gw(p.idx, 'dead')) + '</span>' +
       '</div>').join('');
     const ep = $('endStory');
@@ -4724,6 +4197,9 @@ async function startGame(opts){
 
   const info = newGame(opts);
   Scene3D.setup(G.players.map(p => ({ name:p.name, color:p.color, hat:p.hat, isHuman:p.isHuman })));
+  /* Каждому месту — свой голос: высота, темп и системный голос считаются
+     от номера места, поэтому сосед справа всю партию звучит одинаково. */
+  Voice.assign(G.players.map(p => ({ id: 'seat' + p.idx, seat: p.idx + 1, name: p.name })));
   Scene3D.armCard(G.humanIdx, info.humanRole);
   UI.showRole(info.humanRole, G.players[G.humanIdx].name);
   UI.renderSecret(info.humanRole);
@@ -5454,6 +4930,20 @@ function wireChrome(){
     if(e.key === 'Escape' && Scene3D.isTopView()){ Scene3D.topView(false); syncTopBtn(); }
   });
 
+  function paintVoiceBtn(){
+    const b = el('btnVoice');
+    b.classList.toggle('on', Voice.enabled);
+    b.title = Voice.enabled ? 'Реплики читаются вслух' : 'Читать реплики вслух';
+  }
+  el('btnVoice').addEventListener('click', () => {
+    if(!Voice.available()){ UI.toast('Этот браузер не умеет читать текст вслух'); return; }
+    Voice.setEnabled(!Voice.enabled);
+    paintVoiceBtn();
+    UI.toast(Voice.enabled ? 'Стол заговорит голосами' : 'Голоса выключены');
+    if(Voice.enabled) Voice.say('За столом заговорят разными голосами.', { narrator:true, urgent:true });
+  });
+  paintVoiceBtn();
+
   el('btnMute').addEventListener('click', () => {
     const m = Sound.toggle();
     el('btnMute').title = m ? 'Звук выключен' : 'Звук включён';
@@ -5636,7 +5126,7 @@ const Install = (() => {
     } catch(e){ return false; }
   }
 
-  /* оффлайн-режим: служебный скрипт тоже генерируется в памяти */
+  /* офлайн-режим: служебный скрипт тоже генерируется в памяти */
   async function registerWorker(){
     if(!('serviceWorker' in navigator)) return 'unsupported';
     if(location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return 'insecure';
@@ -5741,6 +5231,13 @@ function boot(){
   window.addEventListener('unhandledrejection', () => {});
   document.body.dataset.sceneMode = USE_2D ? '2d' : '3d';
   if(USE_2D) document.body.classList.add('scene-2d');
+  /* Разрисовываем кнопки: знак берётся из общего набора, а не из шрифта
+     системы, поэтому на любом телефоне он выглядит одинаково. */
+  document.querySelectorAll('[data-ico]').forEach(b => {
+    b.insertAdjacentHTML('afterbegin', Icons.svg(b.dataset.ico, { size: 18 }));
+  });
+  /* Мастерскую моделей создаём только когда three.js действительно загрузился. */
+  if(!USE_2D) initModels();
   Scene3D.init(el('scene-root'));
   loadSettings();
   syncNameFromAccount();   // имя из аккаунта сайта — второй раз не спрашиваем
