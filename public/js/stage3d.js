@@ -70,31 +70,31 @@ export async function mountStage(container, opts) {
   scene.add(root);
 
   const room = M.buildRoom(root);
-  const lamp = M.buildLamp(root, { ceilY: 8.3, bulbY: 3.0 });
+  const lamp = M.buildLamp(root, { ceilY: 4.5, bulbY: 2.2 });
 
   /* Общий свет. Держим ссылки: по фазам он меняется целиком. */
   const ambient = new THREE.AmbientLight(0x6a6070, 1.2);
   const hemi = new THREE.HemisphereLight(0x8b9bb4, 0x3a2c26, 0.95);
   const moon = new THREE.DirectionalLight(0x5878b8, 0);
   moon.position.set(-6, 7, -5);
-  const emberGlow = new THREE.PointLight(0xc4563a, 0, 9, 2);
-  emberGlow.position.set(0, 2.1, 0);
+  const emberGlow = new THREE.PointLight(0xc4563a, 0, 7, 2);
+  emberGlow.position.set(0, 1.55, 0);
   const fills = [];
-  [[0, 3.4, 4.6, 0xffd7ad, 26], [-4.4, 3.0, -3.0, 0x9db4de, 16], [4.4, 3.0, -3.0, 0xdda98a, 16]].forEach(c => {
-    const l = new THREE.PointLight(c[3], c[4], 16, 2);
+  [[0, 2.6, 3.4, 0xffd7ad, 16], [-3.2, 2.4, -2.2, 0x9db4de, 10], [3.2, 2.4, -2.2, 0xdda98a, 10]].forEach(c => {
+    const l = new THREE.PointLight(c[3], c[4], 12, 2);
     l.position.set(c[0], c[1], c[2]);
     fills.push(l); scene.add(l);
   });
-  const tableLight = new THREE.SpotLight(0xfff0d6, 34, 9, Math.PI / 3.1, 0.9, 1.2);
-  tableLight.position.set(0, 4.2, 0.6);
-  tableLight.target.position.set(0, 0.9, 0);
+  const tableLight = new THREE.SpotLight(0xfff0d6, 22, 7, Math.PI / 2.8, 0.9, 1.2);
+  tableLight.position.set(0, 3.3, 0.5);
+  tableLight.target.position.set(0, 0.8, 0);
   scene.add(ambient, hemi, moon, emberGlow, tableLight, tableLight.target);
 
   /* ------------------------------------------------------------------ */
   /* камера: собственная орбита с инерцией                               */
   /* ------------------------------------------------------------------ */
-  const cam = { az: 0, pol: 1.18, dist: 7.4, target: new THREE.Vector3(0, 1.15, 0), vAz: 0, vPol: 0, fit: 7.4 };
-  const LIMIT = { polMin: 0.42, polMax: 1.46, distMin: 2.6, distMax: 16 };
+  const cam = { az: 0, pol: 1.16, dist: 4.2, target: new THREE.Vector3(0, 1.02, 0), vAz: 0, vPol: 0, fit: 4.2 };
+  const LIMIT = { polMin: 0.42, polMax: 1.46, distMin: 1.5, distMax: 9 };
 
   /* Сколько нужно отойти, чтобы стол со стульями целиком влез в кадр.
      На телефоне кадр узкий, и та же дистанция обрезает половину стола —
@@ -103,7 +103,7 @@ export async function mountStage(container, opts) {
     const vFov = camera.fov * Math.PI / 180;
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
     const fov = Math.min(vFov, hFov);
-    return clamp((radius + 0.9) / Math.tan(fov / 2) * 0.92, LIMIT.distMin, LIMIT.distMax);
+    return clamp((radius + 0.72) / Math.tan(fov / 2) * 0.94, LIMIT.distMin, LIMIT.distMax);
   }
 
   function applyCamera() {
@@ -203,10 +203,11 @@ export async function mountStage(container, opts) {
       root.add(group);
 
       const chair = M.buildChair();
-      chair.position.z = -0.46;
+      chair.position.z = -0.30;
       group.add(chair);
 
-      const figure = M.buildFigure(COATS[i % COATS.length], p.hat || (i % 5 === 0 ? 'cap' : 'hair'), i + 1, { sex: i % 3 === 1 ? 'f' : 'm' });
+      const figure = M.buildFigure(COATS[i % COATS.length], p.hat || (i % 5 === 0 ? 'cap' : 'hair'), i + 1,
+        { sex: i % 3 === 1 ? 'f' : 'm', pose: i % 4 });
       group.add(figure);
 
       /* Медный обруч под стулом: подсветка выбираемой цели. */
@@ -215,14 +216,14 @@ export async function mountStage(container, opts) {
         new THREE.MeshBasicMaterial({ color: 0xe2b478, transparent: true, opacity: 0, side: THREE.DoubleSide })
       );
       ring.rotation.x = -Math.PI / 2;
-      ring.position.set(0, 0.02, -0.42);
+      ring.position.set(0, 0.02, -0.28);
       group.add(ring);
 
       const cross = new THREE.Sprite(new THREE.SpriteMaterial({
         map: M.texFromCanvas(M.crossCanvas()), transparent: true, opacity: 0
       }));
-      cross.scale.set(0.46, 0.46, 1);
-      cross.position.set(sx, 2.28, sz);
+      cross.scale.set(0.3, 0.3, 1);
+      cross.position.set(sx, 1.86, sz);
       root.add(cross);
 
       const s = {
@@ -283,11 +284,11 @@ export async function mountStage(container, opts) {
   /* Куда светим в каждой фазе. Ночь — почти без света, только лампа и луна;
      голосование — жёсткий верхний свет; смерть — короткая вспышка угля. */
   const LIGHT = {
-    day: { spot: 58, point: 10, amb: 1.2, hemi: 0.95, moon: 0, fog: 0.022, fill: 22, table: 34, glow: 1, ember: 0, ambColor: 0x6a6070, hemiColor: 0x8b9bb4 },
-    night: { spot: 8, point: 1.9, amb: 0.5, hemi: 0.5, moon: 1.5, fog: 0.046, fill: 4, table: 5, glow: 0.14, ember: 0, ambColor: 0x3a4a70, hemiColor: 0x56769f },
-    vote: { spot: 74, point: 12, amb: 0.9, hemi: 0.7, moon: 0, fog: 0.026, fill: 12, table: 46, glow: 1, ember: 0.6, ambColor: 0x6d5f5a, hemiColor: 0x8b8a86 },
-    morning: { spot: 44, point: 8, amb: 1.35, hemi: 1.2, moon: 0, fog: 0.018, fill: 26, table: 30, glow: 0.8, ember: 0, ambColor: 0x7a7268, hemiColor: 0xa8b0bb },
-    over: { spot: 30, point: 6, amb: 0.8, hemi: 0.6, moon: 0.4, fog: 0.03, fill: 10, table: 20, glow: 0.6, ember: 1.1, ambColor: 0x5c4c52, hemiColor: 0x6f6a72 }
+    day: { spot: 32, point: 5.6, amb: 1.2, hemi: 0.95, moon: 0, fog: 0.022, fill: 14, table: 22, glow: 1, ember: 0, ambColor: 0x6a6070, hemiColor: 0x8b9bb4 },
+    night: { spot: 4.6, point: 1.1, amb: 0.5, hemi: 0.5, moon: 1.5, fog: 0.046, fill: 2.6, table: 3.2, glow: 0.14, ember: 0, ambColor: 0x3a4a70, hemiColor: 0x56769f },
+    vote: { spot: 42, point: 7, amb: 0.9, hemi: 0.7, moon: 0, fog: 0.026, fill: 8, table: 30, glow: 1, ember: 0.6, ambColor: 0x6d5f5a, hemiColor: 0x8b8a86 },
+    morning: { spot: 25, point: 4.6, amb: 1.35, hemi: 1.2, moon: 0, fog: 0.018, fill: 17, table: 19, glow: 0.8, ember: 0, ambColor: 0x7a7268, hemiColor: 0xa8b0bb },
+    over: { spot: 17, point: 3.4, amb: 0.8, hemi: 0.6, moon: 0.4, fog: 0.03, fill: 6.5, table: 13, glow: 0.6, ember: 1.1, ambColor: 0x5c4c52, hemiColor: 0x6f6a72 }
   };
   function lightFor(p) {
     if (p === 'night') return LIGHT.night;
@@ -332,7 +333,7 @@ export async function mountStage(container, opts) {
   function project(id, yOff) {
     const s = seatsById.get(id);
     if (!s) return null;
-    const v = new THREE.Vector3(s.pos.x, yOff === undefined ? 2.0 : yOff, s.pos.z).project(camera);
+    const v = new THREE.Vector3(s.pos.x, yOff === undefined ? 1.62 : yOff, s.pos.z).project(camera);
     return {
       x: (v.x * 0.5 + 0.5) * el.clientWidth,
       y: (-v.y * 0.5 + 0.5) * el.clientHeight,
@@ -405,9 +406,9 @@ export async function mountStage(container, opts) {
         /* Оседание: корпус валится на сторону и вниз, крест проявляется. */
         const k = Math.min(1, (now - s.deadFrom) / 950);
         const ease = 1 - Math.pow(1 - k, 3);
-        s.figure.rotation.z = lerp(0, s.slumpSide * 1.28, ease);
-        s.figure.rotation.x = lerp(s.figure.rotation.x, 0.12, 0.05);
-        s.figure.position.y = lerp(0, -0.14, ease);
+        s.figure.rotation.z = lerp(0, s.slumpSide * 0.92, ease);
+        s.figure.rotation.x = lerp(s.figure.rotation.x, -0.16, 0.05);
+        s.figure.position.y = lerp(0, -0.10, ease);
         s.cross.material.opacity = Math.min(0.9, k);
         u.headPivot.rotation.set(0.4 * ease, 0, 0);
         s.ring.material.opacity = 0;
@@ -417,11 +418,11 @@ export async function mountStage(container, opts) {
       /* Дыхание: грудь и плечи ходят на 1.5 %. Ночью — реже и глубже. */
       s.breath += dt * (nightPose > 0.5 ? 0.0016 : 0.0024);
       const br = Math.sin(s.breath);
-      u.chest.scale.set(1.05 + br * 0.014, 0.86 + br * 0.012, 0.74 + br * 0.01);
-      s.figure.position.y = br * 0.006;
+      u.breathe(br);
+      s.figure.position.y = br * 0.005;
 
       /* Ночь: все склоняются к столу и опускают головы. */
-      s.figure.rotation.x = nightPose * 0.3;
+      s.figure.rotation.x = nightPose * 0.26;
 
       /* Взгляд: голова доворачивается к говорящему. */
       let want = 0;
@@ -510,7 +511,7 @@ export async function mountStage(container, opts) {
       (function jitter() {
         const left = until - performance.now();
         if (left <= 0) { root.position.set(0, 0, 0); return; }
-        const a = (left / 380) * 0.045;
+        const a = (left / 380) * 0.026;
         root.position.set((Math.random() - 0.5) * a, (Math.random() - 0.5) * a, 0);
         requestAnimationFrame(jitter);
       })();

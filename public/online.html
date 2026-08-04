@@ -32,6 +32,11 @@
 .kv:last-child{border-bottom:none}
 .kv b{font-weight:600;color:var(--bone);text-align:right}
 .code{font-family:var(--mono);letter-spacing:.2em;color:var(--tallow);font-size:var(--t-2xl);line-height:1.1}
+/* Ссылка-приглашение длинная: даём ей переноситься, иначе на 360px она
+   распирает всю панель. */
+.invite{font-family:var(--mono);font-size:var(--t-xs);color:var(--tallow);line-height:1.45;
+  overflow-wrap:anywhere;padding:8px 10px;border:1px dashed var(--line-warm);border-radius:var(--r);
+  background:rgba(226,180,120,.06);margin-top:var(--s2)}
 .scen{display:flex;flex-direction:column;gap:var(--s2);max-height:340px;overflow:auto;padding-right:var(--s1)}
 .scen button{
   text-align:left;padding:12px 14px;border-radius:var(--r);border:1px solid var(--hair);
@@ -311,14 +316,13 @@ body.playing #toast{bottom:96px}
 
   <section id="noRoom" class="panel pad lit" style="margin-top:var(--s5)" hidden>
     <h3>Своей комнаты пока нет</h3>
-    <p class="note" style="margin-top:var(--s2)">Соберите стол сами или войдите в чужой по четырёхзначному коду.</p>
+    <p class="note" style="margin-top:var(--s2)">Соберите стол — и пришлите друзьям ссылку. Общего списка комнат нет:
+      за ваш стол садятся только по вашей ссылке. Если людей меньше шести, пустые места займут соседи-боты.</p>
     <div class="row" style="margin-top:var(--s4)">
       <button class="btn primary" id="btnCreate">Собрать стол</button>
-      <input class="inp" id="joinCode" style="max-width:130px" placeholder="Код" inputmode="numeric" maxlength="4" aria-label="Код комнаты">
-      <button class="btn" id="btnJoinCode">Войти по коду</button>
     </div>
     <div style="margin-top:var(--s5)">
-      <span class="label">Открытые столы и приглашения</span>
+      <span class="label">Вас куда-то позвали</span>
       <div class="list" id="roomList" style="margin-top:var(--s3)"></div>
     </div>
   </section>
@@ -327,17 +331,20 @@ body.playing #toast{bottom:96px}
     <div class="stack">
       <section class="panel pad lit">
         <div class="between" style="align-items:flex-start">
-          <div>
-            <span class="label">Код стола</span>
-            <div class="code" id="roomCode">—</div>
+          <div style="min-width:0">
+            <span class="label">Ссылка-приглашение</span>
+            <div class="invite" id="inviteLink">—</div>
           </div>
           <div class="row tight">
-            <button class="btn ghost sm" id="btnCopy">Скопировать ссылку</button>
+            <button class="btn ghost sm" id="btnCopy">Скопировать</button>
             <button class="btn danger sm" id="btnLeave">Уйти</button>
           </div>
         </div>
+        <p class="note" style="margin-top:var(--s2)">Одна ссылка — одна дверь. Кто пришёл по ней, садится за стол;
+          если все места заняты соседями-ботами, один из них уступит место.</p>
         <div style="margin-top:var(--s4)">
           <div class="kv"><span class="muted">Сейчас за столом</span><b id="cntNow">—</b></div>
+          <div class="kv"><span class="muted">Из них соседей-ботов</span><b id="cntBots">—</b></div>
           <div class="kv"><span class="muted">Начнём при</span><b id="cntGoal">—</b></div>
           <div class="kv"><span class="muted">Состав ролей</span><b id="compo">—</b></div>
         </div>
@@ -350,7 +357,11 @@ body.playing #toast{bottom:96px}
           <label class="check" style="margin-top:var(--s3)">
             <input type="checkbox" id="autoStart" checked> Начать самим, как только все соберутся
           </label>
-          <button class="btn primary wide" id="btnStart" style="margin-top:var(--s4)">Начать партию</button>
+          <div class="row" style="margin-top:var(--s4)">
+            <button class="btn" id="btnBots">Добрать ботами</button>
+            <button class="btn ghost" id="btnBotsOff" hidden>Убрать ботов</button>
+          </div>
+          <button class="btn primary wide" id="btnStart" style="margin-top:var(--s3)">Начать партию</button>
         </div>
       </section>
 

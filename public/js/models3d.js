@@ -46,6 +46,33 @@ export function createModels(THREE, cfg) {
     bone: 0xefe9dd
   };
 
+  /* ---------------------------------------------------------------------
+     Единая метрика сцены. Раньше стол, стулья и фигуры мерились каждый
+     своей линейкой: стол стоял на высоте 0,955 при сиденье 0,47 (разница
+     полметра при живой 0,30), а круг мест проходил в 0,92 от края стола —
+     то есть кисти сидящих заканчивались в воздухе, не доставая до сукна
+     почти на полруки. Отсюда и «руки висят».
+
+     Теперь все размеры считаются от этих чисел, и любой сдвиг делается
+     здесь, а не в пяти файлах.
+     --------------------------------------------------------------------- */
+  const METRICS = {
+    seatTopY: 0.47,       // сиденье стула
+    hipY: 0.56,           // таз сидящего
+    chestY: 0.99,         // линия плеч
+    headY: 1.22,          // центр головы
+    crownY: 1.37,         // макушка
+    tableSurfaceY: 0.80,  // сукно: на 0,33 выше сиденья — как за обычным столом
+    seatGap: 0.21,        // от края стола до центра места: предплечье ложится на сукно
+    seatPitch: 0.86       // сколько места нужно одному человеку по кругу
+  };
+
+  /** Радиус стола под число игроков: сначала круг мест, потом столешница. */
+  function tableRadiusFor(n) {
+    const seatR = Math.max(0.73, (Math.max(1, n) * METRICS.seatPitch) / (Math.PI * 2));
+    return Math.max(0.52, seatR - METRICS.seatGap);
+  }
+
   /* --- качество: на слабых и мобильных устройствах режем сетку --- */
   const LOWQ = (() => {
     try {
@@ -355,17 +382,24 @@ export function createModels(THREE, cfg) {
     const cx = W * 0.25, cy = H * 0.50, f = W * 0.20;
     const sc = hex(skinHex), hc = hex(hairHex);
 
+    /* Волосы кладём на всю развёртку, а лицо вырезаем овалом. Раньше
+       причёска была горизонтальной полосой по верху: сзади голова
+       оставалась голой и светилась кожей, как яйцо. */
+    g.fillStyle = hc; g.fillRect(0, 0, W, H);
+    g.save();
+    g.beginPath(); g.ellipse(cx, cy + f * 0.07, f * 0.50, f * 0.72, 0, 0, Math.PI * 2); g.clip();
     g.fillStyle = sc; g.fillRect(0, 0, W, H);
     const sd = g.createLinearGradient(cx - f * 0.85, 0, cx + f * 0.85, 0);
     sd.addColorStop(0, 'rgba(24,12,10,.34)');
     sd.addColorStop(0.5, 'rgba(255,238,220,.10)');
     sd.addColorStop(1, 'rgba(24,12,10,.34)');
     g.fillStyle = sd; g.fillRect(0, 0, W, H);
+    g.restore();
 
+    /* линия волос над лбом: у мужчин выше, у женщин ниже */
     const hairY = cy - f * (female ? 0.30 : 0.40);
-    g.fillStyle = hc; g.fillRect(0, 0, W, hairY);
-    g.beginPath(); g.ellipse(cx, hairY + f * 0.05, f * 0.47, f * 0.32, 0, Math.PI, Math.PI * 2);
-    g.fillStyle = sc; g.fill();
+    g.fillStyle = hc;
+    g.beginPath(); g.ellipse(cx, hairY - f * 0.10, f * 0.52, f * 0.26, 0, 0, Math.PI * 2); g.fill();
     if (female) {
       g.fillStyle = hc;
       for (const s of [-1, 1]) {
@@ -444,7 +478,7 @@ export function createModels(THREE, cfg) {
 
     const floorTex = texFromCanvas(plankCanvas(), [5, 5]);
     out.floor = new THREE.Mesh(
-      new THREE.CircleGeometry(16, sg(48, 24)),
+      new THREE.CircleGeometry(11, sg(48, 24)),
       new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.93, metalness: 0.02 })
     );
     out.floor.rotation.x = -Math.PI / 2;
@@ -453,42 +487,42 @@ export function createModels(THREE, cfg) {
 
     const wallTex = texFromCanvas(plasterCanvas(), [3, 1]);
     out.walls = new THREE.Mesh(
-      new THREE.CylinderGeometry(13, 13, 8.5, sg(32, 18), 1, true),
+      new THREE.CylinderGeometry(8.4, 8.4, 4.7, sg(32, 18), 1, true),
       new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.99, metalness: 0, side: THREE.BackSide })
     );
-    out.walls.position.y = 4.2;
+    out.walls.position.y = 2.3;
     parent.add(out.walls);
 
     /* Задник: полотно натянуто позади стола, чуть не доходя до стен. */
     const backTex = texFromCanvas(backdropCanvas(), [2, 1]);
     out.backdrop = new THREE.Mesh(
-      new THREE.CylinderGeometry(8.6, 8.6, 6.2, sg(28, 16), 1, true, Math.PI * 0.62, Math.PI * 0.76),
+      new THREE.CylinderGeometry(6.0, 6.0, 4.3, sg(28, 16), 1, true, Math.PI * 0.62, Math.PI * 0.76),
       new THREE.MeshStandardMaterial({ map: backTex, roughness: 0.96, side: THREE.DoubleSide })
     );
-    out.backdrop.position.y = 3.1;
+    out.backdrop.position.y = 2.15;
     parent.add(out.backdrop);
 
     /* Плинтус — тонкая тёмная лента по низу стены: пол «сходится» со стеной. */
     const skirt = new THREE.Mesh(
-      new THREE.CylinderGeometry(12.9, 12.9, 0.28, sg(32, 18), 1, true),
+      new THREE.CylinderGeometry(8.3, 8.3, 0.28, sg(32, 18), 1, true),
       new THREE.MeshStandardMaterial({ color: PAL.woodDark, roughness: 0.9, side: THREE.BackSide })
     );
     skirt.position.y = 0.14;
     parent.add(skirt);
 
     out.ceiling = new THREE.Mesh(
-      new THREE.CircleGeometry(13, sg(28, 16)),
+      new THREE.CircleGeometry(8.4, sg(28, 16)),
       new THREE.MeshStandardMaterial({ color: 0x100d0c, roughness: 1, side: THREE.DoubleSide })
     );
     out.ceiling.rotation.x = Math.PI / 2;
-    out.ceiling.position.y = 8.4;
+    out.ceiling.position.y = 4.6;
     parent.add(out.ceiling);
 
     /* Силуэты у стен: шкаф, ящики, вешалка. Дают глубину и тени. */
     const shadowMat = new THREE.MeshStandardMaterial({ color: 0x191412, roughness: 1 });
     for (let i = 0; i < 9; i++) {
       const a = (i / 9) * Math.PI * 2 + 0.4;
-      const r = 8 + (i % 3);
+      const r = 5.6 + (i % 3) * 0.55;
       const h = 1.1 + (i % 4) * 0.75;
       const box = new THREE.Mesh(new THREE.BoxGeometry(0.8 + (i % 3) * 0.5, h, 0.6), shadowMat);
       box.position.set(Math.sin(a) * r, h / 2, Math.cos(a) * r);
@@ -501,8 +535,8 @@ export function createModels(THREE, cfg) {
   /* Эмалированная лампа на цепи. Возвращает ручки для качания и мерцания. */
   function buildLamp(parent, opts) {
     opts = opts || {};
-    const ceilY = opts.ceilY || 8.3;
-    const bulbY = opts.bulbY || 3.0;
+    const ceilY = opts.ceilY || 4.5;
+    const bulbY = opts.bulbY || 2.2;
 
     /* Точка подвеса: качаем именно её, тогда весь абажур ходит как маятник. */
     const pivot = new THREE.Group();
@@ -538,19 +572,19 @@ export function createModels(THREE, cfg) {
 
     /* Абажур: снаружи зелёная эмаль, изнутри белая — свет отражается тёплым. */
     const shade = new THREE.Mesh(
-      new THREE.ConeGeometry(0.9, 0.56, sg(28, 14), 1, true),
+      new THREE.ConeGeometry(0.40, 0.26, sg(28, 14), 1, true),
       new THREE.MeshStandardMaterial({ color: PAL.enamel, roughness: 0.35, metalness: 0.5, side: THREE.FrontSide })
     );
-    shade.position.y = -drop + 0.28;
+    shade.position.y = -drop + 0.13;
     pivot.add(shade);
     const inner = new THREE.Mesh(
-      new THREE.ConeGeometry(0.88, 0.54, sg(28, 14), 1, true),
+      new THREE.ConeGeometry(0.39, 0.25, sg(28, 14), 1, true),
       new THREE.MeshBasicMaterial({ color: 0xf6e6cf, side: THREE.BackSide })
     );
     inner.position.copy(shade.position);
     pivot.add(inner);
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.9, 0.022, sg(8, 5), sg(30, 16)),
+      new THREE.TorusGeometry(0.40, 0.016, sg(8, 5), sg(30, 16)),
       new THREE.MeshStandardMaterial({ color: PAL.brass, roughness: 0.4, metalness: 0.8 })
     );
     ring.rotation.x = Math.PI / 2;
@@ -559,28 +593,28 @@ export function createModels(THREE, cfg) {
 
     /* Нить накала и светящийся диск под абажуром. */
     const glow = new THREE.Mesh(
-      new THREE.SphereGeometry(0.075, sg(14, 8), sg(10, 6)),
+      new THREE.SphereGeometry(0.052, sg(14, 8), sg(10, 6)),
       new THREE.MeshBasicMaterial({ color: 0xffe0b0 })
     );
     glow.position.y = -drop - 0.04;
     pivot.add(glow);
     const disc = new THREE.Mesh(
-      new THREE.CircleGeometry(0.84, sg(24, 14)),
+      new THREE.CircleGeometry(0.37, sg(24, 14)),
       new THREE.MeshBasicMaterial({ color: 0xffd8a4, transparent: true, opacity: 0.3, side: THREE.DoubleSide })
     );
     disc.rotation.x = Math.PI / 2;
     disc.position.y = -drop - 0.02;
     pivot.add(disc);
 
-    const spot = new THREE.SpotLight(0xffd9a8, 62, 20, Math.PI / 3.4, 0.62, 1.1);
+    const spot = new THREE.SpotLight(0xffd9a8, 34, 14, Math.PI / 2.9, 0.62, 1.1);
     spot.position.set(0, -drop - 0.05, 0);
-    spot.target.position.set(0, -drop - 2.2, 0);
+    spot.target.position.set(0, -drop - 1.6, 0);
     spot.castShadow = true;
     spot.shadow.mapSize.set(LOWQ ? 512 : 1024, LOWQ ? 512 : 1024);
     spot.shadow.bias = -0.0016;
     pivot.add(spot, spot.target);
 
-    const point = new THREE.PointLight(0xffc891, 11, 17, 2);
+    const point = new THREE.PointLight(0xffc891, 6, 11, 2);
     point.position.set(0, -drop - 0.08, 0);
     pivot.add(point);
 
@@ -590,9 +624,9 @@ export function createModels(THREE, cfg) {
     const vel = new Float32Array(dustN);
     for (let i = 0; i < dustN; i++) {
       const a = Math.random() * Math.PI * 2;
-      const r = Math.random() * 1.5;
+      const r = Math.random() * 0.85;
       pos[i * 3] = Math.cos(a) * r;
-      pos[i * 3 + 1] = bulbY - Math.random() * 2.4;
+      pos[i * 3 + 1] = bulbY - Math.random() * 1.7;
       pos[i * 3 + 2] = Math.sin(a) * r;
       vel[i] = 0.02 + Math.random() * 0.05;
     }
@@ -605,7 +639,7 @@ export function createModels(THREE, cfg) {
 
     const lamp = {
       pivot, shade, inner, glow, disc, spot, point, dust,
-      baseSpot: 62, basePoint: 11, glowLevel: 1,
+      baseSpot: 34, basePoint: 6, glowLevel: 1,
       /* Маятник: две несинхронные синусоиды, поэтому качание не выглядит
          механическим. amp растёт после удара по столу. */
       swing: 0,
@@ -623,7 +657,7 @@ export function createModels(THREE, cfg) {
         const p = dust.geometry.attributes.position;
         for (let i = 0; i < dustN; i++) {
           let y = p.array[i * 3 + 1] - vel[i] * (dt || 16) * 0.001;
-          if (y < 0.6) y = bulbY - 0.1;
+          if (y < 0.45) y = bulbY - 0.05;
           p.array[i * 3 + 1] = y;
           p.array[i * 3] += Math.sin(t * 0.0004 + i) * 0.0004;
         }
@@ -640,8 +674,10 @@ export function createModels(THREE, cfg) {
     const g = new THREE.Group();
     parent.add(g);
 
-    const R = n > 12 ? 2.55 : n > 6 ? 2.15 : 1.92;
-    const topY = 0.9;
+    /* Стол растёт вместе с числом игроков, но не отрывается от людей:
+       радиус считается от шага мест по кругу, а не берётся из таблицы. */
+    const R = tableRadiusFor(n);
+    const topY = METRICS.tableSurfaceY - 0.055;
 
     const feltTex = texFromCanvas(feltCanvas());
     const top = new THREE.Mesh(
@@ -665,7 +701,10 @@ export function createModels(THREE, cfg) {
       [0.40, 0.00], [0.42, 0.05], [0.30, 0.10], [0.26, 0.20], [0.30, 0.28],
       [0.22, 0.36], [0.20, 0.52], [0.28, 0.60], [0.20, 0.66], [0.18, 0.78], [0.26, 0.86]
     ];
-    pts.forEach(p => prof.push(new THREE.Vector2(p[0], p[1])));
+    /* Балясина подгоняется под столешницу: и по высоте, и по толщине,
+       иначе на маленьком столе нога выглядит бочкой. */
+    const legK = Math.max(0.5, Math.min(1, R / 1.5));
+    pts.forEach(p => prof.push(new THREE.Vector2(p[0] * legK, p[1] * (topY / 0.86))));
     const leg = new THREE.Mesh(
       new THREE.LatheGeometry(prof, sg(24, 12)),
       new THREE.MeshStandardMaterial({ color: PAL.wood, roughness: 0.78, metalness: 0.06 })
@@ -677,10 +716,10 @@ export function createModels(THREE, cfg) {
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2;
       const paw = new THREE.Mesh(
-        new THREE.BoxGeometry(0.16, 0.09, 0.82),
+        new THREE.BoxGeometry(0.14 * legK, 0.085, R * 0.78),
         new THREE.MeshStandardMaterial({ color: PAL.woodDark, roughness: 0.9 })
       );
-      paw.position.set(Math.sin(a) * 0.34, 0.045, Math.cos(a) * 0.34);
+      paw.position.set(Math.sin(a) * R * 0.3, 0.043, Math.cos(a) * R * 0.3);
       paw.rotation.y = a;
       paw.castShadow = true;
       g.add(paw);
@@ -689,6 +728,7 @@ export function createModels(THREE, cfg) {
     /* --- реквизит --- */
     const props = new THREE.Group();
     props.position.y = topY + 0.055;
+    props.scale.setScalar(Math.max(0.62, Math.min(1, R / 1.5)));
     g.add(props);
 
     const glassMat = new THREE.MeshStandardMaterial({
@@ -752,8 +792,10 @@ export function createModels(THREE, cfg) {
     props.add(matchbox);
 
     return {
-      group: g, top, radius: R, topY, props, flame, candleLight,
-      seatRadius: R + 0.92,
+      group: g, top, radius: R, topY, surfaceY: METRICS.tableSurfaceY, props, flame, candleLight,
+      /* Круг мест проходит в 21 см от края: ровно столько, чтобы предплечье
+         легло на сукно, а колени ушли под столешницу. */
+      seatRadius: R + METRICS.seatGap,
       animate(t) {
         /* пламя дышит и слегка ведёт свет — самое дешёвое «живое» на сцене */
         const k = 1 + Math.sin(t * 0.009) * 0.16 + Math.sin(t * 0.021) * 0.09;
@@ -768,46 +810,181 @@ export function createModels(THREE, cfg) {
     const g = new THREE.Group();
     const m = new THREE.MeshStandardMaterial({ color: PAL.woodDark, roughness: 0.92 });
 
-    const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.29, 0.06, sg(20, 10)), m);
-    seat.position.y = 0.44; seat.castShadow = true; g.add(seat);
+    const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.25, 0.055, sg(20, 10)), m);
+    seat.position.y = METRICS.seatTopY - 0.028; seat.castShadow = true; g.add(seat);
 
     /* обод спинки: полукольцо + две стойки */
-    const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.022, sg(8, 5), sg(24, 12), Math.PI), m);
-    hoop.position.set(0, 1.06, -0.24);
+    const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.02, sg(8, 5), sg(24, 12), Math.PI), m);
+    hoop.position.set(0, 0.94, -0.215);
     hoop.rotation.set(0, 0, 0);
     g.add(hoop);
     for (const s of [-1, 1]) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.024, 0.62, sg(10, 6)), m);
-      post.position.set(s * 0.24, 0.75, -0.24);
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.022, 0.51, sg(10, 6)), m);
+      post.position.set(s * 0.21, 0.69, -0.215);
       g.add(post);
     }
-    const slat = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.017, sg(6, 4), sg(18, 9), Math.PI), m);
-    slat.position.set(0, 0.86, -0.24);
+    const slat = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.015, sg(6, 4), sg(18, 9), Math.PI), m);
+    slat.position.set(0, 0.80, -0.215);
     g.add(slat);
 
-    const legG = new THREE.CylinderGeometry(0.028, 0.02, 0.44, sg(8, 5));
-    [[-0.2, -0.18], [0.2, -0.18], [-0.2, 0.2], [0.2, 0.2]].forEach(p => {
+    const legG = new THREE.CylinderGeometry(0.026, 0.018, METRICS.seatTopY - 0.03, sg(8, 5));
+    [[-0.17, -0.155], [0.17, -0.155], [-0.17, 0.175], [0.17, 0.175]].forEach(p => {
       const l = new THREE.Mesh(legG, m);
-      l.position.set(p[0], 0.22, p[1]);
+      l.position.set(p[0], (METRICS.seatTopY - 0.03) / 2, p[1]);
       l.rotation.set(p[1] * 0.12, 0, -p[0] * 0.12);
       g.add(l);
     });
     return g;
   }
 
-  /* Кость: цилиндр между двумя точками — руки и ноги в позе сидя. */
-  function bone(a, b, r1, r2, mat, segs) {
-    const grp = new THREE.Group();
-    grp.position.set(a[0], a[1], a[2]);
-    const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
-    const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.001;
-    grp.lookAt(new THREE.Vector3(b[0], b[1], b[2]));
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, len, segs || sg(14, 8)), mat);
-    m.rotation.x = Math.PI / 2;
-    m.position.z = len / 2;
+  /* =====================================================================
+     ГЕОМЕТРИЯ ТЕЛА
+
+     Две операции, из которых собрано всё живое на сцене.
+
+     loft — натягивает поверхность на набор эллиптических сечений вдоль
+     кривой в плоскости YZ. Так делается торс: круглые плечи, гнутая
+     спина, сужение к поясу. Раньше спина была капсулой, сплющенной до
+     0,42 по глубине, — отсюда «квадратная спина».
+
+     limb — вымётывает трубу переменного радиуса по кривой Catmull-Rom.
+     Рука и нога получаются одним куском, без шва на локте и колене.
+     ===================================================================== */
+
+  /** stations: [{ y, z, rx, rz }] снизу вверх. Сечения перпендикулярны хребту. */
+  function loft(stations, segs, opts) {
+    opts = opts || {};
+    const N = stations.length;
+    const S = segs || sg(24, 12);
+    const pos = [], idx = [];
+
+    for (let i = 0; i < N; i++) {
+      const s = stations[i];
+      const prev = stations[Math.max(0, i - 1)], next = stations[Math.min(N - 1, i + 1)];
+      let ty = next.y - prev.y, tz = next.z - prev.z;
+      const tl = Math.hypot(ty, tz) || 1;
+      ty /= tl; tz /= tl;
+      /* Сечение лежит в плоскости, перпендикулярной хребту: одна ось — x,
+         вторая получается векторным произведением. */
+      for (let k = 0; k < S; k++) {
+        const a = (k / S) * Math.PI * 2;
+        const cx = Math.cos(a) * s.rx, cz = Math.sin(a) * s.rz;
+        pos.push(cx, s.y + cz * tz, s.z - cz * ty);
+      }
+    }
+    for (let i = 0; i < N - 1; i++) {
+      for (let k = 0; k < S; k++) {
+        const a = i * S + k, b = i * S + (k + 1) % S;
+        const c = a + S, d = b + S;
+        idx.push(a, c, b, b, c, d);
+      }
+    }
+    /* Донышко и крышка: центральная точка и веер треугольников. */
+    if (opts.cap !== false) {
+      const first = stations[0], last = stations[N - 1];
+      const cLow = pos.length / 3;
+      pos.push(0, first.y - first.rz * 0.35, first.z);
+      for (let k = 0; k < S; k++) idx.push(cLow, (k + 1) % S, k);
+      const cHigh = pos.length / 3;
+      pos.push(0, last.y + last.rz * 0.35, last.z);
+      const base = (N - 1) * S;
+      for (let k = 0; k < S; k++) idx.push(cHigh, base + k, base + (k + 1) % S);
+    }
+
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  }
+
+  /** Труба переменного радиуса по кривой: pts — [[x,y,z]…], radii — по длине. */
+  function limbGeometry(pts, radii, segs, steps) {
+    const S = segs || sg(12, 7);
+    const T = steps || sg(14, 8);
+    const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2])), false, 'catmullrom', 0.5);
+    const frames = curve.computeFrenetFrames(T, false);
+    const pos = [], idx = [];
+    const radAt = (u) => {
+      if (radii.length === 1) return radii[0];
+      const x = u * (radii.length - 1);
+      const i = Math.min(radii.length - 2, Math.floor(x));
+      return radii[i] + (radii[i + 1] - radii[i]) * (x - i);
+    };
+    for (let i = 0; i <= T; i++) {
+      const u = i / T;
+      const p = curve.getPoint(u), r = radAt(u);
+      const nrm = frames.normals[Math.min(T - 1, i)], bin = frames.binormals[Math.min(T - 1, i)];
+      for (let k = 0; k < S; k++) {
+        const a = (k / S) * Math.PI * 2;
+        pos.push(
+          p.x + (nrm.x * Math.cos(a) + bin.x * Math.sin(a)) * r,
+          p.y + (nrm.y * Math.cos(a) + bin.y * Math.sin(a)) * r,
+          p.z + (nrm.z * Math.cos(a) + bin.z * Math.sin(a)) * r
+        );
+      }
+    }
+    for (let i = 0; i < T; i++) {
+      for (let k = 0; k < S; k++) {
+        const a = i * S + k, b = i * S + (k + 1) % S;
+        idx.push(a, a + S, b, b, a + S, b + S);
+      }
+    }
+    /* заглушки на концах, чтобы в сустав не было видно «трубу» */
+    const p0 = curve.getPoint(0), p1 = curve.getPoint(1);
+    const c0 = pos.length / 3; pos.push(p0.x, p0.y, p0.z);
+    for (let k = 0; k < S; k++) idx.push(c0, (k + 1) % S, k);
+    const c1 = pos.length / 3; pos.push(p1.x, p1.y, p1.z);
+    for (let k = 0; k < S; k++) idx.push(c1, T * S + k, T * S + (k + 1) % S);
+
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  }
+
+  function limb(pts, radii, mat, segs, steps) {
+    const m = new THREE.Mesh(limbGeometry(pts, radii, segs, steps), mat);
     m.castShadow = true;
-    grp.add(m);
-    return grp;
+    return m;
+  }
+
+  /* Кисть: ладонь, четыре подогнутых пальца и большой отдельно.
+     Своя система координат: начало — сустав кисти, +z — куда смотрят
+     пальцы, y вверх. Дальше рука ставится целиком одним поворотом. */
+  function buildHand(skinMat, side, opts) {
+    opts = opts || {};
+    const g = new THREE.Group();
+    const flat = opts.flat !== false;      // ладонь лежит на сукне
+
+    const palm = new THREE.Mesh(loft([
+      { y: 0, z: 0.005, rx: 0.036, rz: 0.019 },
+      { y: 0, z: 0.045, rx: 0.043, rz: 0.021 },
+      { y: 0, z: 0.085, rx: 0.041, rz: 0.018 }
+    ], sg(16, 9)), skinMat);
+    palm.castShadow = true;
+    g.add(palm);
+
+    const fingerR = [0.0145, 0.0135, 0.0105];
+    for (let k = 0; k < 4; k++) {
+      const x = (k - 1.5) * 0.023;
+      const len = 0.072 - Math.abs(k - 1.2) * 0.006;
+      const drop = flat ? 0.004 : 0.03;
+      const f = limb([
+        [x, 0.002, 0.082],
+        [x * 1.06, -drop * 0.6, 0.082 + len * 0.55],
+        [x * 1.1, -drop, 0.082 + len]
+      ], fingerR, skinMat, sg(8, 5), sg(7, 4));
+      g.add(f);
+    }
+    const thumb = limb([
+      [side * 0.032, 0.004, 0.028],
+      [side * 0.056, -0.004, 0.056],
+      [side * 0.062, -0.01, 0.086]
+    ], [0.017, 0.015, 0.012], skinMat, sg(8, 5), sg(7, 4));
+    g.add(thumb);
+    return g;
   }
 
   /* Фигура человека, сидящего за столом: ноги, руки с кистями, торс,
@@ -837,114 +1014,162 @@ export function createModels(THREE, cfg) {
       roughness: 0.6
     });
 
-    /* ---- таз и ноги ---- */
-    const hipY = 0.56, hipZ = -0.28;
-    const pelvis = new THREE.Mesh(new THREE.SphereGeometry(0.19, sg(20, 10), sg(14, 8)), trous);
-    pelvis.scale.set(1.12, 0.72, 0.92);
-    pelvis.position.set(0, hipY, hipZ);
-    pelvis.castShadow = true; grp.add(pelvis);
+    /* ---- посадка: как именно человек держит руки ----
+       Четыре посадки раздаются по номеру места, иначе стол выглядит строем
+       клонов. Все четыре кладут руки на сукно: край столешницы приходится
+       на местную координату z = METRICS.seatGap, и предплечье достаёт до
+       него с запасом. */
+    const edgeZ = (opts.reach === undefined ? METRICS.seatGap : opts.reach);
+    const tblY = (opts.tableY === undefined ? METRICS.tableSurfaceY : opts.tableY);
+    const wrY = tblY + 0.022;                 // кисть лежит, не проваливаясь
+    const female2 = female;
+    const shX = female2 ? 0.225 : 0.248;
+    const shY = 0.995, shZ = -0.168;
 
-    const kneeY = 0.53, kneeZ = 0.20, ankY = 0.11, ankZ = 0.26;
-    for (const s of [-1, 1]) {
-      const hx = s * 0.135, kx = s * 0.155, ax = s * 0.16;
-      grp.add(bone([hx, hipY - 0.02, hipZ], [kx, kneeY, kneeZ], 0.115, 0.093, trous));
-      grp.add(bone([kx, kneeY, kneeZ], [ax, ankY, ankZ], 0.088, 0.062, trous));
-      const knee = new THREE.Mesh(new THREE.SphereGeometry(0.098, sg(14, 8), sg(12, 6)), trous);
-      knee.position.set(kx, kneeY, kneeZ); knee.castShadow = true; grp.add(knee);
-      const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.075, 0.27), shoeM);
-      shoe.position.set(ax, 0.045, ankZ + 0.06); shoe.castShadow = true; grp.add(shoe);
-      const toe = new THREE.Mesh(new THREE.SphereGeometry(0.066, sg(12, 6), sg(10, 5)), shoeM);
-      toe.scale.set(1, 0.56, 1.05);
-      toe.position.set(ax, 0.045, ankZ + 0.18); grp.add(toe);
-    }
-
-    /* ---- торс: позвоночник по одной прямой, иначе появляется горб ---- */
-    const chestY = 0.99;
-    const lean = -0.045;
-    const torsoZ = hipZ * 0.86;
-    const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(female ? 0.235 : 0.265, female ? 0.20 : 0.215, 0.46, sg(22, 12)), cloth);
-    body.position.set(0, (hipY + chestY) / 2 + 0.02, torsoZ);
-    body.rotation.x = lean;
-    body.castShadow = true; body.receiveShadow = true; grp.add(body);
-
-    const chest = new THREE.Mesh(new THREE.SphereGeometry(0.27, sg(22, 12), sg(16, 9)), cloth);
-    chest.scale.set(1.05, 0.86, 0.74);
-    chest.position.set(0, chestY - 0.09, torsoZ + 0.035);
-    chest.rotation.x = lean;
-    chest.castShadow = true; grp.add(chest);
-
-    const back = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.115, female ? 0.30 : 0.34, sg(8, 4), sg(16, 8)), cloth);
-    back.scale.set(female ? 1.75 : 1.95, 1, 0.42);
-    back.position.set(0, (hipY + chestY) / 2 + 0.04, torsoZ - (female ? 0.115 : 0.125));
-    back.rotation.x = lean;
-    back.castShadow = true; grp.add(back);
-
-    const cloak = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.34, 0.5, sg(22, 12), 1, true), dark);
-    cloak.position.set(0, hipY + 0.20, torsoZ * 0.92);
-    cloak.rotation.x = lean;
-    cloak.castShadow = true; grp.add(cloak);
-
-    const shX = female ? 0.235 : 0.275, shY = chestY - 0.02, shZ = torsoZ + 0.055;
-    const yoke = new THREE.Mesh(new THREE.CapsuleGeometry(0.105, shX * 2 - 0.02, sg(8, 4), sg(14, 7)), cloth);
-    yoke.rotation.z = Math.PI / 2;
-    yoke.position.set(0, shY, shZ);
-    yoke.castShadow = true; grp.add(yoke);
-
-    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.16, 0.13, sg(18, 10)), shirt);
-    collar.position.set(0, chestY + 0.06, shZ + 0.02);
-    collar.rotation.x = lean; grp.add(collar);
-    const tie = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.30, 0.04), tieM);
-    tie.position.set(0, chestY - 0.17, shZ + (female ? 0.175 : 0.195));
-    tie.rotation.x = lean; grp.add(tie);
-
-    /* ---- руки: кисти лежат на столе ---- */
-    const wrY = 0.98, wrZ = 0.42;
-    for (const s of [-1, 1]) {
-      const sh = [s * shX, shY, shZ];
-      const eb = [s * (shX + 0.07), 0.74, shZ + 0.16];
-      const wr = [s * 0.205, wrY, wrZ];
-      grp.add(bone(sh, eb, 0.098, 0.078, cloth));
-      grp.add(bone(eb, wr, 0.076, 0.058, cloth));
-      const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.105, sg(14, 8), sg(12, 6)), cloth);
-      shoulder.position.set(sh[0], sh[1], sh[2]); shoulder.castShadow = true; grp.add(shoulder);
-      const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.079, sg(12, 7), sg(10, 5)), cloth);
-      elbow.position.set(eb[0], eb[1], eb[2]); grp.add(elbow);
-      const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.05, sg(12, 7)), shirt);
-      cuff.position.set(wr[0], wr[1] + 0.005, wr[2] - 0.055);
-      cuff.rotation.x = Math.PI / 2.4; grp.add(cuff);
-      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.042, 0.115), skin);
-      palm.position.set(wr[0], wr[1] - 0.012, wr[2] + 0.045);
-      palm.rotation.x = -0.08; palm.castShadow = true; grp.add(palm);
-      const fingerG = new THREE.CapsuleGeometry(0.0155, 0.062, sg(5, 3), sg(8, 4));
-      for (let k = 0; k < 4; k++) {
-        const fg = new THREE.Mesh(fingerG, skin);
-        fg.position.set(wr[0] + (k - 1.5) * 0.024, wr[1] - 0.018, wr[2] + 0.135);
-        fg.rotation.x = Math.PI / 2 - 0.1;
-        grp.add(fg);
+    const POSE = (opts.pose === undefined ? 0 : opts.pose) % 4;
+    function armFor(s) {
+      /* s = -1 слева, +1 справа. Возвращает локоть, кисть и доводку кисти. */
+      if (POSE === 1) {                       // руки сложены перед собой
+        return { eb: [s * 0.265, wrY + 0.022, 0.045], wr: [s * 0.052, wrY + (s > 0 ? 0.028 : 0.004), edgeZ + 0.02],
+                 yaw: -s * 0.85, flat: true };
       }
-      const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.05, sg(5, 3), sg(8, 4)), skin);
-      thumb.position.set(wr[0] - s * 0.052, wr[1] - 0.016, wr[2] + 0.075);
-      thumb.rotation.set(Math.PI / 2 - 0.25, 0, s * 0.7);
-      grp.add(thumb);
+      if (POSE === 2 && s < 0) {               // левая рука лежит на колене
+        return { eb: [s * 0.27, 0.80, -0.04], wr: [s * 0.165, 0.665, 0.075], yaw: 0.12, pitch: -0.22, flat: false };
+      }
+      if (POSE === 3) {                        // руки скрещены на столе
+        const up = s > 0 ? 0.026 : 0;
+        return { eb: [s * 0.285, wrY + 0.03 + up, 0.02], wr: [-s * 0.03, wrY + 0.03 + up, edgeZ - 0.075],
+                 yaw: -s * 1.25, flat: false };
+      }
+      return { eb: [s * 0.30, wrY + 0.024, 0.02], wr: [s * 0.20, wrY, edgeZ + 0.05], yaw: 0, flat: true };
     }
+
+    /* ---- таз и ноги: одна вымётанная труба от бедра до ступни ---- */
+    const hipY = METRICS.hipY, hipZ = -0.245;
+    for (const s of [-1, 1]) {
+      grp.add(limb([
+        [s * 0.125, hipY - 0.01, hipZ],
+        [s * 0.15, 0.515, -0.05],
+        [s * 0.158, 0.495, 0.13],
+        [s * 0.16, 0.30, 0.20],
+        [s * 0.162, 0.105, 0.205]
+      ], [0.102, 0.094, 0.084, 0.072, 0.055], trous, sg(14, 8), sg(20, 11)));
+      const shoe = new THREE.Mesh(loft([
+        { y: 0.014, z: 0.15, rx: 0.052, rz: 0.014 },
+        { y: 0.042, z: 0.185, rx: 0.058, rz: 0.042 },
+        { y: 0.040, z: 0.27, rx: 0.054, rz: 0.034 },
+        { y: 0.026, z: 0.325, rx: 0.038, rz: 0.020 }
+      ], sg(16, 9)), shoeM);
+      shoe.position.x = s * 0.162;
+      shoe.castShadow = true;
+      grp.add(shoe);
+    }
+
+    /* ---- торс: сечения по хребту, круглые плечи, гнутая спина ----
+       Раньше здесь стояли цилиндр, шар и капсула, сплющенная до 0,42 по
+       глубине: со спины фигура читалась как доска. */
+    const chestY = METRICS.chestY;
+    const wide = female2 ? 0.94 : 1;
+    const torsoStations = [
+      { y: 0.520, z: hipZ - 0.01, rx: 0.195 * wide, rz: 0.140 },
+      { y: 0.620, z: hipZ + 0.005, rx: 0.172 * wide, rz: 0.124 },
+      { y: 0.720, z: -0.222, rx: 0.178 * wide, rz: 0.126 },
+      { y: 0.830, z: -0.200, rx: 0.198 * wide, rz: 0.132 },
+      { y: 0.925, z: -0.180, rx: 0.218 * wide, rz: 0.138 },
+      { y: 0.995, z: -0.172, rx: 0.224 * wide, rz: 0.134 },
+      { y: 1.020, z: -0.168, rx: 0.176 * wide, rz: 0.112 },
+      { y: 1.050, z: -0.164, rx: 0.115 * wide, rz: 0.082 }
+    ];
+    const torsoGeo = loft(torsoStations, sg(26, 13));
+    /* Геометрию центруем, чтобы дыхание масштабировало торс вокруг груди,
+       а не растягивало его от начала координат фигуры. */
+    const CX = 0, CY = 0.80, CZ = -0.20;
+    torsoGeo.translate(-CX, -CY, -CZ);
+    const torso = new THREE.Mesh(torsoGeo, cloth);
+    torso.position.set(CX, CY, CZ);
+    torso.castShadow = true; torso.receiveShadow = true;
+    grp.add(torso);
+
+    /* Отвороты пиджака: две тёмные полоски по краям груди. */
+    for (const s of [-1, 1]) {
+      const lap = limb([
+        [s * 0.085, 1.012, -0.055],
+        [s * 0.072, 0.925, -0.036],
+        [s * 0.040, 0.845, -0.055]
+      ], [0.024, 0.021, 0.014], dark, sg(8, 5), sg(8, 5));
+      grp.add(lap);
+    }
+
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.070, 0.104, 0.085, sg(18, 10)), shirt);
+    collar.position.set(0, 1.045, -0.156);
+    collar.rotation.x = -0.05; grp.add(collar);
+    const tie = new THREE.Mesh(loft([
+      { y: 0.815, z: -0.052, rx: 0.024, rz: 0.011 },
+      { y: 0.925, z: -0.036, rx: 0.027, rz: 0.012 },
+      { y: 1.008, z: -0.052, rx: 0.016, rz: 0.010 }
+    ], sg(10, 6)), tieM);
+    grp.add(tie);
+
+    /* ---- руки: плечо → локоть → кисть, кисть ложится на сукно ---- */
+    for (const s of [-1, 1]) {
+      const A = armFor(s);
+      const sh = [s * shX, shY, shZ];
+      const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.062, sg(16, 8), sg(12, 6)), cloth);
+      shoulder.position.set(sh[0], sh[1], sh[2]);
+      shoulder.scale.set(1, 0.92, 1);
+      shoulder.castShadow = true; grp.add(shoulder);
+
+      grp.add(limb([
+        sh,
+        [(sh[0] + A.eb[0]) / 2 + s * 0.018, (sh[1] + A.eb[1]) / 2 - 0.01, (sh[2] + A.eb[2]) / 2 - 0.012],
+        A.eb,
+        [(A.eb[0] + A.wr[0]) / 2, (A.eb[1] + A.wr[1]) / 2 + 0.006, (A.eb[2] + A.wr[2]) / 2],
+        A.wr
+      ], [0.068, 0.062, 0.052, 0.045, 0.040], cloth, sg(13, 7), sg(22, 12)));
+
+      /* манжета рубашки у самой кисти */
+      const dir = new THREE.Vector3(A.wr[0] - A.eb[0], A.wr[1] - A.eb[1], A.wr[2] - A.eb[2]);
+      const cuffFrom = new THREE.Vector3(A.wr[0], A.wr[1], A.wr[2]).addScaledVector(dir, -0.16);
+      const cuff = limb([
+        [cuffFrom.x, cuffFrom.y, cuffFrom.z],
+        [A.wr[0], A.wr[1], A.wr[2]]
+      ], [0.046, 0.042], shirt, sg(12, 7), sg(4, 3));
+      grp.add(cuff);
+
+      const hand = buildHand(skin, s, { flat: A.flat });
+      hand.position.set(A.wr[0], A.wr[1], A.wr[2]);
+      /* Пальцы продолжают предплечье: так кисть не «отломана» от руки. */
+      hand.rotation.y = Math.atan2(dir.x, dir.z) + (A.yaw || 0);
+      hand.rotation.x = A.pitch || 0;
+      grp.add(hand);
+    }
+
 
     /* ---- шея и голова ---- */
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.092, 0.16, sg(14, 8)), skin);
-    neck.position.set(0, chestY + 0.11, shZ + 0.005);
-    neck.rotation.x = lean; grp.add(neck);
+    grp.add(limb([
+      [0, 1.005, shZ + 0.010],
+      [0, 1.065, shZ + 0.024],
+      [0, 1.125, shZ + 0.034]
+    ], [0.068, 0.058, 0.052], skin, sg(14, 8), sg(8, 5)));
 
     /* Голова висит на своём пивоте: так её можно поворачивать к говорящему,
        не разбирая всю фигуру. */
-    const headY = chestY + 0.32, headZ = shZ + 0.012;
+    const headY = METRICS.headY, headZ = shZ + 0.032;
     const headPivot = new THREE.Group();
     headPivot.position.set(0, headY, headZ);
     grp.add(headPivot);
 
+    /* Голова и всё, что на ней, живут в своём масштабе. Раньше сфера радиусом
+       0,205 давала голову шириной 41 см при плечах 50 — фигура читалась как
+       кукла. Теперь голова человеческая, а лицо и причёска пересчитываются
+       вместе с ней одним множителем. */
+    const headBox = new THREE.Group();
+    headBox.scale.setScalar(0.56);
+    headPivot.add(headBox);
+
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.205, sg(32, 16), sg(24, 12)), faceM);
     head.scale.set(0.97, 1.09, 0.95);
-    head.castShadow = true; headPivot.add(head);
+    head.castShadow = true; headBox.add(head);
 
     /* Веки: две тонкие «шапочки» цвета кожи. Опускаются при мигании. */
     const lids = [];
@@ -954,25 +1179,25 @@ export function createModels(THREE, cfg) {
       lid.rotation.x = Math.PI / 2.1;
       lid.scale.set(1, 0.5, 1);
       lid.visible = false;
-      headPivot.add(lid);
+      headBox.add(lid);
       lids.push(lid);
     }
 
     const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.155, sg(20, 10), sg(14, 8)), skin);
     jaw.scale.set(0.95, 0.78, 0.92);
     jaw.position.set(0, -0.105, 0.022);
-    headPivot.add(jaw);
+    headBox.add(jaw);
 
     const nose = new THREE.Mesh(new THREE.ConeGeometry(0.031, 0.072, sg(12, 6)), skin);
     nose.rotation.x = Math.PI / 2;
     nose.position.set(0, -0.012, 0.196);
-    headPivot.add(nose);
+    headBox.add(nose);
 
     for (const s of [-1, 1]) {
       const ear = new THREE.Mesh(new THREE.SphereGeometry(0.042, sg(12, 6), sg(10, 5)), skin);
       ear.scale.set(0.42, 1.05, 0.78);
       ear.position.set(s * 0.196, -0.01, -0.012);
-      headPivot.add(ear);
+      headBox.add(ear);
     }
 
     /* ---- головной убор или причёска ---- */
@@ -1019,11 +1244,16 @@ export function createModels(THREE, cfg) {
         hat.add(bun);
       }
     }
-    headPivot.add(hat);
+    headBox.add(hat);
 
     grp.userData = {
-      body, chest, head, headPivot, jaw, hat, cloak, lids,
+      torso, head, headPivot, jaw, hat, lids,
       restJawY: jaw.position.y,
+      /* Дыхание: торс чуть раздаётся в грудь и на волос поднимается.
+         Ручка отдаётся наружу, чтобы сцена не знала про сечения. */
+      breathe(k) {
+        torso.scale.set(1 + k * 0.013, 1 + k * 0.006, 1 + k * 0.016);
+      },
       materials: [cloth, dark, skin, shirt, tieM, hairM, trous, shoeM, faceM],
       baseColor: base.clone()
     };
@@ -1041,8 +1271,9 @@ export function createModels(THREE, cfg) {
 
   return {
     PAL, LOWQ, sg, prng, cvs, roundRect, texFromCanvas, disposeTree,
+    METRICS, tableRadiusFor, loft, limb, buildHand,
     plankCanvas, plasterCanvas, backdropCanvas, feltCanvas,
     cardBackCanvas, cardFaceCanvas, nameCanvas, crossCanvas, faceCanvas,
-    buildRoom, buildLamp, buildTable, buildChair, buildFigure, bone
+    buildRoom, buildLamp, buildTable, buildChair, buildFigure
   };
 }

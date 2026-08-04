@@ -86,6 +86,12 @@
 
   function nearBottom(box) { return box.scrollHeight - box.scrollTop - box.clientHeight < 60; }
 
+  /* Полный адрес приглашения: его и показываем, и копируем. */
+  function inviteUrl(room) {
+    if (!room) return '';
+    return location.origin + (room.inviteLink || ('/online.html?join=' + room.invite));
+  }
+
   /* Сцена поднимается асинхронно, и всё это время в state.stage лежит метка
      'loading'. Один геттер вместо проверок в каждой точке вызова. */
   function stg() { return (state.stage && state.stage !== 'loading') ? state.stage : null; }
@@ -109,33 +115,25 @@
      ======================================================================= */
   function renderLobby(lobby) {
     state.lobby = lobby;
-    var items = []
-      .concat((lobby.invites || []).map(function (i) { return { kind: 'invite', i: i }; }))
-      .concat((lobby.rooms || []).filter(function (r) { return !r.mine; }).map(function (r) { return { kind: 'room', r: r }; }));
+    /* Общего списка чужих комнат больше нет: показываем только адресные
+       приглашения. Чужой стол — не проходной двор. */
+    var items = (lobby.invites || []).map(function (i) { return { kind: 'invite', i: i }; });
 
     var box = $('roomList');
     if (!items.length) {
-      setHTML(box, '<div class="empty">Открытых столов пока нет. Соберите свой и позовите людей — они появятся в списке.</div>');
+      setHTML(box, '<div class="empty">Приглашений нет. Попросите у хозяина стола ссылку — по ней вы сядете сразу.</div>');
       return;
     }
     box._html = null;
     syncKeyed(box, items,
-      function (it) { return it.kind + ':' + (it.i ? it.i.roomId : it.r.id); },
+      function (it) { return it.kind + ':' + it.i.roomId; },
       function () { var d = document.createElement('div'); d.className = 'item'; return d; },
       function (el, it) {
-        if (it.kind === 'invite') {
-          el.style.borderColor = 'rgba(226,180,120,.45)';
-          setHTML(el, '<span class="avatar">' + ico('envelope', 18) + '</span>' +
-            '<span class="nm">' + API.esc(it.i.from) + ' зовёт в «' + API.esc(it.i.title) + '» ' +
-            '<span class="muted">' + it.i.players + '/' + it.i.size + '</span></span>' +
-            '<button class="btn primary sm" data-join="' + it.i.roomId + '">Принять</button>');
-        } else {
-          setHTML(el, '<span class="avatar">' + API.esc(API.initial(it.r.hostName)) + '</span>' +
-            '<span class="nm">' + API.esc(it.r.title) + ' <span class="muted">· ' + API.esc(it.r.scenario) +
-            ' · ' + it.r.players + '/' + it.r.size + '</span></span>' +
-            (it.r.started ? '<span class="pill bad">идёт партия</span>'
-              : '<button class="btn sm" data-join="' + it.r.id + '">Сесть</button>'));
-        }
+        el.style.borderColor = 'rgba(226,180,120,.45)';
+        setHTML(el, '<span class="avatar">' + ico('envelope', 18) + '</span>' +
+          '<span class="nm">' + API.esc(it.i.from) + ' зовёт в «' + API.esc(it.i.title) + '» ' +
+          '<span class="muted">' + it.i.players + '/' + it.i.size + '</span></span>' +
+          '<button class="btn primary sm" data-join="' + it.i.roomId + '">Принять</button>');
       });
   }
 
@@ -185,8 +183,9 @@
 
     var isHost = room.hostId === API.user.id;
     setHTML($('lobbyTitle'), API.esc(room.title) + '<em>хозяин — ' + API.esc(room.hostName) + '</em>');
-    setText($('roomCode'), room.code);
+    setText($('inviteLink'), inviteUrl(room));
     setText($('cntNow'), room.members.length + ' из ' + room.size);
+    setText($('cntBots'), room.bots ? String(room.bots) : 'ни одного');
     setText($('cntGoal'), room.autoStart ? (room.size + ' игроках — сами') : 'ручном старте');
     setText($('compo'), room.compositionLabel);
 
@@ -197,6 +196,10 @@
       $('autoStart').checked = room.autoStart;
       $('btnStart').disabled = !room.canStart;
       setText($('btnStart'), room.canStart ? 'Начать партию (' + room.members.length + ')' : 'Нужно хотя бы шесть человек');
+      /* Добор ботами: сколько мест осталось — столько и предлагаем занять. */
+      $('btnBots').hidden = !room.freeSeats;
+      setText($('btnBots'), 'Добрать ботами (' + room.freeSeats + ')');
+      $('btnBotsOff').hidden = !room.bots;
     }
 
     var mem = room.members.map(function (m) { return { kind: 'm', m: m }; })
@@ -210,6 +213,7 @@
           setHTML(el, '<span class="avatar">' + API.esc(API.initial(it.m.name)) + '</span>' +
             '<span class="nm">' + API.esc(it.m.name) + (it.m.id === API.user.id ? ' <span class="muted">— это вы</span>' : '') + '</span>' +
             (it.m.voice ? '<span class="pill good">' + ico('mic', 14) + '</span>' : '') +
+            (it.m.bot ? '<span class="pill">сосед-бот</span>' : '') +
             (it.m.host ? '<span class="pill">хозяин</span>' : '') +
             '<span class="dot ' + (it.m.online ? '' : 'off') + '"></span>' +
             (isHost && !it.m.host ? '<button class="iconbtn" data-kick="' + it.m.id + '" aria-label="Убрать из комнаты">' + ico('close', 16) + '</button>' : ''));
@@ -377,7 +381,7 @@
       /* Своя подпись поднята выше: камера стоит почти за спиной игрока,
          и на уровне головы табличка легла бы прямо на сукно. */
       var mine = state.game && state.game.you && state.game.you.id === id;
-      var p = st.project(id, mine ? 2.5 : 2.05);
+      var p = st.project(id, mine ? 1.95 : 1.66);
       if (!p || !p.visible) { el.style.opacity = '0'; el.style.pointerEvents = 'none'; return; }
       el.style.opacity = '1';
       el.style.pointerEvents = 'auto';
@@ -659,16 +663,19 @@
   $('btnCreate').addEventListener('click', function () {
     call('/api/rooms/create', { size: 8, autoStart: true }).then(function (r) { if (r) renderRoom(r.room); });
   });
-  $('btnJoinCode').addEventListener('click', function () {
-    var code = $('joinCode').value.trim();
-    if (!code) return API.toast('Введите код стола', 'bad');
-    call('/api/rooms/join', { code: code }).then(function (r) { if (r) renderRoom(r.room); });
+  $('btnBots').addEventListener('click', function () {
+    call('/api/rooms/bots', { on: true }).then(function (r) {
+      if (r) { renderRoom(r.room); API.toast('Соседи сели за стол'); }
+    });
+  });
+  $('btnBotsOff').addEventListener('click', function () {
+    call('/api/rooms/bots', { on: false }).then(function (r) { if (r) renderRoom(r.room); });
   });
   $('btnLeave').addEventListener('click', function () {
     call('/api/rooms/leave').then(function () { state.room = null; renderRoom(null); });
   });
   $('btnCopy').addEventListener('click', function () {
-    var link = location.origin + '/online.html?room=' + state.room.id;
+    var link = inviteUrl(state.room);
     (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject())
       .then(function () { API.toast('Ссылка скопирована'); })
       .catch(function () { prompt('Скопируйте ссылку:', link); });
@@ -854,7 +861,12 @@
     curtain.progress(0.7);
     curtain.note('Ищем ваш стол');
 
-    var wanted = new URLSearchParams(location.search).get('room');
+    var q = new URLSearchParams(location.search);
+    var token = q.get('join');
+    if (token) {
+      return API.call('/api/rooms/join', { invite: token }).then(function (x) { renderRoom(x.room); });
+    }
+    var wanted = q.get('room');
     if (wanted) return API.call('/api/rooms/join', { roomId: wanted }).then(function (x) { renderRoom(x.room); });
     return API.call('/api/rooms/state').then(function (x) { renderRoom(x.room); })
       .catch(function () { renderRoom(null); });
