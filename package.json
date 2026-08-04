@@ -1,0 +1,13 @@
+{
+  "name": "mafia-online",
+  "version": "1.0.0",
+  "description": "Сюжетная «Мафия»: игра с ботами и игра по сети на 6–20 человек",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/run-all.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {},
+  "private": true
+}

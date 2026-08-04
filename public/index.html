@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08060a">
+<meta name="color-scheme" content="dark">
+<title>Мафия — главная</title>
+<meta name="description" content="Сюжетная «Мафия»: игра с ботами или по сети на 6–20 человек.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23140d10'/%3E%3Cpath d='M32 15c7.2 0 11.4 5.2 12.2 14.6C49.6 31 53 33 53 35.2 53 38.4 43.6 41 32 41S11 38.4 11 35.2c0-2.2 3.4-4.2 8.8-5.6C20.6 20.2 24.8 15 32 15z' fill='%23c9a227'/%3E%3Ccircle cx='24' cy='50' r='3.2' fill='%23a8202b'/%3E%3Ccircle cx='32' cy='50' r='3.2' fill='%23e8dcc6'/%3E%3Ccircle cx='40' cy='50' r='3.2' fill='%23a8202b'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">Ма<b>ф</b>ия</div>
+  <div class="spacer"></div>
+  <div class="who" id="who" hidden>
+    <span class="dot"></span><span id="whoName">—</span>
+    <button class="btn ghost sm" id="btnRename">Сменить имя</button>
+  </div>
+</header>
+
+<main class="shell">
+
+  <!-- шаг 1 · регистрация -->
+  <section id="authView" hidden>
+    <span class="eyebrow">Вход за стол</span>
+    <h1>Мафия<em>город засыпает</em></h1>
+    <p class="lede">Для игры по сети нужно только имя — никаких почт и паролей.
+    Под этим именем вас увидят другие игроки и смогут позвать в свою комнату.</p>
+
+    <div class="plate card sect" style="max-width:520px">
+      <label class="field">
+        <span class="eyebrow">Ваше имя за столом</span>
+        <input class="inp" id="regName" maxlength="16" placeholder="Например, Анна" autocomplete="nickname">
+      </label>
+      <div class="row" style="margin-top:14px">
+        <button class="btn primary" id="btnReg">Создать аккаунт</button>
+        <span class="muted" style="font-size:13.5px">Имя сохранится в этом браузере</span>
+      </div>
+      <p class="muted" style="font-size:13.5px;margin-bottom:0">Играть с ботами можно и без аккаунта —
+        <a href="/bots.html">открыть игру с ботами</a>.</p>
+    </div>
+  </section>
+
+  <!-- шаг 2 · две плашки -->
+  <section id="hubView" hidden>
+    <span class="eyebrow">Выберите стол</span>
+    <h1>Добрый вечер, <span class="gold" id="hubName">гость</span><em>два способа сыграть</em></h1>
+
+    <div class="modes">
+      <a class="mode" id="modeBots" href="/bots.html">
+        <div class="glyph">🎴</div>
+        <h2>Игра с ботами</h2>
+        <p>Та же партия за круглым столом: соседи со своими характерами, памятью на чужие слова и собственными расчётами.</p>
+        <ul>
+          <li>6 или 8 игроков, четыре уровня сложности</li>
+          <li>Сюжет, 3D-сцена и протокол партии</li>
+          <li>Играется одному, аккаунт не нужен</li>
+        </ul>
+        <div class="go">Сесть за стол ▸</div>
+      </a>
+
+      <a class="mode" id="modeOnline" href="/online.html">
+        <div class="glyph">🌐</div>
+        <h2>Игра по сети</h2>
+        <p>Комната на живых людей: выбираете сюжет, зовёте друзей из списка зарегистрированных и начинаете, как только все собрались.</p>
+        <ul>
+          <li>От 6 до 20 игроков, состав ролей считается автоматически</li>
+          <li>Ночной чат мафии, проверки шерифа, голосование</li>
+          <li>Автостарт, когда набралось нужное число человек</li>
+        </ul>
+        <div class="go">Открыть комнату ▸</div>
+      </a>
+    </div>
+
+    <div class="plate card sect" id="quickPanel">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <span class="eyebrow">Сейчас на сайте</span>
+          <h3 id="quickStat" style="margin-top:6px">—</h3>
+        </div>
+        <button class="btn ghost sm" id="btnRefresh">Обновить</button>
+      </div>
+      <div class="list" id="quickList" style="margin-top:14px"></div>
+    </div>
+  </section>
+
+</main>
+
+<div id="toast"></div>
+<script src="/js/api.js"></script>
+<script src="/js/hub.js"></script>
+</body>
+</html>

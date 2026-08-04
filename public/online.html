@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08060a">
+<meta name="color-scheme" content="dark">
+<title>Мафия — игра по сети</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23140d10'/%3E%3Cpath d='M32 15c7.2 0 11.4 5.2 12.2 14.6C49.6 31 53 33 53 35.2 53 38.4 43.6 41 32 41S11 38.4 11 35.2c0-2.2 3.4-4.2 8.8-5.6C20.6 20.2 24.8 15 32 15z' fill='%23c9a227'/%3E%3Ccircle cx='24' cy='50' r='3.2' fill='%23a8202b'/%3E%3Ccircle cx='32' cy='50' r='3.2' fill='%23e8dcc6'/%3E%3Ccircle cx='40' cy='50' r='3.2' fill='%23a8202b'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/css/app.css">
+<style>
+/* ---------- лобби ---------- */
+.cols{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;margin-top:22px;align-items:start}
+.stack{display:flex;flex-direction:column;gap:18px}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed var(--line-soft);font-size:14.5px}
+.kv:last-child{border-bottom:none}
+.kv b{font-weight:600}
+.code{font-family:var(--mono);letter-spacing:.22em;color:var(--gold-soft);font-size:20px}
+.scen{display:flex;flex-direction:column;gap:9px;max-height:330px;overflow:auto;padding-right:4px}
+.scen button{
+  text-align:left;padding:12px 14px;border-radius:11px;border:1px solid var(--line-soft);
+  background:rgba(255,255,255,.026);transition:.15s ease;
+}
+.scen button:hover{border-color:rgba(201,162,39,.45)}
+.scen button.on{border-color:var(--gold);background:linear-gradient(180deg,rgba(201,162,39,.16),rgba(201,162,39,.04))}
+.scen .t{font-family:var(--serif);font-size:17px}
+.scen .d{font-size:13px;color:var(--paper-faint);margin-top:3px}
+.pill{
+  display:inline-block;padding:3px 10px;border-radius:999px;font-size:11.5px;letter-spacing:.1em;
+  text-transform:uppercase;border:1px solid var(--line);color:var(--gold-soft);
+}
+.pill.grey{border-color:var(--line-soft);color:var(--paper-faint)}
+.pill.red{border-color:rgba(194,65,58,.5);color:#f0b7b2}
+.pill.green{border-color:rgba(111,174,125,.5);color:#a9d8b4}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{padding:7px 14px;border-radius:999px;border:1px solid var(--line-soft);font-size:13.5px;color:var(--paper-dim)}
+.tabs button.on{border-color:var(--gold);color:var(--paper);background:rgba(201,162,39,.12)}
+
+/* ---------- игровой экран ---------- */
+.phasebar{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:15px 18px;border-radius:14px;
+  border:1px solid var(--line-soft);background:linear-gradient(180deg,rgba(20,14,18,.95),rgba(9,6,10,.9));
+}
+.phasebar .ph{font-family:var(--serif);font-size:22px}
+.timer{font-family:var(--mono);font-size:24px;color:var(--gold-soft);min-width:74px;text-align:right}
+.timer.warn{color:#f0b7b2}
+.bar{height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden;width:100%;margin-top:12px}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-soft));transition:width .9s linear}
+
+.seats{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px}
+.seat{
+  position:relative;display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:12px;text-align:left;
+  border:1px solid var(--line-soft);background:rgba(255,255,255,.028);transition:.15s ease;min-height:96px;
+}
+.seat .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seat .sub{font-size:12px;color:var(--paper-faint)}
+.seat .no{position:absolute;top:9px;right:11px;font-family:var(--mono);font-size:12px;color:var(--paper-faint)}
+.seat.dead{opacity:.42;filter:grayscale(1)}
+.seat.me{border-color:rgba(201,162,39,.5)}
+.seat.pick{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+.seat.mafia{border-color:rgba(194,65,58,.55)}
+.seat.clickable{cursor:pointer}
+.seat.clickable:hover{border-color:rgba(201,162,39,.6);transform:translateY(-2px)}
+.seat .votes{font-family:var(--mono);font-size:12px;color:var(--gold-soft)}
+
+.rolecard{
+  padding:18px;border-radius:14px;border:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(61,15,24,.5),rgba(12,9,12,.9));
+}
+.rolecard .g{font-size:32px;line-height:1}
+.rolecard h3{margin:8px 0 4px;font-size:22px}
+.rolecard p{margin:0;font-size:13.5px;color:var(--paper-dim)}
+
+.feed{display:flex;flex-direction:column;gap:7px;max-height:300px;overflow:auto;padding-right:5px;font-size:14px}
+.feed .m{padding:8px 11px;border-radius:9px;background:rgba(255,255,255,.03);border:1px solid var(--line-soft)}
+.feed .m b{color:var(--gold-soft)}
+.feed .m.sys{background:none;border:none;color:var(--paper-faint);font-size:13px;padding:3px 2px}
+.feed .m.mafia{border-color:rgba(194,65,58,.4)}
+.feed .m.ghost{border-color:rgba(95,147,196,.35);color:var(--paper-dim)}
+.feed .m.mine{background:rgba(200,168,105,.07)}
+.feed .m.toyou{border-color:rgba(200,168,105,.75);box-shadow:0 0 0 1px rgba(200,168,105,.25) inset}
+.feed .m.toyou .tag{display:inline-block;margin-right:6px;padding:1px 7px;border-radius:999px;font-size:11px;
+  letter-spacing:.08em;text-transform:uppercase;background:rgba(200,168,105,.18);color:var(--gold-soft)}
+.feed .m .men{text-decoration:none;color:var(--gold-soft);border-bottom:1px dotted rgba(200,168,105,.6)}
+.log{font-size:13.5px;color:var(--paper-dim);max-height:240px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.log .l{padding-left:12px;border-left:2px solid var(--line-soft)}
+.log .l.death{border-color:rgba(194,65,58,.6)}
+.log .l.day{border-color:rgba(201,162,39,.6)}
+.composer{display:flex;gap:8px;margin-top:10px}
+.composer .inp{min-height:42px}
+
+.finale{text-align:center;padding:28px 22px}
+.finale h2{font-size:clamp(26px,5vw,40px);margin-bottom:8px}
+.finale .win{font-family:var(--serif);font-size:clamp(30px,6vw,46px)}
+.finale .win.town{color:var(--gold-soft)}
+.finale .win.mafia{color:#e08c86}
+
+@media (max-width:860px){
+  .cols{grid-template-columns:1fr;gap:14px}
+  .seats{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+  .seat{min-height:84px;padding:10px}
+  .phasebar{padding:12px 14px;gap:10px}
+  .phasebar .ph{font-size:19px}
+  .timer{font-size:21px}
+  .feed{max-height:230px}
+  /* панель действия остаётся под рукой при прокрутке */
+  #actionBar{
+    position:sticky;bottom:calc(8px + env(safe-area-inset-bottom));z-index:15;
+    padding:12px 14px;background:rgba(8,6,10,.96);backdrop-filter:blur(10px);
+    border-color:rgba(201,162,39,.32);
+  }
+}
+@media (max-width:420px){
+  .seats{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
+  .seat .sub{font-size:11px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="/" style="text-decoration:none;color:inherit">Ма<b>ф</b>ия</a>
+  <div class="spacer"></div>
+  <div class="who"><span class="dot"></span><span id="whoName">—</span></div>
+  <a class="btn ghost sm" href="/">Домой</a>
+</header>
+
+<main class="shell">
+
+  <!-- НЕТ АККАУНТА -->
+  <section id="needAuth" hidden>
+    <h1>Нужно имя<em>регистрация занимает секунду</em></h1>
+    <p class="lede">Чтобы играть по сети, вернитесь на главную и введите имя.</p>
+    <p><a class="btn primary" href="/">На главную</a></p>
+  </section>
+
+  <!-- ЛОББИ -->
+  <section id="lobbyView" hidden>
+    <span class="eyebrow">Игра по сети</span>
+    <h1 id="lobbyTitle">Комната<em>от 6 до 20 игроков</em></h1>
+
+    <div id="noRoom" class="plate card sect" hidden>
+      <h3>У вас пока нет комнаты</h3>
+      <p class="muted" style="font-size:14px">Создайте свою или войдите в чужую по четырёхзначному коду.</p>
+      <div class="row">
+        <button class="btn primary" id="btnCreate">Создать комнату</button>
+        <input class="inp" id="joinCode" style="max-width:150px" placeholder="Код" inputmode="numeric" maxlength="4">
+        <button class="btn" id="btnJoinCode">Войти по коду</button>
+      </div>
+      <div class="sect">
+        <span class="eyebrow">Открытые комнаты и приглашения</span>
+        <div class="list" id="roomList" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <div id="roomPane" class="cols" hidden>
+      <div class="stack">
+        <div class="plate card">
+          <div class="row" style="justify-content:space-between;align-items:flex-start">
+            <div>
+              <span class="eyebrow">Код комнаты</span>
+              <div class="code" id="roomCode">—</div>
+            </div>
+            <div class="row">
+              <button class="btn ghost sm" id="btnCopy">Скопировать ссылку</button>
+              <button class="btn danger sm" id="btnLeave">Выйти</button>
+            </div>
+          </div>
+          <div class="sect" style="margin-top:16px">
+            <div class="kv"><span class="muted">Игроков сейчас</span><b id="cntNow">—</b></div>
+            <div class="kv"><span class="muted">Старт при</span><b id="cntGoal">—</b></div>
+            <div class="kv"><span class="muted">Состав ролей</span><b id="compo" style="text-align:right">—</b></div>
+          </div>
+          <div id="hostBox" class="sect" hidden>
+            <span class="eyebrow">Сколько игроков ждём</span>
+            <div class="row" style="margin-top:8px">
+              <input class="inp" type="range" id="sizeRange" min="6" max="20" step="1" style="flex:1;min-width:180px;padding:0">
+              <b id="sizeVal" class="code" style="font-size:18px">8</b>
+            </div>
+            <label class="row" style="margin-top:10px;font-size:14px;color:var(--paper-dim)">
+              <input type="checkbox" id="autoStart" checked> Начать автоматически, как только все соберутся
+            </label>
+            <button class="btn primary wide" id="btnStart" style="margin-top:14px">Начать партию</button>
+          </div>
+        </div>
+
+        <div class="plate card">
+          <div class="row" style="justify-content:space-between">
+            <h3>За столом</h3>
+            <button class="btn sm" id="btnFriends">Добавить друзей</button>
+          </div>
+          <div class="list" id="members" style="margin-top:12px"></div>
+        </div>
+
+        <div class="plate card" id="friendsBox" hidden>
+          <div class="row" style="justify-content:space-between">
+            <h3>Зарегистрированы на сайте</h3>
+            <button class="btn ghost sm" id="btnFriendsClose">Свернуть</button>
+          </div>
+          <input class="inp" id="friendSearch" placeholder="Поиск по имени" style="margin:12px 0">
+          <div class="list" id="friends"></div>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="plate card">
+          <h3>Сюжет партии</h3>
+          <p class="muted" style="font-size:13.5px;margin:6px 0 12px">Показаны только те, что рассчитаны на текущее число игроков.</p>
+          <div class="scen" id="scenarios"></div>
+        </div>
+        <div class="plate card">
+          <h3>Чат комнаты</h3>
+          <div class="feed" id="lobbyFeed" style="margin-top:10px"></div>
+          <div class="composer">
+            <input class="inp" id="lobbyMsg" placeholder="Сказать что-нибудь…" maxlength="400">
+            <button class="btn sm" id="lobbySend">↑</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ИГРА -->
+  <section id="gameView" hidden>
+    <div class="phasebar">
+      <div>
+        <span class="eyebrow" id="gScenario">—</span>
+        <div class="ph" id="gPhase">—</div>
+      </div>
+      <div class="spacer" style="flex:1"></div>
+      <span class="pill grey" id="gAlive">—</span>
+      <div class="timer" id="gTimer">0:00</div>
+      <div class="bar"><i id="gBar" style="width:100%"></i></div>
+    </div>
+
+    <p class="lede sect" id="gHint" style="margin-top:14px"></p>
+
+    <div class="cols">
+      <div class="stack">
+        <div class="plate card">
+          <div class="row" style="justify-content:space-between">
+            <h3>Стол</h3>
+            <span class="muted" style="font-size:13px" id="gPickHint"></span>
+          </div>
+          <div class="seats" id="seats" style="margin-top:12px"></div>
+        </div>
+        <div class="plate card" id="actionBar">
+          <div class="row" id="actions"></div>
+        </div>
+        <div class="plate card">
+          <h3>Протокол партии</h3>
+          <div class="log" id="gLog" style="margin-top:10px"></div>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="rolecard" id="roleCard"></div>
+        <div class="plate card">
+          <div class="tabs" id="chatTabs"></div>
+          <div class="feed" id="gFeed" style="margin-top:12px"></div>
+          <div class="composer">
+            <input class="inp" id="gMsg" placeholder="Ваша речь…" maxlength="400">
+            <button class="btn sm" id="gSend">↑</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="plate finale sect" id="finale" hidden></div>
+  </section>
+
+</main>
+
+<div id="toast"></div>
+<script src="/js/api.js"></script>
+<script src="/js/online.js"></script>
+</body>
+</html>
