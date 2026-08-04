@@ -9,7 +9,10 @@ const suites = [
   ['Тест 2 · движок партии', 'test-engine.js'],
   ['Тест 3 · сетевой слой и статика', 'test-server.js'],
   ['Тест 4 · живая речь и реакция стола', 'test-speech.js'],
-  ['Тест 5 · сетевой чат и обращения', 'test-chat.js']
+  ['Тест 5 · сетевой чат и обращения', 'test-chat.js'],
+  ['Тест 7 · обрывы связи не держат фазу', 'test-offline.js'],
+  ['Тест 8 · сигналинг голосового чата', 'test-signal.js'],
+  ['Тест 9 · гигиена страниц', 'test-assets.js']
 ];
 
 let bad = 0;
@@ -25,8 +28,13 @@ const must = [
   'server.js', 'package.json', 'README.md',
   'shared/game-config.js', 'server/game.js',
   'public/index.html', 'public/online.html', 'public/bots.html',
-  'public/css/app.css', 'public/js/api.js', 'public/js/hub.js', 'public/js/online.js', 'public/js/speech.js',
-  'tests/test-speech.js', 'tests/test-chat.js'
+  'public/css/app.css', 'public/css/theatre.css', 'public/css/fonts.css',
+  'public/js/api.js', 'public/js/hub.js', 'public/js/online.js', 'public/js/speech.js',
+  'public/js/icons.js', 'public/js/voice.js', 'public/js/rtc.js', 'public/js/curtain.js',
+  'public/js/models3d.js', 'public/js/stage3d.js',
+  'public/vendor/three/three.module.js',
+  'tests/test-speech.js', 'tests/test-chat.js', 'tests/test-offline.js',
+  'tests/test-signal.js', 'tests/test-assets.js'
 ];
 let miss = 0;
 must.forEach(f => {

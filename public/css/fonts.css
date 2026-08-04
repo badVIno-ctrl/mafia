@@ -1,0 +1,96 @@
+/* =========================================================================
+   Свои шрифты. Ни одного обращения к внешним CDN: игра обязана открываться
+   в локальной сети и без интернета вообще.
+
+   Bitter      — плотная брусковая антиква. Афишный, «печатный» характер,
+                 но с крупным очком и открытыми проёмами, поэтому читается
+                 лучше Playfair/Georgia в мелких кеглях.
+   Golos Text  — гуманистический гротеск с кириллицей по-настоящему
+                 родного рисунка (не «латиница с приделанными хвостами»).
+
+   Подключены только нужные срезы: cyrillic + latin, начертания 400/600/700.
+   ========================================================================= */
+
+/* ------------------------------- Bitter ------------------------------- */
+@font-face{
+  font-family:'Bitter';font-style:normal;font-weight:400;font-display:swap;
+  src:url('/fonts/bitter-cyrillic-400-normal.woff2') format('woff2');
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+@font-face{
+  font-family:'Bitter';font-style:normal;font-weight:400;font-display:swap;
+  src:url('/fonts/bitter-latin-400-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:'Bitter';font-style:italic;font-weight:400;font-display:swap;
+  src:url('/fonts/bitter-cyrillic-400-italic.woff2') format('woff2');
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+@font-face{
+  font-family:'Bitter';font-style:italic;font-weight:400;font-display:swap;
+  src:url('/fonts/bitter-latin-400-italic.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:'Bitter';font-style:normal;font-weight:600;font-display:swap;
+  src:url('/fonts/bitter-cyrillic-600-normal.woff2') format('woff2');
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+@font-face{
+  font-family:'Bitter';font-style:normal;font-weight:600;font-display:swap;
+  src:url('/fonts/bitter-latin-600-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:'Bitter';font-style:normal;font-weight:700;font-display:swap;
+  src:url('/fonts/bitter-cyrillic-700-normal.woff2') format('woff2');
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+@font-face{
+  font-family:'Bitter';font-style:normal;font-weight:700;font-display:swap;
+  src:url('/fonts/bitter-latin-700-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+/* ----------------------------- Golos Text ----------------------------- */
+@font-face{
+  font-family:'Golos Text';font-style:normal;font-weight:400;font-display:swap;
+  src:url('/fonts/golos-text-cyrillic-400-normal.woff2') format('woff2');
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+@font-face{
+  font-family:'Golos Text';font-style:normal;font-weight:400;font-display:swap;
+  src:url('/fonts/golos-text-latin-400-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:'Golos Text';font-style:normal;font-weight:500;font-display:swap;
+  src:url('/fonts/golos-text-cyrillic-500-normal.woff2') format('woff2');
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+@font-face{
+  font-family:'Golos Text';font-style:normal;font-weight:500;font-display:swap;
+  src:url('/fonts/golos-text-latin-500-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:'Golos Text';font-style:normal;font-weight:600;font-display:swap;
+  src:url('/fonts/golos-text-cyrillic-600-normal.woff2') format('woff2');
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+@font-face{
+  font-family:'Golos Text';font-style:normal;font-weight:600;font-display:swap;
+  src:url('/fonts/golos-text-latin-600-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:'Golos Text';font-style:normal;font-weight:700;font-display:swap;
+  src:url('/fonts/golos-text-cyrillic-700-normal.woff2') format('woff2');
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+@font-face{
+  font-family:'Golos Text';font-style:normal;font-weight:700;font-display:swap;
+  src:url('/fonts/golos-text-latin-700-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}

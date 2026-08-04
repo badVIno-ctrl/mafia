@@ -94,7 +94,10 @@ function run() {
   assert.ok(js.indexOf('обращается к вам') >= 0, 'нет уведомления об обращении');
   assert.ok(js.indexOf("'prologue', 'day'") >= 0, 'в прологе поле ввода заблокировано');
   const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'online.html'), 'utf8');
-  assert.ok(html.indexOf('.feed .m.toyou') >= 0, 'нет стиля для обращённых реплик');
+  /* Реплики переехали из «.feed .m» в отдельное окно чата с классом .msg. */
+  assert.ok(html.indexOf('.msg.toyou') >= 0, 'нет стиля для обращённых реплик');
+  assert.ok(html.indexOf('.msg .men') >= 0, 'нет стиля для названного имени внутри реплики');
+  assert.ok(html.indexOf('id="chatDock"') >= 0, 'чат не вынесен в отдельное окно');
 
   console.log('test-chat: все проверки пройдены');
 }

@@ -3,17 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#08060a">
+<meta name="theme-color" content="#0a0809">
 <meta name="color-scheme" content="dark">
-<title>Мафия — главная</title>
-<meta name="description" content="Сюжетная «Мафия»: игра с ботами или по сети на 6–20 человек.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23140d10'/%3E%3Cpath d='M32 15c7.2 0 11.4 5.2 12.2 14.6C49.6 31 53 33 53 35.2 53 38.4 43.6 41 32 41S11 38.4 11 35.2c0-2.2 3.4-4.2 8.8-5.6C20.6 20.2 24.8 15 32 15z' fill='%23c9a227'/%3E%3Ccircle cx='24' cy='50' r='3.2' fill='%23a8202b'/%3E%3Ccircle cx='32' cy='50' r='3.2' fill='%23e8dcc6'/%3E%3Ccircle cx='40' cy='50' r='3.2' fill='%23a8202b'/%3E%3C/svg%3E">
+<title>Мафия — вечер в шести лицах</title>
+<meta name="description" content="Сюжетная «Мафия»: живая 3D-сцена, озвучка разными голосами, игра с ботами или по сети на 6–20 человек.">
+<link rel="icon" href="/img/mask.svg">
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/theatre.css">
 <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
+<div class="plasterwall"></div>
+<div class="filmgrain"></div>
+<div class="houselights"></div>
 
 <header class="topbar">
-  <div class="brand">Ма<b>ф</b>ия</div>
+  <a class="brand" href="/">Мафия</a>
+  <span class="brand-sub">вечер в шести лицах</span>
   <div class="spacer"></div>
   <div class="who" id="who" hidden>
     <span class="dot"></span><span id="whoName">—</span>
@@ -23,73 +29,82 @@
 
 <main class="shell">
 
-  <!-- шаг 1 · регистрация -->
+  <!-- ------------------------- вход ------------------------- -->
   <section id="authView" hidden>
-    <span class="eyebrow">Вход за стол</span>
-    <h1>Мафия<em>город засыпает</em></h1>
-    <p class="lede">Для игры по сети нужно только имя — никаких почт и паролей.
-    Под этим именем вас увидят другие игроки и смогут позвать в свою комнату.</p>
+    <h1>Мафия<em>город засыпает, и до утра дойдут не все</em></h1>
+    <p class="lede">За круглым столом шесть человек, одна лампа под потолком и как минимум один нож
+      в кармане. Чтобы сесть за стол по сети, нужно только имя: ни почты, ни пароля.</p>
 
-    <div class="plate card sect" style="max-width:520px">
+    <section class="panel pad lit" style="max-width:520px;margin-top:var(--s6)">
       <label class="field">
-        <span class="eyebrow">Ваше имя за столом</span>
+        <span class="label">Как вас звать за столом</span>
         <input class="inp" id="regName" maxlength="16" placeholder="Например, Анна" autocomplete="nickname">
       </label>
-      <div class="row" style="margin-top:14px">
-        <button class="btn primary" id="btnReg">Создать аккаунт</button>
-        <span class="muted" style="font-size:13.5px">Имя сохранится в этом браузере</span>
+      <div class="row" style="margin-top:var(--s4)">
+        <button class="btn primary" id="btnReg">Назваться</button>
+        <span class="note">Имя останется в этом браузере</span>
       </div>
-      <p class="muted" style="font-size:13.5px;margin-bottom:0">Играть с ботами можно и без аккаунта —
-        <a href="/bots.html">открыть игру с ботами</a>.</p>
-    </div>
+      <hr class="rule">
+      <p class="note" style="margin:0">Играть с ботами можно и без имени —
+        <a href="/bots.html">открыть партию с ботами</a>.</p>
+    </section>
   </section>
 
-  <!-- шаг 2 · две плашки -->
+  <!-- ------------------------- афиша ------------------------- -->
   <section id="hubView" hidden>
-    <span class="eyebrow">Выберите стол</span>
-    <h1>Добрый вечер, <span class="gold" id="hubName">гость</span><em>два способа сыграть</em></h1>
+    <h1>Добрый вечер, <span class="warm" id="hubName">гость</span><em>сегодня в программе два спектакля</em></h1>
 
-    <div class="modes">
-      <a class="mode" id="modeBots" href="/bots.html">
-        <div class="glyph">🎴</div>
-        <h2>Игра с ботами</h2>
-        <p>Та же партия за круглым столом: соседи со своими характерами, памятью на чужие слова и собственными расчётами.</p>
-        <ul>
-          <li>6 или 8 игроков, четыре уровня сложности</li>
-          <li>Сюжет, 3D-сцена и протокол партии</li>
-          <li>Играется одному, аккаунт не нужен</li>
-        </ul>
-        <div class="go">Сесть за стол ▸</div>
+    <div class="playbill">
+      <a class="act" id="modeBots" href="/bots.html">
+        <span class="sign" id="signBots"></span>
+        <div>
+          <h2>Вечер с соседями</h2>
+          <div class="said">партия с ботами, одному</div>
+          <p>Тот же круглый стол: пять соседей со своими характерами, памятью на чужие слова
+            и собственными расчётами. Они спорят, обижаются, врут и запоминают, кто на кого показал.</p>
+          <ul>
+            <li>Шесть или восемь человек, четыре уровня выдержки соперников</li>
+            <li>Сюжет вечера, живая сцена и протокол партии</li>
+            <li>Имя не нужно — садитесь и играйте</li>
+          </ul>
+          <span class="go">Сесть за стол <span id="goBots"></span></span>
+        </div>
       </a>
 
-      <a class="mode" id="modeOnline" href="/online.html">
-        <div class="glyph">🌐</div>
-        <h2>Игра по сети</h2>
-        <p>Комната на живых людей: выбираете сюжет, зовёте друзей из списка зарегистрированных и начинаете, как только все собрались.</p>
-        <ul>
-          <li>От 6 до 20 игроков, состав ролей считается автоматически</li>
-          <li>Ночной чат мафии, проверки шерифа, голосование</li>
-          <li>Автостарт, когда набралось нужное число человек</li>
-        </ul>
-        <div class="go">Открыть комнату ▸</div>
+      <a class="act second" id="modeOnline" href="/online.html">
+        <span class="sign" id="signNet"></span>
+        <div>
+          <h2>Стол на живых людей</h2>
+          <div class="said">игра по сети, от шести до двадцати</div>
+          <p>Комната для своих: выбираете историю вечера, зовёте людей из списка и начинаете,
+            как только все собрались. Говорить можно голосом — микрофон соединяет игроков напрямую.</p>
+          <ul>
+            <li>Голосовой чат и отдельное окно переписки</li>
+            <li>Ночной сговор мафии, проверки шерифа, открытое голосование</li>
+            <li>Состав ролей считается сам под число собравшихся</li>
+          </ul>
+          <span class="go">Открыть комнату <span id="goNet"></span></span>
+        </div>
       </a>
     </div>
 
-    <div class="plate card sect" id="quickPanel">
-      <div class="row" style="justify-content:space-between">
+    <section class="panel pad now" id="quickPanel">
+      <div class="between">
         <div>
-          <span class="eyebrow">Сейчас на сайте</span>
-          <h3 id="quickStat" style="margin-top:6px">—</h3>
+          <span class="label">Сейчас на сайте</span>
+          <h3 id="quickStat" style="margin-top:var(--s1)">—</h3>
         </div>
         <button class="btn ghost sm" id="btnRefresh">Обновить</button>
       </div>
-      <div class="list" id="quickList" style="margin-top:14px"></div>
-    </div>
+      <div class="list" id="quickList" style="margin-top:var(--s4)"></div>
+    </section>
   </section>
 
 </main>
 
 <div id="toast"></div>
+<script src="/js/icons.js"></script>
+<script src="/js/curtain.js"></script>
 <script src="/js/api.js"></script>
 <script src="/js/hub.js"></script>
 </body>

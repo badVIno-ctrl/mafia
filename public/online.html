@@ -3,275 +3,455 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#08060a">
+<meta name="theme-color" content="#0a0809">
 <meta name="color-scheme" content="dark">
 <title>Мафия — игра по сети</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23140d10'/%3E%3Cpath d='M32 15c7.2 0 11.4 5.2 12.2 14.6C49.6 31 53 33 53 35.2 53 38.4 43.6 41 32 41S11 38.4 11 35.2c0-2.2 3.4-4.2 8.8-5.6C20.6 20.2 24.8 15 32 15z' fill='%23c9a227'/%3E%3Ccircle cx='24' cy='50' r='3.2' fill='%23a8202b'/%3E%3Ccircle cx='32' cy='50' r='3.2' fill='%23e8dcc6'/%3E%3Ccircle cx='40' cy='50' r='3.2' fill='%23a8202b'/%3E%3C/svg%3E">
+<meta name="description" content="Сетевая «Мафия» на 6–20 человек: живая сцена, голосовой чат, отдельное окно переписки.">
+<link rel="icon" href="/img/mask.svg">
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/theatre.css">
 <link rel="stylesheet" href="/css/app.css">
 <style>
-/* ---------- лобби ---------- */
-.cols{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;margin-top:22px;align-items:start}
-.stack{display:flex;flex-direction:column;gap:18px}
-.kv{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed var(--line-soft);font-size:14.5px}
+/* =========================================================================
+   Игра по сети. Экран партии устроен как сцена: 3D-комната занимает всё
+   поле, а служебные панели лежат поверх неё стеклянными планшетами.
+   Раньше здесь была плоская сетка карточек — именно её игроки называли
+   «кривыми модельками».
+   ========================================================================= */
+
+/* ---------------- лобби: доска вызова ---------------- */
+.board{display:grid;grid-template-columns:1.12fr .88fr;gap:var(--s5);margin-top:var(--s6);align-items:start}
+.board>.stack{min-width:0}
+.board .panel{min-width:0}
+/* Строка «ключ — значение». Состав ролей бывает длинным («дон · 4 мафии ·
+   2 доктора · 2 шерифа · 11 мирных»), поэтому значение обязано переноситься,
+   иначе на 360px оно распирает всю страницу. */
+.kv{display:flex;justify-content:space-between;gap:var(--s3);padding:9px 0;border-bottom:1px dashed var(--hair);font-size:var(--t-xs);flex-wrap:wrap}
+.kv>span{min-width:0}
+.kv b{min-width:0;overflow-wrap:anywhere}
 .kv:last-child{border-bottom:none}
-.kv b{font-weight:600}
-.code{font-family:var(--mono);letter-spacing:.22em;color:var(--gold-soft);font-size:20px}
-.scen{display:flex;flex-direction:column;gap:9px;max-height:330px;overflow:auto;padding-right:4px}
+.kv b{font-weight:600;color:var(--bone);text-align:right}
+.code{font-family:var(--mono);letter-spacing:.2em;color:var(--tallow);font-size:var(--t-2xl);line-height:1.1}
+.scen{display:flex;flex-direction:column;gap:var(--s2);max-height:340px;overflow:auto;padding-right:var(--s1)}
 .scen button{
-  text-align:left;padding:12px 14px;border-radius:11px;border:1px solid var(--line-soft);
-  background:rgba(255,255,255,.026);transition:.15s ease;
+  text-align:left;padding:12px 14px;border-radius:var(--r);border:1px solid var(--hair);
+  background:rgba(241,236,225,.028);transition:var(--fast) var(--ease);
 }
-.scen button:hover{border-color:rgba(201,162,39,.45)}
-.scen button.on{border-color:var(--gold);background:linear-gradient(180deg,rgba(201,162,39,.16),rgba(201,162,39,.04))}
-.scen .t{font-family:var(--serif);font-size:17px}
-.scen .d{font-size:13px;color:var(--paper-faint);margin-top:3px}
-.pill{
-  display:inline-block;padding:3px 10px;border-radius:999px;font-size:11.5px;letter-spacing:.1em;
-  text-transform:uppercase;border:1px solid var(--line);color:var(--gold-soft);
-}
-.pill.grey{border-color:var(--line-soft);color:var(--paper-faint)}
-.pill.red{border-color:rgba(194,65,58,.5);color:#f0b7b2}
-.pill.green{border-color:rgba(111,174,125,.5);color:#a9d8b4}
-.tabs{display:flex;gap:6px;flex-wrap:wrap}
-.tabs button{padding:7px 14px;border-radius:999px;border:1px solid var(--line-soft);font-size:13.5px;color:var(--paper-dim)}
-.tabs button.on{border-color:var(--gold);color:var(--paper);background:rgba(201,162,39,.12)}
+.scen button:hover{border-color:var(--line)}
+.scen button.on{border-color:var(--line-warm);background:linear-gradient(180deg,rgba(226,180,120,.14),rgba(226,180,120,.03))}
+.scen .t{font-family:var(--display);font-size:var(--t-lg);color:var(--bone)}
+.scen .d{font-size:var(--t-2xs);color:var(--plaster-dim);margin-top:2px}
+.scen button[disabled]{opacity:.6}
 
-/* ---------- игровой экран ---------- */
-.phasebar{
-  display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:15px 18px;border-radius:14px;
-  border:1px solid var(--line-soft);background:linear-gradient(180deg,rgba(20,14,18,.95),rgba(9,6,10,.9));
-}
-.phasebar .ph{font-family:var(--serif);font-size:22px}
-.timer{font-family:var(--mono);font-size:24px;color:var(--gold-soft);min-width:74px;text-align:right}
-.timer.warn{color:#f0b7b2}
-.bar{height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden;width:100%;margin-top:12px}
-.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-soft));transition:width .9s linear}
+/* ---------------- экран партии ---------------- */
+.play{position:fixed;inset:0;top:var(--barH,58px);display:grid;grid-template-columns:1fr 344px}
+.stagewrap{position:relative;overflow:hidden;background:#070606}
+#stage{position:absolute;inset:0}
+#stage canvas{display:block}
+#marks{position:absolute;inset:0;pointer-events:none}
 
-.seats{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px}
+/* Подпись места: рисуется HTML поверх сцены, поэтому текст всегда резкий
+   и его можно нажать пальцем. */
+.mark{
+  position:absolute;transform:translate(-50%,-100%);pointer-events:auto;
+  min-width:96px;max-width:190px;padding:6px 9px;border-radius:var(--r);
+  background:rgba(10,8,9,.78);border:1px solid var(--hair);backdrop-filter:blur(6px);
+  text-align:center;transition:border-color var(--fast) var(--ease), opacity var(--fast) linear;
+}
+.mark .nm{display:block;font-size:var(--t-2xs);font-weight:600;color:var(--bone);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mark .sub{display:block;font-size:var(--t-3xs);color:var(--plaster-dim);margin-top:1px}
+.mark .seatno{
+  position:absolute;left:-9px;top:-9px;width:22px;height:22px;border-radius:50%;
+  display:grid;place-items:center;font-family:var(--mono);font-size:12px;
+  background:var(--ink-2);border:1px solid var(--hair);color:var(--plaster-dim);
+}
+.mark.you{border-color:var(--line-warm)}
+.mark.you .nm{color:var(--tallow)}
+.mark.dead{opacity:.5;border-color:rgba(196,86,58,.45)}
+.mark.dead .nm{text-decoration:line-through}
+.mark.pickable{cursor:pointer;border-color:rgba(226,180,120,.55);box-shadow:0 0 0 1px rgba(226,180,120,.25)}
+.mark.pickable:hover{border-color:var(--tallow);background:rgba(38,28,20,.9)}
+.mark.picked{border-color:var(--tallow);background:linear-gradient(180deg,rgba(226,180,120,.22),rgba(226,180,120,.06))}
+.mark.mafia{border-color:rgba(196,86,58,.6)}
+.mark.talking{border-color:var(--verdigris);box-shadow:0 0 14px rgba(123,162,149,.35)}
+.mark .lvl{display:block;height:2px;margin-top:4px;border-radius:2px;background:var(--verdigris);width:0;transition:width .12s linear}
+.mark .flags{display:flex;gap:4px;justify-content:center;margin-top:3px;color:var(--plaster-faint)}
+
+/* Режим жетонов: на сцене остаются только номера мест, а имена читаются
+   в панели «Стол». Так двадцать человек не превращаются в кашу подписей. */
+#marks.chips .mark{
+  min-width:0;max-width:none;width:30px;height:30px;padding:0;border-radius:50%;
+  display:grid;place-items:center;transform:translate(-50%,-50%);
+}
+#marks.chips .mark .nm,#marks.chips .mark .sub,#marks.chips .mark .lvl{display:none}
+#marks.chips .mark .seatno{
+  position:static;width:auto;height:auto;border:0;background:none;
+  font-size:var(--t-2xs);color:var(--bone);
+}
+#marks.chips .mark.you{background:rgba(226,180,120,.22)}
+#marks.chips .mark.pickable{background:rgba(226,180,120,.14)}
+#marks.chips .mark.picked{background:var(--tallow)}
+#marks.chips .mark.picked .seatno{color:#1b1206}
+
+/* Планшет фазы — сверху сцены */
+.phaseband{
+  position:absolute;left:var(--s4);right:var(--s4);top:var(--s4);z-index:4;
+  display:flex;align-items:center;gap:var(--s4);flex-wrap:wrap;padding:10px 14px;border-radius:var(--r-lg);
+  background:rgba(10,8,9,.72);border:1px solid var(--hair);backdrop-filter:blur(8px);
+}
+.phaseband .ico{color:var(--tallow)}
+.phaseband .ph{font-family:var(--display);font-size:var(--t-lg);color:var(--bone);line-height:1.2}
+.phaseband .sc{font-size:var(--t-3xs);color:var(--plaster-faint);display:block}
+.timer{font-family:var(--mono);font-size:var(--t-xl);color:var(--tallow);min-width:66px;text-align:right}
+.timer.warn{color:var(--ember-soft)}
+.thread{position:absolute;left:0;right:0;bottom:0;height:2px;background:rgba(241,236,225,.08);border-radius:0 0 var(--r-lg) var(--r-lg);overflow:hidden}
+.thread i{display:block;height:100%;background:linear-gradient(90deg,var(--tallow-dim),var(--tallow));transition:width .9s linear}
+
+/* Карта роли — слева */
+.rolepane{
+  position:absolute;left:var(--s4);top:78px;z-index:3;width:250px;
+  padding:var(--s4);border-radius:var(--r-lg);
+  background:rgba(10,8,9,.74);border:1px solid var(--hair);backdrop-filter:blur(8px);
+}
+.rolepane .role{display:flex;align-items:center;gap:var(--s2);color:var(--tallow)}
+.rolepane h3{font-size:var(--t-lg);color:var(--bone)}
+.rolepane p{font-size:var(--t-2xs);color:var(--plaster-dim);margin:var(--s2) 0 0}
+.rolepane .known{margin-top:var(--s3);font-size:var(--t-2xs);color:var(--plaster);line-height:1.5}
+.rolepane .known b{color:var(--tallow)}
+
+/* Док действий — снизу */
+.actiondock{
+  position:absolute;left:336px;right:var(--s4);bottom:var(--s4);z-index:4;
+  display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap;
+  padding:12px 14px;border-radius:var(--r-lg);
+  background:rgba(10,8,9,.8);border:1px solid var(--hair);backdrop-filter:blur(8px);
+}
+.actiondock .hint{font-size:var(--t-2xs);color:var(--plaster-dim);flex:1;min-width:150px}
+
+/* ---------------- отдельное окно чата ---------------- */
+.chatdock{
+  display:flex;flex-direction:column;min-height:0;
+  border-left:1px solid var(--hair);background:linear-gradient(180deg,rgba(18,16,15,.96),rgba(8,7,7,.98));
+}
+.chatdock .head{display:flex;align-items:center;gap:var(--s2);padding:10px var(--s4);border-bottom:1px solid var(--hair)}
+.chatdock .head h3{font-size:var(--t-md);flex:1}
+.chatdock .tabs{padding:var(--s2) var(--s4) 0}
+.feed{flex:1;min-height:0;overflow:auto;padding:var(--s3) var(--s4);display:flex;flex-direction:column;gap:var(--s2)}
+.msg{padding:8px 10px;border-radius:var(--r);background:rgba(241,236,225,.035);border:1px solid var(--hair);font-size:var(--t-xs)}
+.msg .who{font-weight:600;color:var(--tallow)}
+.msg .no{font-family:var(--mono);font-size:var(--t-3xs);color:var(--plaster-faint);margin-right:4px}
+.msg.mine{background:rgba(226,180,120,.07)}
+.msg.mafia{border-color:rgba(196,86,58,.4)}
+.msg.ghost{border-color:rgba(107,74,99,.5);color:var(--plaster-dim)}
+.msg.sys{background:none;border:none;color:var(--plaster-faint);font-size:var(--t-2xs);padding:2px 0}
+.msg.toyou{border-color:rgba(226,180,120,.75);box-shadow:0 0 0 1px rgba(226,180,120,.2) inset}
+.msg .flag{display:inline-block;margin-right:5px;padding:1px 7px;border-radius:99px;font-size:var(--t-3xs);
+  background:rgba(226,180,120,.18);color:var(--tallow)}
+.msg .men{color:var(--tallow);border-bottom:1px dotted rgba(226,180,120,.55)}
+.msg .say{margin-left:6px;color:var(--plaster-faint);vertical-align:middle}
+.msg .say:hover{color:var(--tallow)}
+.composer{display:flex;gap:var(--s2);padding:var(--s3) var(--s4);border-top:1px solid var(--hair)}
+.composer .inp{min-height:42px}
+.composer .btn{min-height:42px;padding:0 14px}
+
+/* Протокол партии — выдвижная шторка слева внизу. Справа стоять не может:
+   там уже живёт окно чата, и шторка накрывала бы поле ввода. */
+.logsheet{
+  position:fixed;left:0;bottom:0;width:320px;max-height:52vh;z-index:30;
+  display:flex;flex-direction:column;
+  border:1px solid var(--hair);border-left:0;border-radius:0 var(--r-lg) 0 0;
+  background:rgba(12,10,10,.97);box-shadow:var(--lift-lg);transform:translateY(calc(100% - 44px));
+  transition:transform var(--norm) var(--ease-out);
+}
+.logsheet.open{transform:none}
+.logsheet .grip{display:flex;align-items:center;gap:var(--s2);height:44px;padding:0 var(--s4);cursor:pointer;font-size:var(--t-2xs);color:var(--plaster-dim)}
+.logsheet .grip b{color:var(--bone);font-weight:600}
+.log{overflow:auto;padding:0 var(--s4) var(--s4);display:flex;flex-direction:column;gap:6px;font-size:var(--t-2xs);color:var(--plaster-dim)}
+.log .l{padding-left:10px;border-left:2px solid var(--hair)}
+.log .l.morning,.log .l.execution{border-color:rgba(196,86,58,.6);color:var(--plaster)}
+.log .l.night{border-color:rgba(107,74,99,.7)}
+.log .l.vote{border-color:rgba(226,180,120,.6)}
+.log .l.story{border-color:rgba(123,162,149,.5);font-family:var(--display);font-style:italic;color:var(--plaster)}
+.log .l.end{border-color:var(--tallow);color:var(--bone)}
+
+/* Плоский стол: и запасной вариант без WebGL, и панель выбора на телефоне */
+.seats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:var(--s2)}
 .seat{
-  position:relative;display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:12px;text-align:left;
-  border:1px solid var(--line-soft);background:rgba(255,255,255,.028);transition:.15s ease;min-height:96px;
+  position:relative;display:flex;flex-direction:column;gap:5px;padding:12px;border-radius:var(--r);
+  text-align:left;border:1px solid var(--hair);background:rgba(241,236,225,.03);min-height:92px;
 }
 .seat .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.seat .sub{font-size:12px;color:var(--paper-faint)}
-.seat .no{position:absolute;top:9px;right:11px;font-family:var(--mono);font-size:12px;color:var(--paper-faint)}
-.seat.dead{opacity:.42;filter:grayscale(1)}
-.seat.me{border-color:rgba(201,162,39,.5)}
-.seat.pick{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
-.seat.mafia{border-color:rgba(194,65,58,.55)}
-.seat.clickable{cursor:pointer}
-.seat.clickable:hover{border-color:rgba(201,162,39,.6);transform:translateY(-2px)}
-.seat .votes{font-family:var(--mono);font-size:12px;color:var(--gold-soft)}
+.seat .sub{font-size:var(--t-3xs);color:var(--plaster-faint)}
+.seat .no{position:absolute;top:8px;right:10px;font-family:var(--mono);font-size:var(--t-3xs);color:var(--plaster-faint)}
+.seat.dead{opacity:.45;filter:grayscale(1)}
+.seat.you{border-color:var(--line-warm)}
+.seat.picked{border-color:var(--tallow)}
+.seat.pickable{cursor:pointer}
+.seat.pickable:hover{border-color:var(--line-warm)}
+.flatwrap{position:absolute;inset:0;z-index:70;overflow:auto;padding:78px var(--s4) 96px;
+  background:var(--ink);}
+.flatwrap.plain{background:none;backdrop-filter:none}
 
-.rolecard{
-  padding:18px;border-radius:14px;border:1px solid var(--line);
-  background:linear-gradient(180deg,rgba(61,15,24,.5),rgba(12,9,12,.9));
-}
-.rolecard .g{font-size:32px;line-height:1}
-.rolecard h3{margin:8px 0 4px;font-size:22px}
-.rolecard p{margin:0;font-size:13.5px;color:var(--paper-dim)}
+/* финал */
+.finale{position:absolute;inset:0;z-index:20;display:grid;place-items:center;padding:var(--s5);
+  background:rgba(5,4,5,.86);backdrop-filter:blur(4px);overflow:auto}
+.finale .box{max-width:760px;width:100%;text-align:center;padding:var(--s6);
+  border:1px solid var(--line);border-radius:var(--r-lg);background:linear-gradient(180deg,rgba(30,20,22,.96),rgba(10,8,9,.98))}
+.finale .win{font-family:var(--display);font-size:clamp(28px,6vw,46px);color:var(--bone)}
+.finale .win.mafia{color:var(--ember-soft)}
+.finale .win.town{color:var(--verdigris)}
 
-.feed{display:flex;flex-direction:column;gap:7px;max-height:300px;overflow:auto;padding-right:5px;font-size:14px}
-.feed .m{padding:8px 11px;border-radius:9px;background:rgba(255,255,255,.03);border:1px solid var(--line-soft)}
-.feed .m b{color:var(--gold-soft)}
-.feed .m.sys{background:none;border:none;color:var(--paper-faint);font-size:13px;padding:3px 2px}
-.feed .m.mafia{border-color:rgba(194,65,58,.4)}
-.feed .m.ghost{border-color:rgba(95,147,196,.35);color:var(--paper-dim)}
-.feed .m.mine{background:rgba(200,168,105,.07)}
-.feed .m.toyou{border-color:rgba(200,168,105,.75);box-shadow:0 0 0 1px rgba(200,168,105,.25) inset}
-.feed .m.toyou .tag{display:inline-block;margin-right:6px;padding:1px 7px;border-radius:999px;font-size:11px;
-  letter-spacing:.08em;text-transform:uppercase;background:rgba(200,168,105,.18);color:var(--gold-soft)}
-.feed .m .men{text-decoration:none;color:var(--gold-soft);border-bottom:1px dotted rgba(200,168,105,.6)}
-.log{font-size:13.5px;color:var(--paper-dim);max-height:240px;overflow:auto;display:flex;flex-direction:column;gap:6px}
-.log .l{padding-left:12px;border-left:2px solid var(--line-soft)}
-.log .l.death{border-color:rgba(194,65,58,.6)}
-.log .l.day{border-color:rgba(201,162,39,.6)}
-.composer{display:flex;gap:8px;margin-top:10px}
-.composer .inp{min-height:42px}
+body.playing #toast{bottom:96px}
 
-.finale{text-align:center;padding:28px 22px}
-.finale h2{font-size:clamp(26px,5vw,40px);margin-bottom:8px}
-.finale .win{font-family:var(--serif);font-size:clamp(30px,6vw,46px)}
-.finale .win.town{color:var(--gold-soft)}
-.finale .win.mafia{color:#e08c86}
+/* нижняя панель вкладок и кнопка чата в шапке — только на телефоне */
+.mobtabs{display:none}
+#btnChat{display:none!important}
 
-@media (max-width:860px){
-  .cols{grid-template-columns:1fr;gap:14px}
-  .seats{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
-  .seat{min-height:84px;padding:10px}
-  .phasebar{padding:12px 14px;gap:10px}
-  .phasebar .ph{font-size:19px}
-  .timer{font-size:21px}
-  .feed{max-height:230px}
-  /* панель действия остаётся под рукой при прокрутке */
-  #actionBar{
-    position:sticky;bottom:calc(8px + env(safe-area-inset-bottom));z-index:15;
-    padding:12px 14px;background:rgba(8,6,10,.96);backdrop-filter:blur(10px);
-    border-color:rgba(201,162,39,.32);
+/* ---------------- телефон ---------------- */
+@media (max-width:900px){
+  #btnChat{display:inline-grid!important}
+  .board{grid-template-columns:1fr;gap:var(--s4)}
+  .play{grid-template-columns:1fr;grid-template-rows:1fr}
+  .stagewrap{grid-row:1}
+  /* Чат, роль и протокол уезжают в шторки: на 360px им негде стоять рядом. */
+  /* Шторка чата встаёт над панелью вкладок, а не под ней: иначе поле ввода
+     оказывается под кнопками и до него не дотянуться. */
+  .chatdock{
+    position:fixed;left:0;right:0;bottom:56px;top:auto;height:66vh;z-index:40;
+    border-left:0;border-top:1px solid var(--line);border-radius:var(--r-lg) var(--r-lg) 0 0;
+    transform:translateY(calc(100% + 56px));transition:transform var(--norm) var(--ease-out);
+    margin-bottom:env(safe-area-inset-bottom);
+  }
+  .chatdock.open{transform:none}
+  /* Панели, закрытые на телефоне, убираем и из вида: одного transform мало —
+     край панели всё равно выглядывал из-под панели вкладок. */
+  .rolepane{
+    left:var(--s3);right:var(--s3);top:auto;bottom:118px;width:auto;
+    visibility:hidden;opacity:0;transform:translateY(18px);
+    transition:opacity var(--norm) var(--ease), transform var(--norm) var(--ease-out), visibility var(--norm);
+  }
+  .rolepane.open{visibility:visible;opacity:1;transform:none}
+  .chatdock{visibility:hidden;transition:transform var(--norm) var(--ease-out), visibility var(--norm)}
+  .chatdock.open{visibility:visible}
+  .logsheet{visibility:hidden}
+  .logsheet.open{visibility:visible}
+  /* Подписи мест на узком экране: только номер и имя, без пояснений. */
+  .mark{min-width:70px;max-width:104px;padding:4px 6px}
+  .mark .sub{display:none}
+  .mark .nm{font-size:var(--t-3xs)}
+  .mark .seatno{width:19px;height:19px;font-size:12px;left:-7px;top:-7px}
+  .logsheet{width:100%;max-height:64vh;border-radius:var(--r-lg) var(--r-lg) 0 0;border-right:1px solid var(--hair);
+    bottom:56px;transform:translateY(calc(100% + 56px))}
+  .logsheet.open{transform:none}
+  /* В узком кадре планшет фазы оставляет только суть: название фазы,
+     счёт живых и таймер. Место действия уходит в протокол. */
+  .phaseband{left:var(--s2);right:var(--s2);top:var(--s2);padding:8px 10px;gap:var(--s2)}
+  .phaseband .ph{font-size:var(--t-md);white-space:nowrap}
+  .phaseband .sc{display:none}
+  .phaseband .pill{white-space:nowrap;padding:3px 8px}
+  .timer{min-width:48px}
+  .timer{font-size:var(--t-lg);min-width:54px}
+  .actiondock{left:var(--s2);right:var(--s2);bottom:66px;padding:10px}
+  /* Тост не должен садиться на панель вкладок и на док действий. */
+  body.playing #toast{bottom:132px}
+  .mark{min-width:78px;max-width:132px;padding:5px 7px}
+  .flatwrap{padding:70px var(--s3) 130px}
+  .mobtabs{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;
+    background:rgba(8,7,7,.97);border-top:1px solid var(--hair);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .mobtabs button{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+    padding:8px 4px;min-height:56px;font-size:var(--t-3xs);color:var(--plaster-dim);
+  }
+  .mobtabs button.on{color:var(--tallow)}
+  .mobtabs .badge{
+    position:absolute;top:5px;margin-left:22px;min-width:17px;height:17px;border-radius:99px;
+    background:var(--ember);color:#fff;font-size:12px;line-height:17px;text-align:center;padding:0 4px;
   }
 }
-@media (max-width:420px){
-  .seats{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
-  .seat .sub{font-size:11px}
+@media (max-width:430px){
+  /* Совсем узкий кадр: счёт живых уходит в протокол, остаётся фаза и время. */
+  .phaseband #gAlive{display:none}
+}
+@media (max-width:380px){
+  .mark{min-width:62px;max-width:92px}
+  .code{font-size:var(--t-xl)}
 }
 </style>
 </head>
 <body>
+<div class="plasterwall"></div>
+<div class="filmgrain"></div>
+<div class="houselights"></div>
 
-<header class="topbar">
-  <a class="brand" href="/" style="text-decoration:none;color:inherit">Ма<b>ф</b>ия</a>
+<header class="topbar" id="topbar">
+  <a class="brand" href="/">Мафия</a>
+  <span class="brand-sub" id="roomTag" hidden></span>
   <div class="spacer"></div>
-  <div class="who"><span class="dot"></span><span id="whoName">—</span></div>
-  <a class="btn ghost sm" href="/">Домой</a>
+  <div class="who"><span class="dot" id="netDot"></span><span id="whoName">—</span></div>
+  <button class="iconbtn" id="btnMic" title="Голосовой чат" aria-label="Голосовой чат"></button>
+  <button class="iconbtn" id="btnTts" title="Озвучивать реплики" aria-label="Озвучивать реплики"></button>
+  <button class="iconbtn" id="btnChat" title="Окно чата" aria-label="Окно чата" hidden></button>
+  <a class="btn ghost sm" href="/">Выйти</a>
 </header>
 
-<main class="shell">
-
-  <!-- НЕТ АККАУНТА -->
-  <section id="needAuth" hidden>
-    <h1>Нужно имя<em>регистрация занимает секунду</em></h1>
-    <p class="lede">Чтобы играть по сети, вернитесь на главную и введите имя.</p>
-    <p><a class="btn primary" href="/">На главную</a></p>
-  </section>
-
-  <!-- ЛОББИ -->
-  <section id="lobbyView" hidden>
-    <span class="eyebrow">Игра по сети</span>
-    <h1 id="lobbyTitle">Комната<em>от 6 до 20 игроков</em></h1>
-
-    <div id="noRoom" class="plate card sect" hidden>
-      <h3>У вас пока нет комнаты</h3>
-      <p class="muted" style="font-size:14px">Создайте свою или войдите в чужую по четырёхзначному коду.</p>
-      <div class="row">
-        <button class="btn primary" id="btnCreate">Создать комнату</button>
-        <input class="inp" id="joinCode" style="max-width:150px" placeholder="Код" inputmode="numeric" maxlength="4">
-        <button class="btn" id="btnJoinCode">Войти по коду</button>
-      </div>
-      <div class="sect">
-        <span class="eyebrow">Открытые комнаты и приглашения</span>
-        <div class="list" id="roomList" style="margin-top:10px"></div>
-      </div>
-    </div>
-
-    <div id="roomPane" class="cols" hidden>
-      <div class="stack">
-        <div class="plate card">
-          <div class="row" style="justify-content:space-between;align-items:flex-start">
-            <div>
-              <span class="eyebrow">Код комнаты</span>
-              <div class="code" id="roomCode">—</div>
-            </div>
-            <div class="row">
-              <button class="btn ghost sm" id="btnCopy">Скопировать ссылку</button>
-              <button class="btn danger sm" id="btnLeave">Выйти</button>
-            </div>
-          </div>
-          <div class="sect" style="margin-top:16px">
-            <div class="kv"><span class="muted">Игроков сейчас</span><b id="cntNow">—</b></div>
-            <div class="kv"><span class="muted">Старт при</span><b id="cntGoal">—</b></div>
-            <div class="kv"><span class="muted">Состав ролей</span><b id="compo" style="text-align:right">—</b></div>
-          </div>
-          <div id="hostBox" class="sect" hidden>
-            <span class="eyebrow">Сколько игроков ждём</span>
-            <div class="row" style="margin-top:8px">
-              <input class="inp" type="range" id="sizeRange" min="6" max="20" step="1" style="flex:1;min-width:180px;padding:0">
-              <b id="sizeVal" class="code" style="font-size:18px">8</b>
-            </div>
-            <label class="row" style="margin-top:10px;font-size:14px;color:var(--paper-dim)">
-              <input type="checkbox" id="autoStart" checked> Начать автоматически, как только все соберутся
-            </label>
-            <button class="btn primary wide" id="btnStart" style="margin-top:14px">Начать партию</button>
-          </div>
-        </div>
-
-        <div class="plate card">
-          <div class="row" style="justify-content:space-between">
-            <h3>За столом</h3>
-            <button class="btn sm" id="btnFriends">Добавить друзей</button>
-          </div>
-          <div class="list" id="members" style="margin-top:12px"></div>
-        </div>
-
-        <div class="plate card" id="friendsBox" hidden>
-          <div class="row" style="justify-content:space-between">
-            <h3>Зарегистрированы на сайте</h3>
-            <button class="btn ghost sm" id="btnFriendsClose">Свернуть</button>
-          </div>
-          <input class="inp" id="friendSearch" placeholder="Поиск по имени" style="margin:12px 0">
-          <div class="list" id="friends"></div>
-        </div>
-      </div>
-
-      <div class="stack">
-        <div class="plate card">
-          <h3>Сюжет партии</h3>
-          <p class="muted" style="font-size:13.5px;margin:6px 0 12px">Показаны только те, что рассчитаны на текущее число игроков.</p>
-          <div class="scen" id="scenarios"></div>
-        </div>
-        <div class="plate card">
-          <h3>Чат комнаты</h3>
-          <div class="feed" id="lobbyFeed" style="margin-top:10px"></div>
-          <div class="composer">
-            <input class="inp" id="lobbyMsg" placeholder="Сказать что-нибудь…" maxlength="400">
-            <button class="btn sm" id="lobbySend">↑</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ИГРА -->
-  <section id="gameView" hidden>
-    <div class="phasebar">
-      <div>
-        <span class="eyebrow" id="gScenario">—</span>
-        <div class="ph" id="gPhase">—</div>
-      </div>
-      <div class="spacer" style="flex:1"></div>
-      <span class="pill grey" id="gAlive">—</span>
-      <div class="timer" id="gTimer">0:00</div>
-      <div class="bar"><i id="gBar" style="width:100%"></i></div>
-    </div>
-
-    <p class="lede sect" id="gHint" style="margin-top:14px"></p>
-
-    <div class="cols">
-      <div class="stack">
-        <div class="plate card">
-          <div class="row" style="justify-content:space-between">
-            <h3>Стол</h3>
-            <span class="muted" style="font-size:13px" id="gPickHint"></span>
-          </div>
-          <div class="seats" id="seats" style="margin-top:12px"></div>
-        </div>
-        <div class="plate card" id="actionBar">
-          <div class="row" id="actions"></div>
-        </div>
-        <div class="plate card">
-          <h3>Протокол партии</h3>
-          <div class="log" id="gLog" style="margin-top:10px"></div>
-        </div>
-      </div>
-
-      <div class="stack">
-        <div class="rolecard" id="roleCard"></div>
-        <div class="plate card">
-          <div class="tabs" id="chatTabs"></div>
-          <div class="feed" id="gFeed" style="margin-top:12px"></div>
-          <div class="composer">
-            <input class="inp" id="gMsg" placeholder="Ваша речь…" maxlength="400">
-            <button class="btn sm" id="gSend">↑</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="plate finale sect" id="finale" hidden></div>
-  </section>
-
+<!-- =============== НЕТ АККАУНТА =============== -->
+<main class="shell" id="needAuth" hidden>
+  <h1>Нужно имя<em>за стол пускают только по имени</em></h1>
+  <p class="lede">Чтобы играть по сети, вернитесь на главную и назовитесь. Пароля нет — только имя, под которым вас позовут.</p>
+  <p><a class="btn primary lg" href="/">На главную</a></p>
 </main>
 
+<!-- =============== ЛОББИ =============== -->
+<main class="shell" id="lobbyView" hidden>
+  <h1 id="lobbyTitle">Комната<em>от шести до двадцати человек</em></h1>
+
+  <section id="noRoom" class="panel pad lit" style="margin-top:var(--s5)" hidden>
+    <h3>Своей комнаты пока нет</h3>
+    <p class="note" style="margin-top:var(--s2)">Соберите стол сами или войдите в чужой по четырёхзначному коду.</p>
+    <div class="row" style="margin-top:var(--s4)">
+      <button class="btn primary" id="btnCreate">Собрать стол</button>
+      <input class="inp" id="joinCode" style="max-width:130px" placeholder="Код" inputmode="numeric" maxlength="4" aria-label="Код комнаты">
+      <button class="btn" id="btnJoinCode">Войти по коду</button>
+    </div>
+    <div style="margin-top:var(--s5)">
+      <span class="label">Открытые столы и приглашения</span>
+      <div class="list" id="roomList" style="margin-top:var(--s3)"></div>
+    </div>
+  </section>
+
+  <div id="roomPane" class="board" hidden>
+    <div class="stack">
+      <section class="panel pad lit">
+        <div class="between" style="align-items:flex-start">
+          <div>
+            <span class="label">Код стола</span>
+            <div class="code" id="roomCode">—</div>
+          </div>
+          <div class="row tight">
+            <button class="btn ghost sm" id="btnCopy">Скопировать ссылку</button>
+            <button class="btn danger sm" id="btnLeave">Уйти</button>
+          </div>
+        </div>
+        <div style="margin-top:var(--s4)">
+          <div class="kv"><span class="muted">Сейчас за столом</span><b id="cntNow">—</b></div>
+          <div class="kv"><span class="muted">Начнём при</span><b id="cntGoal">—</b></div>
+          <div class="kv"><span class="muted">Состав ролей</span><b id="compo">—</b></div>
+        </div>
+        <div id="hostBox" style="margin-top:var(--s5)" hidden>
+          <span class="label">Сколько человек ждём</span>
+          <div class="row" style="margin-top:var(--s2)">
+            <input type="range" id="sizeRange" min="6" max="20" step="1" style="flex:1;min-width:170px" aria-label="Число игроков">
+            <b class="code" id="sizeVal" style="font-size:var(--t-lg)">8</b>
+          </div>
+          <label class="check" style="margin-top:var(--s3)">
+            <input type="checkbox" id="autoStart" checked> Начать самим, как только все соберутся
+          </label>
+          <button class="btn primary wide" id="btnStart" style="margin-top:var(--s4)">Начать партию</button>
+        </div>
+      </section>
+
+      <section class="panel pad">
+        <div class="between"><h3>За столом</h3>
+          <button class="btn sm" id="btnFriends">Позвать людей</button></div>
+        <div class="list" id="members" style="margin-top:var(--s3)"></div>
+      </section>
+
+      <section class="panel pad" id="friendsBox" hidden>
+        <div class="between"><h3>Кто есть на сайте</h3>
+          <button class="btn ghost sm" id="btnFriendsClose">Свернуть</button></div>
+        <input class="inp" id="friendSearch" placeholder="Поиск по имени" style="margin:var(--s3) 0" aria-label="Поиск по имени">
+        <div class="list" id="friends"></div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="panel pad">
+        <h3>Пьеса на вечер</h3>
+        <p class="note" style="margin-top:var(--s2)">Показаны только те истории, что рассчитаны на текущее число людей.</p>
+        <div class="scen" id="scenarios" style="margin-top:var(--s3)"></div>
+      </section>
+      <section class="panel pad">
+        <h3>Разговор до начала</h3>
+        <div class="feed" id="lobbyFeed" style="max-height:260px;padding:var(--s3) 0"></div>
+        <div class="composer" style="padding:0;border:0">
+          <input class="inp" id="lobbyMsg" placeholder="Сказать что-нибудь…" maxlength="400" aria-label="Сообщение">
+          <button class="btn sm" id="lobbySend" aria-label="Отправить">Сказать</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<!-- =============== ПАРТИЯ =============== -->
+<div class="play" id="gameView" hidden>
+  <div class="stagewrap">
+    <div id="stage"></div>
+    <div id="marks"></div>
+
+    <!-- запасной плоский стол: показывается, если 3D не поднялась -->
+    <div class="flatwrap" id="flatWrap" hidden>
+      <div class="seats" id="seats"></div>
+    </div>
+
+    <div class="phaseband">
+      <span id="phaseIcon" class="ico"></span>
+      <div>
+        <div class="ph" id="gPhase">—</div>
+        <span class="sc" id="gScenario">—</span>
+      </div>
+      <div class="spacer"></div>
+      <span class="pill" id="gAlive">—</span>
+      <div class="timer" id="gTimer">0:00</div>
+      <div class="thread"><i id="gBar" style="width:100%"></i></div>
+    </div>
+
+    <aside class="rolepane" id="rolePane"></aside>
+
+    <div class="actiondock" id="actionDock">
+      <span class="hint" id="gHint"></span>
+      <div class="row tight" id="actions"></div>
+    </div>
+
+    <div class="finale" id="finale" hidden></div>
+  </div>
+
+  <aside class="chatdock" id="chatDock">
+    <div class="head">
+      <h3>Чат стола</h3>
+      <button class="iconbtn" id="btnChatClose" aria-label="Закрыть чат" title="Закрыть"></button>
+    </div>
+    <div class="tabs" id="chatTabs"></div>
+    <div class="feed" id="gFeed"></div>
+    <div class="composer">
+      <input class="inp" id="gMsg" placeholder="Ваша речь…" maxlength="400" aria-label="Реплика">
+      <button class="btn sm" id="gSend" aria-label="Сказать">Сказать</button>
+    </div>
+  </aside>
+</div>
+
+<div class="logsheet" id="logSheet" hidden>
+  <div class="grip" id="logGrip"><span id="logIcon"></span><b>Протокол партии</b><span class="spacer"></span><span id="logCount" class="num"></span></div>
+  <div class="log" id="gLog"></div>
+</div>
+
+<nav class="mobtabs" id="mobTabs" hidden>
+  <button data-panel="stage" class="on" id="tabStage"></button>
+  <button data-panel="table" id="tabTable"></button>
+  <button data-panel="role" id="tabRole"></button>
+  <button data-panel="chat" id="tabChat"></button>
+  <button data-panel="log" id="tabLog"></button>
+</nav>
+
 <div id="toast"></div>
+
+<script src="/js/icons.js"></script>
+<script src="/js/curtain.js"></script>
+<script src="/js/voice.js"></script>
+<script src="/js/rtc.js"></script>
 <script src="/js/api.js"></script>
 <script src="/js/online.js"></script>
 </body>
