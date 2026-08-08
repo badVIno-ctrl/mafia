@@ -5,9 +5,40 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a0809">
 <meta name="color-scheme" content="dark">
-<title>Мафия — игра по сети</title>
-<meta name="description" content="Сетевая «Мафия» на 6–20 человек: живая сцена, голосовой чат, отдельное окно переписки.">
+<title>Мафия по сети — играть с живыми игроками онлайн, 6–20 человек</title>
+<meta name="description" content="Сетевая «Мафия» на 6–20 живых игроков: быстрая игра в одно касание, список открытых столов, голосовой чат и переписка. Без регистрации — достаточно назваться.">
+<meta name="keywords" content="мафия по сети, мафия онлайн с игроками, мафия с друзьями онлайн, найти соперника мафия, мафия голосовой чат">
+<link rel="canonical" href="/online.html">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Мафия">
+<meta name="format-detection" content="telephone=no">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Мафия — вечер в шести лицах">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:url" content="/online.html">
+<meta property="og:title" content="Мафия по сети — играть с живыми игроками">
+<meta property="og:description" content="Быстрая игра в одно касание, список открытых столов, голосовой чат. На 6–20 человек.">
+<meta property="og:image" content="/img/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Мафия по сети — играть с живыми игроками">
+<meta name="twitter:description" content="Быстрая игра в одно касание, список открытых столов, голосовой чат.">
+<meta name="twitter:image" content="/img/og-image.png">
+
 <link rel="icon" href="/img/mask.svg">
+<link rel="apple-touch-icon" href="/img/icon-192.png">
+<link rel="manifest" href="/manifest.webmanifest">
+
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","name":"Мафия по сети","url":"/online.html",
+ "inLanguage":"ru-RU","isPartOf":{"@type":"WebSite","name":"Мафия — вечер в шести лицах","url":"/"},
+ "breadcrumb":{"@type":"BreadcrumbList","itemListElement":[
+   {"@type":"ListItem","position":1,"name":"Главная","item":"/"},
+   {"@type":"ListItem","position":2,"name":"Игра по сети","item":"/online.html"}]}}
+</script>
 <link rel="stylesheet" href="/css/fonts.css">
 <link rel="stylesheet" href="/css/theatre.css">
 <link rel="stylesheet" href="/css/app.css">
@@ -26,6 +57,18 @@
 /* Строка «ключ — значение». Состав ролей бывает длинным («дон · 4 мафии ·
    2 доктора · 2 шерифа · 11 мирных»), поэтому значение обязано переноситься,
    иначе на 360px оно распирает всю страницу. */
+/* ---------------- поиск соперников ----------------
+   Главная жалоба на сетевую игру была простой: сесть за стол можно
+   было только по чужой ссылке. Теперь есть список открытых столов. */
+.tblrow{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap;width:100%}
+.tblrow .who2{min-width:0;flex:1 1 200px}
+.tblrow .ttl{display:block;font-size:var(--t-sm);color:var(--paper);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tblrow .sub2{display:block;font-size:var(--t-2xs);color:var(--paper-faint);margin-top:2px}
+.seatbar{width:100%;height:4px;border-radius:2px;background:rgba(255,255,255,.07);overflow:hidden;margin-top:6px}
+.seatbar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold-soft),var(--gold));transition:width var(--norm) var(--ease)}
+#openTables .item,#roomList .item{align-items:center}
+@media (max-width:520px){ .tblrow .btn{flex:1 1 100%} }
+
 .kv{display:flex;justify-content:space-between;gap:var(--s3);padding:9px 0;border-bottom:1px dashed var(--hair);font-size:var(--t-xs);flex-wrap:wrap}
 .kv>span{min-width:0}
 .kv b{min-width:0;overflow-wrap:anywhere}
@@ -206,6 +249,27 @@
 .finale .win{font-family:var(--display);font-size:clamp(28px,6vw,46px);color:var(--bone)}
 .finale .win.mafia{color:var(--ember-soft)}
 .finale .win.town{color:var(--verdigris)}
+/* Выиграл ли именно этот игрок — главный вопрос после партии. */
+.finale .youres{display:inline-block;margin-top:var(--s3);padding:6px 14px 7px;
+  border:1px solid var(--line);border-radius:999px;font-size:13px;letter-spacing:.02em;
+  color:var(--plaster)}
+.finale .youres.won{border-color:rgba(123,162,149,.55);background:rgba(123,162,149,.12);color:#cfe3db}
+.finale .youres.lost{border-color:rgba(196,86,58,.45);background:rgba(196,86,58,.1);color:#e9c3b6}
+/* Причина победы обычными словами. */
+.finale .why{max-width:52ch;margin:var(--s4) auto 0;font-size:15px;line-height:1.62;
+  color:var(--plaster);text-wrap:pretty}
+/* Атмосферная концовка — отделена, чтобы её не читали как правило. */
+.finale .epilogue{max-width:52ch;margin:var(--s5) auto 0;padding:var(--s4) var(--s5);
+  border-left:2px solid rgba(226,180,120,.34);
+  border-radius:2px 10px 10px 2px;background:rgba(226,180,120,.055);
+  font-family:var(--display);font-size:15.5px;line-height:1.66;font-style:italic;
+  color:var(--plaster-dim);text-align:left;text-wrap:pretty}
+.finale .epilogue span{display:block;margin-bottom:6px;font-family:var(--sans);
+  font-style:normal;font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--plaster-faint)}
+.finale .seats{margin-top:var(--s6)}
+.finale .seat.mafia .sub{color:var(--ember-soft)}
+.finale .seat.town .sub{color:var(--verdigris)}
 
 body.playing #toast{bottom:96px}
 
@@ -285,6 +349,18 @@ body.playing #toast{bottom:96px}
   .mark{min-width:62px;max-width:92px}
   .code{font-size:var(--t-xl)}
 }
+
+/* Шапка на узком экране. Два выхода («Правила» и «На главную»),
+   три иконки и имя игрока вместе не влезали в 320px и тянули всю
+   страницу вбок. Имя прячем — оно и так видно в составе стола;
+   точка связи и оба выхода остаются на месте. Перенос строки —
+   страховка: даже на самом узком экране шапка не даёт горизонтальной
+   прокрутки, а аккуратно съезжает во вторую строку. */
+@media (max-width:430px){
+  .topbar{flex-wrap:wrap;height:auto;min-height:54px}
+  .topbar #whoName{display:none}
+  .topbar .btn.sm{padding:8px 9px}
+}
 </style>
 </head>
 <body>
@@ -300,7 +376,8 @@ body.playing #toast{bottom:96px}
   <button class="iconbtn" id="btnMic" title="Голосовой чат" aria-label="Голосовой чат"></button>
   <button class="iconbtn" id="btnTts" title="Озвучивать реплики" aria-label="Озвучивать реплики"></button>
   <button class="iconbtn" id="btnChat" title="Окно чата" aria-label="Окно чата" hidden></button>
-  <a class="btn ghost sm" href="/">Выйти</a>
+  <a class="btn ghost sm" href="/rules.html">Правила</a>
+  <a class="btn ghost sm" href="/">На главную</a>
 </header>
 
 <!-- =============== НЕТ АККАУНТА =============== -->
@@ -315,14 +392,32 @@ body.playing #toast{bottom:96px}
   <h1 id="lobbyTitle">Комната<em>от шести до двадцати человек</em></h1>
 
   <section id="noRoom" class="panel pad lit" style="margin-top:var(--s5)" hidden>
-    <h3>Своей комнаты пока нет</h3>
-    <p class="note" style="margin-top:var(--s2)">Соберите стол — и пришлите друзьям ссылку. Общего списка комнат нет:
-      за ваш стол садятся только по вашей ссылке. Если людей меньше шести, пустые места займут соседи-боты.</p>
-    <div class="row" style="margin-top:var(--s4)">
-      <button class="btn primary" id="btnCreate">Собрать стол</button>
+    <div class="between" style="align-items:flex-start;gap:var(--s3)">
+      <div style="min-width:0">
+        <h3>Найти соперников</h3>
+        <p class="note" style="margin-top:var(--s2);max-width:64ch">Нажмите «Быстрая игра» — и вас
+          посадят за самый полный открытый стол. Если свободных столов нет,
+          ваш откроется сам — и его сразу увидят остальные.</p>
+      </div>
+      <span class="pill" id="onlineCount" title="Сколько людей сейчас на сайте">—</span>
     </div>
+
+    <div class="row" style="margin-top:var(--s4);flex-wrap:wrap">
+      <button class="btn primary lg" id="btnQuick">Быстрая игра</button>
+      <button class="btn" id="btnCreate">Собрать свой стол</button>
+      <a class="btn ghost" href="/bots.html">Пока сыграть с ботами</a>
+    </div>
+
+    <hr class="rule">
+
+    <div class="between">
+      <span class="label">Открытые столы</span>
+      <button class="btn ghost sm" id="btnRefreshTables">Обновить</button>
+    </div>
+    <div class="list" id="openTables" style="margin-top:var(--s3)"></div>
+
     <div style="margin-top:var(--s5)">
-      <span class="label">Вас куда-то позвали</span>
+      <span class="label">Вас позвали лично</span>
       <div class="list" id="roomList" style="margin-top:var(--s3)"></div>
     </div>
   </section>
@@ -357,6 +452,10 @@ body.playing #toast{bottom:96px}
           <label class="check" style="margin-top:var(--s3)">
             <input type="checkbox" id="autoStart" checked> Начать самим, как только все соберутся
           </label>
+          <label class="check" style="margin-top:var(--s2)">
+            <input type="checkbox" id="openTable" checked> Показывать стол в списке открытых
+          </label>
+          <p class="note" style="margin-top:var(--s2)">Снимете галочку — и за стол сядут только по вашей ссылке.</p>
           <div class="row" style="margin-top:var(--s4)">
             <button class="btn" id="btnBots">Добрать ботами</button>
             <button class="btn ghost" id="btnBotsOff" hidden>Убрать ботов</button>

@@ -454,10 +454,10 @@ export async function mountStage(container, opts) {
 
       /* Речь: челюсть двигается, фигура чуть подаётся вперёд. */
       if (s.speaking) {
-        u.jaw.position.y = u.restJawY - 0.014 - Math.abs(Math.sin(now * 0.016)) * 0.02;
+        u.talk(0.30 + Math.abs(Math.sin(now * 0.016)) * 0.70);
         u.headPivot.rotation.x = Math.sin(now * 0.004) * 0.04;
-      } else if (u.jaw.position.y !== u.restJawY) {
-        u.jaw.position.y = lerp(u.jaw.position.y, u.restJawY, 0.2);
+      } else if (u.talkAmt() > 0.002) {
+        u.talk(lerp(u.talkAmt(), 0, 0.2));
       }
 
       /* Обруч цели пульсирует — так видно, кого можно выбрать. */

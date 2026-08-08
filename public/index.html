@@ -5,9 +5,49 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a0809">
 <meta name="color-scheme" content="dark">
-<title>Мафия — вечер в шести лицах</title>
-<meta name="description" content="Сюжетная «Мафия»: живая 3D-сцена, озвучка разными голосами, игра с ботами или по сети на 6–20 человек.">
+<title>Мафия онлайн — играть бесплатно в браузере, с ботами или по сети</title>
+<meta name="description" content="Сюжетная «Мафия» в браузере без регистрации: живая 3D-сцена, озвучка разными голосами, голосовой чат. Играйте с ботами или по сети на 6–20 человек — быстрый поиск соперников в одно касание.">
+<meta name="keywords" content="мафия онлайн, играть в мафию, мафия с ботами, мафия браузерная игра, мафия с друзьями, мафия голосовой чат">
+<link rel="canonical" href="/">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Мафия">
+<meta name="format-detection" content="telephone=no">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Мафия — вечер в шести лицах">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:url" content="/">
+<meta property="og:title" content="Мафия онлайн — играть бесплатно в браузере">
+<meta property="og:description" content="Живая 3D-сцена, голосовой чат и боты с характером. С ботами или по сети на 6–20 человек, без регистрации.">
+<meta property="og:image" content="/img/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Мафия — город засыпает, и до утра дойдут не все">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Мафия онлайн — играть бесплатно в браузере">
+<meta name="twitter:description" content="Живая 3D-сцена, голосовой чат и боты с характером. На 6–20 человек, без регистрации.">
+<meta name="twitter:image" content="/img/og-image.png">
+
 <link rel="icon" href="/img/mask.svg">
+<link rel="apple-touch-icon" href="/img/icon-192.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="preload" href="/fonts/golos-text-cyrillic-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":"WebSite","name":"Мафия — вечер в шести лицах","url":"/","inLanguage":"ru-RU"},
+{"@type":"VideoGame","name":"Мафия — вечер в шести лицах",
+ "url":"/","image":"/img/og-image.png","inLanguage":"ru-RU",
+ "description":"Сюжетная «Мафия» в браузере: живая 3D-сцена, озвучка разными голосами, игра с ботами или по сети на 6–20 человек.",
+ "genre":["Социальная дедукция","Партийная игра"],
+ "gamePlatform":["Web browser","Android","iOS"],
+ "playMode":["SinglePlayer","MultiPlayer"],
+ "numberOfPlayers":{"@type":"QuantitativeValue","minValue":6,"maxValue":20},
+ "applicationCategory":"Game","operatingSystem":"Any",
+ "offers":{"@type":"Offer","price":"0","priceCurrency":"RUB","availability":"https://schema.org/InStock"}}
+]}
+</script>
 <link rel="stylesheet" href="/css/fonts.css">
 <link rel="stylesheet" href="/css/theatre.css">
 <link rel="stylesheet" href="/css/app.css">
@@ -21,6 +61,7 @@
   <a class="brand" href="/">Мафия</a>
   <span class="brand-sub">вечер в шести лицах</span>
   <div class="spacer"></div>
+  <a class="btn ghost sm" href="/rules.html">Правила</a>
   <div class="who" id="who" hidden>
     <span class="dot"></span><span id="whoName">—</span>
     <button class="btn ghost sm" id="btnRename">Сменить имя</button>
@@ -28,6 +69,16 @@
 </header>
 
 <main class="shell">
+
+  <noscript>
+    <h1>Мафия онлайн<em>город засыпает, и до утра дойдут не все</em></h1>
+    <section class="panel pad lit" style="max-width:560px">
+      <span class="label">Для игры нужен JavaScript</span>
+      <p class="note" style="margin:var(--s3) 0 0">Сцена, озвучка и голосовой чат работают на JavaScript —
+        включите его в настройках браузера и обновите страницу.
+        Правила игры можно прочитать и без него: <a href="/rules.html">Правила Мафии</a>.</p>
+    </section>
+  </noscript>
 
   <!-- ------------------------- вход ------------------------- -->
   <section id="authView" hidden>
@@ -98,6 +149,23 @@
       </div>
       <div class="list" id="quickList" style="margin-top:var(--s4)"></div>
     </section>
+  </section>
+
+  <!-- Видимый всегда: и человеку, который ещё не назвался, и поисковому роботу,
+       который не ждёт выполнения скриптов. Раньше оба экрана были hidden,
+       и без JS страница выглядела совсем пустой. -->
+  <section class="panel pad" id="aboutSeo" style="margin-top:var(--s7)">
+    <h2 style="font-family:var(--serif);font-size:var(--t-lg);margin:0 0 var(--s3)">Что это за игра</h2>
+    <p class="note" style="margin:0 0 var(--s3);max-width:74ch;line-height:1.6">«Мафия» — игра на разговор
+      для компании от шести до двадцати человек. Ночью мафия выбирает жертву, шериф
+      проверяет одного игрока, доктор кого-то лечит. Днём город спорит и голосует.
+      Здесь всё это идёт в браузере: без установки, без почты и пароля, с живой 3D-сценой,
+      озвучкой разными голосами и голосовым чатом между игроками.</p>
+    <div class="row" style="flex-wrap:wrap;gap:var(--s3)">
+      <a class="btn ghost sm" href="/rules.html">Правила и роли</a>
+      <a class="btn ghost sm" href="/bots.html">Партия с ботами</a>
+      <a class="btn ghost sm" href="/online.html">Стол на живых людей</a>
+    </div>
   </section>
 
 </main>

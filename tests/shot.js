@@ -217,7 +217,11 @@ async function homeScene(browser) {
   srv.stderr.on('data', d => console.log('  [server stderr] ' + d));
   await sleep(900);
 
-  const browser = await chromium.launch({ args: ARGS });
+  /* В закрытом контуре playwright часто стоит без своего браузера.
+     Тогда берём системный Chromium из CHROME_BIN. */
+  const launchOpts = { args: ARGS };
+  if (process.env.CHROME_BIN) launchOpts.executablePath = process.env.CHROME_BIN;
+  const browser = await chromium.launch(launchOpts);
   try {
     if (!only || only === 'home') await homeScene(browser);
     if (!only || only === 'bots') { await botsScene(browser, 8); }

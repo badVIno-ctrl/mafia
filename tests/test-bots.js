@@ -8,9 +8,10 @@
       две ночи подряд, шериф-бот проверяет и голосует по проверке, и партия
       всегда доходит до занавеса, а не встаёт на середине.
 
-   2. Комната своя: общего списка столов нет, четырёхзначного кода нет,
-      войти можно только по длинной ссылке-приглашению. Друг, пришедший по
-      ссылке, садится на место соседа-бота.
+   2. Закрытый стол остаётся закрытым: его нет в общем зале, четырёхзначного
+      кода нет, войти можно только по длинной ссылке-приглашению. А открытый —
+      наоборот, виден всем и пускает без приглашения, и переключается одной
+      галочкой. Друг, пришедший по ссылке, садится на место соседа-бота.
 
    Первая часть гоняет движок напрямую с ускоренным временем — так полная
    партия занимает миллисекунды. Вторая идёт через живой сервер.
@@ -134,17 +135,36 @@ async function humanMove(user, view) {
     const friend = await mk('Друг');
     const stranger = await mk('Чужой');
 
-    const created = await api('/api/rooms/create', { token: host.token, body: { size: 6, autoStart: false } });
+    const created = await api('/api/rooms/create', { token: host.token, body: { size: 6, autoStart: false, visibility: 'invite' } });
     const room = created.json.room;
     ok(!!room.invite && room.invite.length >= 12, 'у комнаты длинный токен-приглашение (' + (room.invite || '').length + ' символов)');
     ok(!/^\d{4}$/.test(String(room.invite)), 'четырёхзначного кода больше нет');
     ok(room.inviteLink.indexOf('?join=') > 0, 'ссылка-приглашение ведёт на ?join=');
+    ok(room.visibility === 'invite', 'закрытый стол так и помечен: visibility=' + room.visibility);
 
+    /* Закрытый стол — только по ссылке, как и было. */
     const lobby = await api('/api/lobby', { token: stranger.token });
-    ok(Array.isArray(lobby.json.rooms) && lobby.json.rooms.length === 0, 'общего списка чужих столов нет');
+    ok(Array.isArray(lobby.json.rooms) && !lobby.json.rooms.some(r => r.roomId === room.id),
+      'закрытого стола нет в общем зале');
 
     const sneak = await api('/api/rooms/join', { token: stranger.token, body: { roomId: room.id } });
-    ok(sneak.status === 403, 'без приглашения в комнату не пускают');
+    ok(sneak.status === 403, 'без приглашения в закрытый стол не пускают');
+
+    /* А открытый стол виден всем — иначе новичку не с кем играть.
+       Открываем, смотрим, что видно в строке, и закрываем обратно. */
+    await api('/api/rooms/config', { token: host.token, body: { visibility: 'public' } });
+    const openLobby = await api('/api/lobby', { token: stranger.token });
+    const shown = (openLobby.json.rooms || []).find(r => r.roomId === room.id);
+    ok(!!shown, 'открытый стол виден в общем зале');
+    ok(!!shown && shown.humans === 1 && shown.size === 6,
+      'в строке сразу видно, сколько людей и сколько мест');
+    ok(!!shown && typeof shown.waitingSec === 'number' && !!shown.host && !!shown.title,
+      'видно хозяина, название и сколько стол уже ждёт');
+
+    await api('/api/rooms/config', { token: host.token, body: { visibility: 'invite' } });
+    const hidden = await api('/api/lobby', { token: stranger.token });
+    ok(!(hidden.json.rooms || []).some(r => r.roomId === room.id),
+      'стол снова прячется одной галочкой');
 
     const filled = await api('/api/rooms/bots', { token: host.token, body: { on: true } });
     ok(filled.json.room.members.length === 6, 'пустые места заняли соседи-боты (за столом ' + filled.json.room.members.length + ')');

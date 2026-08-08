@@ -21,11 +21,13 @@
   var $ = function (id) { return document.getElementById(id); };
   var ico = function (name, size) { return window.Icons ? Icons.svg(name, { size: size || 18 }) : ''; };
 
+  /* Названия фаз. Общее правило для всех подписей: сначала обычные
+     слова, образ — потом. Игрок не должен расшифровывать «занавес». */
   var PHASE_RU = {
-    prologue: 'Пролог', night: 'Ночь', morning: 'Утро',
-    day: 'День — обсуждение', vote: 'Голосование', runoff: 'Переголосовка', over: 'Занавес'
+    prologue: 'Знакомство', night: 'Ночь', morning: 'Утро',
+    day: 'День — обсуждение', vote: 'Голосование', runoff: 'Повторное голосование', over: 'Игра окончена'
   };
-  var CH_RU = { town: 'Город', mafia: 'Мафия', ghost: 'За чертой' };
+  var CH_RU = { town: 'Общий чат', mafia: 'Чат мафии', ghost: 'Выбывшие' };
   var ACT_RU = {
     kill: 'Выберите жертву', heal: 'Кого спасаете этой ночью',
     check: 'Кого проверяете', vote: 'За кого голосуете'
@@ -34,10 +36,10 @@
   var NARRATE = {
     night: 'Город засыпает.',
     morning: 'Город просыпается.',
-    day: 'День. Слово столу.',
+    day: 'День. Обсуждайте, кто вам кажется подозрительным.',
     vote: 'Голосуем.',
-    runoff: 'Переголосовка.',
-    over: 'Занавес.'
+    runoff: 'Повторное голосование.',
+    over: 'Игра окончена.'
   };
 
   var state = {
@@ -113,27 +115,83 @@
   /* =======================================================================
      ЛОББИ
      ======================================================================= */
+  /* Раньше здесь были только адресные приглашения: человек, пришедший на сайт
+     впервые, не мог найти соперников вообще никак. Теперь лобби отвечает на три
+     вопроса сразу: есть ли тут люди, куда можно сесть и кто меня звал. */
   function renderLobby(lobby) {
     state.lobby = lobby;
-    /* Общего списка чужих комнат больше нет: показываем только адресные
-       приглашения. Чужой стол — не проходной двор. */
-    var items = (lobby.invites || []).map(function (i) { return { kind: 'invite', i: i }; });
+    renderOnlineCount(lobby);
+    renderOpenTables(lobby);
+    renderInvites(lobby);
+  }
 
-    var box = $('roomList');
-    if (!items.length) {
-      setHTML(box, '<div class="empty">Приглашений нет. Попросите у хозяина стола ссылку — по ней вы сядете сразу.</div>');
+  /* Самый важный ответ на вопрос «а есть вообще с кем играть?» */
+  function renderOnlineCount(lobby) {
+    var el = $('onlineCount'); if (!el) return;
+    var online = (lobby.users || []).filter(function (u) { return u.online; }).length + 1;
+    var tables = (lobby.rooms || []).length;
+    setText(el, online + ' ' + API.plural(online, 'игрок', 'игрока', 'игроков') + ' на сайте' +
+      (tables ? ' · ' + tables + ' ' + API.plural(tables, 'стол ждёт', 'стола ждут', 'столов ждут') : ''));
+    setCls(el, 'good', tables > 0 || online > 1);
+  }
+
+  /* «Ждёт 4 минуты» понятнее, чем штамп времени создания. */
+  function waitLabel(sec) {
+    sec = Math.max(0, Math.round(sec || 0));
+    if (sec < 45) return 'собрался только что';
+    var m = Math.round(sec / 60);
+    if (m < 60) return 'ждёт ' + m + ' ' + API.plural(m, 'минуту', 'минуты', 'минут');
+    var h = Math.round(m / 60);
+    return 'ждёт ' + h + ' ' + API.plural(h, 'час', 'часа', 'часов');
+  }
+
+  /* Открытые столы общего зала. Порядок задаёт сервер: сначала те,
+     где почти собрались — так ждать приходится меньше всего. */
+  function renderOpenTables(lobby) {
+    var box = $('openTables'); if (!box) return;
+    var rooms = lobby.rooms || [];
+    if (!rooms.length) {
+      setHTML(box, '<div class="empty">Открытых столов сейчас нет. Нажмите «Быстрая игра» — ' +
+        'стол откроется, и остальные увидят его в этом списке.</div>');
       return;
     }
     box._html = null;
-    syncKeyed(box, items,
-      function (it) { return it.kind + ':' + it.i.roomId; },
+    syncKeyed(box, rooms, function (r) { return r.roomId; },
       function () { var d = document.createElement('div'); d.className = 'item'; return d; },
-      function (el, it) {
+      function (el, r) {
+        var pct = Math.round(100 * (r.players || 0) / Math.max(1, r.size));
+        var людей = r.humans || 0;
+        setHTML(el, '<div class="tblrow">' +
+          '<span class="avatar">' + API.esc(API.initial(r.host)) + '</span>' +
+          '<span class="who2">' +
+            '<b class="ttl">' + API.esc(r.title || 'Стол') + '</b>' +
+            '<span class="sub2">' + людей + ' ' + API.plural(людей, 'человек', 'человека', 'человек') +
+              (r.bots ? ' и ' + r.bots + ' ' + API.plural(r.bots, 'бот', 'бота', 'ботов') : '') +
+              ' из ' + r.size + ' · ' + API.esc(r.scenario) + ' · ' + waitLabel(r.waitingSec) + '</span>' +
+            '<span class="seatbar"><i style="width:' + pct + '%"></i></span>' +
+          '</span>' +
+          '<button class="btn primary sm" data-sit="' + r.roomId + '">Сесть</button>' +
+          '</div>');
+      });
+  }
+
+  function renderInvites(lobby) {
+    var box = $('roomList'); if (!box) return;
+    var items = lobby.invites || [];
+    if (!items.length) {
+      setHTML(box, '<div class="empty">Личных приглашений нет — но за любой открытый стол ' +
+        'можно сесть и без них.</div>');
+      return;
+    }
+    box._html = null;
+    syncKeyed(box, items, function (i) { return 'invite:' + i.roomId; },
+      function () { var d = document.createElement('div'); d.className = 'item'; return d; },
+      function (el, i) {
         el.style.borderColor = 'rgba(226,180,120,.45)';
         setHTML(el, '<span class="avatar">' + ico('envelope', 18) + '</span>' +
-          '<span class="nm">' + API.esc(it.i.from) + ' зовёт в «' + API.esc(it.i.title) + '» ' +
-          '<span class="muted">' + it.i.players + '/' + it.i.size + '</span></span>' +
-          '<button class="btn primary sm" data-join="' + it.i.roomId + '">Принять</button>');
+          '<span class="nm">' + API.esc(i.from) + ' зовёт в «' + API.esc(i.title) + '» ' +
+          '<span class="muted">' + i.players + '/' + i.size + '</span></span>' +
+          '<button class="btn primary sm" data-join="' + i.roomId + '">Принять</button>');
       });
   }
 
@@ -194,6 +252,7 @@
       if (document.activeElement !== $('sizeRange')) $('sizeRange').value = room.size;
       setText($('sizeVal'), String(room.size));
       $('autoStart').checked = room.autoStart;
+      $('openTable').checked = room.visibility !== 'invite';
       $('btnStart').disabled = !room.canStart;
       setText($('btnStart'), room.canStart ? 'Начать партию (' + room.members.length + ')' : 'Нужно хотя бы шесть человек');
       /* Добор ботами: сколько мест осталось — столько и предлагаем занять. */
@@ -453,7 +512,7 @@
     if (you.checks && you.checks.length) {
       h += '<div class="known">Проверки: ' + you.checks.map(function (c) {
         return API.esc(c.name) + ' — <b style="color:' + (c.isMafia ? 'var(--ember-soft)' : 'var(--verdigris)') + '">' +
-          (c.isMafia ? 'чёрный' : 'мирный') + '</b>';
+          (c.isMafia ? 'мафия' : 'мирный') + '</b>';
       }).join('; ') + '</div>';
     }
     if (you.alive === false && !g.finished) h += '<div class="known muted">Вы выбыли, но видите всё.</div>';
@@ -497,7 +556,7 @@
     var stick = nearBottom(feed);
 
     if (!msgs.length) {
-      setHTML(feed, '<div class="empty">Пока тишина. Начните разговор — к вам прислушаются.</div>');
+      setHTML(feed, '<div class="empty">Сообщений пока нет. Напишите первым — остальные ответят.</div>');
     } else {
       feed._html = null;
       syncKeyed(feed, msgs, function (m) { return m.ts + ':' + m.from; },
@@ -565,28 +624,74 @@
     if (stick) box.scrollTop = box.scrollHeight;
   }
 
-  /* ---------------------------- финал ---------------------------- */
+  /* ---------------------------- итог партии ----------------------------
+     Раньше здесь было «Занавес» и «Тишина осталась за чёрными» — красиво,
+     но игрок не понимал, почему партия закончилась именно сейчас. Теперь
+     сначала счёт и причина обычными словами, а атмосферная фраза сюжета
+     остаётся, но явно помечена как концовка истории. */
+  function isMafiaRole(r) { return r === 'mafia' || r === 'don'; }
+
+  /* Склонение числительных. Локально: shared/game-config.js к этой странице
+     не подключён, и обращение к MafiaConfig отсюда упало бы. */
+  function plural(n, one, few, many) {
+    var m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
+  }
+
+  /** Почему партия закончилась — в числах, а не в метафорах. */
+  function winReason(g) {
+    var mafiaAlive = 0, townAlive = 0, mafiaTotal = 0;
+    g.players.forEach(function (p) {
+      if (isMafiaRole(p.role)) { mafiaTotal++; if (p.alive) mafiaAlive++; }
+      else if (p.alive) townAlive++;
+    });
+    if (g.winner === 'town') {
+      return 'Город выиграл: ' + plural(mafiaTotal,
+        'единственный игрок из мафии выбыл',
+        'все ' + mafiaTotal + ' игрока из мафии выбыли',
+        'все ' + mafiaTotal + ' игроков из мафии выбыли') +
+        ' из игры. В живых остались только мирные жители.';
+    }
+    return 'Мафия выиграла: её осталось ' + mafiaAlive + ', а мирных — ' + townAlive +
+      '. Когда мафии становится столько же, сколько мирных, город больше не может её переголосовать.';
+  }
+
   function renderFinale(g) {
     if (!g.finished) { $('finale').hidden = true; return; }
     $('finale').hidden = false;
     var key = 'fin' + g.winner + g.players.length;
     if ($('finale')._k === key) return;
     $('finale')._k = key;
+
+    var you = g.you || {};
+    var youWon = you.role ? (isMafiaRole(you.role) ? g.winner === 'mafia' : g.winner === 'town') : null;
+    var story = g.winner === 'town' ? g.scenario.finaleTown : g.scenario.finaleMafia;
+
     $('finale').innerHTML =
       '<div class="box">' +
-      '<span class="label">Занавес</span>' +
+      '<span class="label">Итог партии</span>' +
       '<div class="win ' + g.winner + '">' + (g.winner === 'town' ? 'Победил город' : 'Победила мафия') + '</div>' +
-      '<p class="lede" style="margin:var(--s4) auto var(--s5)">' +
-      API.esc(g.winner === 'town' ? (g.scenario.finaleTown || 'Город вычистил себя сам.')
-        : (g.scenario.finaleMafia || 'Тишина осталась за чёрными.')) + '</p>' +
+      (youWon === null ? '' :
+        '<div class="youres ' + (youWon ? 'won' : 'lost') + '">' +
+        (youWon ? 'Вы в числе победителей' : 'В этот раз не ваша партия') +
+        ' · ваша роль: ' + API.esc(you.roleRu || '—') + '</div>') +
+      '<p class="why">' + API.esc(winReason(g)) + '</p>' +
+      (story ? '<p class="epilogue"><span>Концовка истории</span>' + API.esc(story) + '</p>' : '') +
       '<div class="seats">' + g.players.map(function (p) {
-        return '<div class="seat ' + (p.alive ? '' : 'dead') + '">' +
+        var team = isMafiaRole(p.role) ? 'mafia' : 'town';
+        return '<div class="seat ' + (p.alive ? '' : 'dead') + ' ' + team + '">' +
           '<span class="no">№' + p.seat + '</span>' +
           '<span class="avatar' + (p.alive ? '' : ' dead') + '">' + API.esc(API.initial(p.name)) + '</span>' +
-          '<span class="nm">' + API.esc(p.name) + '</span>' +
-          '<span class="sub">' + API.esc(p.roleRu || '') + '</span></div>';
+          '<span class="nm">' + API.esc(p.name) + (p.id === you.id ? ' · вы' : '') + '</span>' +
+          '<span class="sub">' + API.esc(p.roleRu || '') +
+          (p.alive ? '' : ' · выбыл' + (p.deathDay ? ' на ' + p.deathDay + '-й день' : '')) +
+          '</span></div>';
       }).join('') + '</div></div>';
-    Voice.say('Занавес. ' + (g.winner === 'town' ? 'Победил город.' : 'Победила мафия.'), { narrator: true, urgent: true });
+
+    Voice.say('Игра окончена. ' + (g.winner === 'town' ? 'Победил город.' : 'Победила мафия.') +
+      ' ' + winReason(g), { narrator: true, urgent: true });
   }
 
   /* =======================================================================
@@ -640,9 +745,17 @@
   }
 
   document.addEventListener('click', function (e) {
-    var el = e.target.closest('[data-join],[data-invite],[data-kick],[data-scen],[data-target],[data-tab],[data-say],[data-panel]');
+    var el = e.target.closest('[data-join],[data-sit],[data-invite],[data-kick],[data-scen],[data-target],[data-tab],[data-say],[data-panel]');
     if (el) {
       if (el.dataset.join) return call('/api/rooms/join', { roomId: el.dataset.join });
+      /* Сесть за открытый стол — без ссылки и без приглашения. */
+      if (el.dataset.sit) {
+        el.disabled = true;
+        return call('/api/rooms/join', { roomId: el.dataset.sit }).then(function (r) {
+          el.disabled = false;
+          if (r && r.room) { renderRoom(r.room); API.toast('Вы за столом «' + r.room.title + '»'); }
+        });
+      }
       if (el.dataset.invite) return call('/api/rooms/invite', { userId: el.dataset.invite })
         .then(function () { API.toast('Приглашение отправлено'); });
       if (el.dataset.kick) return call('/api/rooms/kick', { userId: el.dataset.kick });
@@ -660,8 +773,34 @@
     if (e.target.closest('#btnRestart')) return call('/api/rooms/restart');
   });
 
+  /* Быстрая игра: одна кнопка вместо переписки со знакомыми. Сервер сам
+     выбирает самый полный открытый стол, а если таких нет — открывает новый. */
+  var quickBusy = false;
+  $('btnQuick').addEventListener('click', function () {
+    if (quickBusy) return;
+    var b = this, was = b.textContent;
+    quickBusy = true; b.disabled = true; setText(b, 'Ищем стол…');
+    API.call('/api/rooms/quick', { size: 8 })
+      .then(function (r) {
+        if (r && r.room) renderRoom(r.room);
+        API.toast(r && r.joined ? 'Вас посадили за стол — ждём остальных'
+          : 'Свободных столов не нашлось — открыли ваш');
+      })
+      .catch(API.fail)
+      .then(function () { quickBusy = false; b.disabled = false; setText(b, was); });
+  });
+
+  $('btnRefreshTables').addEventListener('click', function () {
+    var b = this; b.disabled = true;
+    API.call('/api/lobby').then(function (r) {
+      if (r && r.lobby) renderLobby(r.lobby); else if (r) renderLobby(r);
+      API.toast('Список обновлён');
+    }).catch(API.fail).then(function () { b.disabled = false; });
+  });
+
   $('btnCreate').addEventListener('click', function () {
-    call('/api/rooms/create', { size: 8, autoStart: true }).then(function (r) { if (r) renderRoom(r.room); });
+    call('/api/rooms/create', { size: 8, autoStart: true, visibility: 'public' })
+      .then(function (r) { if (r) { renderRoom(r.room); API.toast('Стол открыт — его видно в общем зале'); } });
   });
   $('btnBots').addEventListener('click', function () {
     call('/api/rooms/bots', { on: true }).then(function (r) {
@@ -688,6 +827,11 @@
   $('sizeRange').addEventListener('input', function () { setText($('sizeVal'), this.value); });
   $('sizeRange').addEventListener('change', function () { call('/api/rooms/config', { size: Number(this.value) }); });
   $('autoStart').addEventListener('change', function () { call('/api/rooms/config', { autoStart: this.checked }); });
+  $('openTable').addEventListener('change', function () {
+    var on = this.checked;
+    call('/api/rooms/config', { visibility: on ? 'public' : 'invite' })
+      .then(function () { API.toast(on ? 'Стол виден в общем зале' : 'Стол теперь только по ссылке'); });
+  });
   $('btnStart').addEventListener('click', function () { call('/api/rooms/start'); });
 
   function sendLobby() {

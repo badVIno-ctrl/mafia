@@ -331,7 +331,7 @@ export function createModels(THREE, cfg) {
     g.fillStyle = '#f6e8cd';
     g.save(); g.translate(128, PY + PH / 2 + size * 0.35); g.scale(squeeze, 1); g.fillText(title, 0, 0); g.restore();
 
-    const sub = (role === ROLE.MAFIA || role === ROLE.DON) ? 'город против вас' : 'вы за город';
+    const sub = (role === ROLE.MAFIA || role === ROLE.DON) ? 'вы играете за мафию' : 'вы играете за город';
     let ss = 17;
     g.font = font(ss);
     while (ss > 10 && g.measureText(sub).width > maxW) { ss -= 1; g.font = font(ss); }
@@ -379,16 +379,35 @@ export function createModels(THREE, cfg) {
     const W = LOWQ ? 512 : 1024, H = W / 2;
     const c = cvs(W, H), g = c.getContext('2d');
     const rnd = prng(seed * 31 + 5);
-    const cx = W * 0.25, cy = H * 0.50, f = W * 0.20;
+    /* f задаёт размер лица на равнопромежуточной развёртке. При 0.20
+       лицо занимало ±36° долготы и с расстояния стола не читалось вовсе.
+       У живого человека лицо — около ±45°, этому соответствует 0.235. */
+    const cx = W * 0.25, cy = H * 0.50, f = W * 0.235;
     const sc = hex(skinHex), hc = hex(hairHex);
 
     /* Волосы кладём на всю развёртку, а лицо вырезаем овалом. Раньше
        причёска была горизонтальной полосой по верху: сзади голова
        оставалась голой и светилась кожей, как яйцо. */
     g.fillStyle = hc; g.fillRect(0, 0, W, H);
+
+    /* Кожу кладём с растушёванным краем. Жёсткий клип по эллипсу давал
+       на голове «маску»: светлое пятно лица обрывалось видимой линией.
+       Теперь кожа уходит в волосы плавно, как линия роста волос. */
+    const sR = (skinHex >> 16) & 255, sG = (skinHex >> 8) & 255, sB = skinHex & 255;
+    g.save();
+    g.translate(cx, cy + f * 0.07);
+    g.scale(f * 0.53, f * 0.75);
+    const skinG = g.createRadialGradient(0, 0, 0.08, 0, 0, 1);
+    skinG.addColorStop(0, sc);
+    skinG.addColorStop(0.78, sc);
+    skinG.addColorStop(1, 'rgba(' + sR + ',' + sG + ',' + sB + ',0)');
+    g.fillStyle = skinG;
+    g.beginPath(); g.arc(0, 0, 1, 0, Math.PI * 2); g.fill();
+    g.restore();
+
+    /* Объём: виски темнее, середина лица светлее. */
     g.save();
     g.beginPath(); g.ellipse(cx, cy + f * 0.07, f * 0.50, f * 0.72, 0, 0, Math.PI * 2); g.clip();
-    g.fillStyle = sc; g.fillRect(0, 0, W, H);
     const sd = g.createLinearGradient(cx - f * 0.85, 0, cx + f * 0.85, 0);
     sd.addColorStop(0, 'rgba(24,12,10,.34)');
     sd.addColorStop(0.5, 'rgba(255,238,220,.10)');
@@ -399,7 +418,13 @@ export function createModels(THREE, cfg) {
     /* линия волос над лбом: у мужчин выше, у женщин ниже */
     const hairY = cy - f * (female ? 0.30 : 0.40);
     g.fillStyle = hc;
-    g.beginPath(); g.ellipse(cx, hairY - f * 0.10, f * 0.52, f * 0.26, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(cx, hairY - f * 0.13, f * 0.52, f * 0.24, 0, 0, Math.PI * 2); g.fill();
+    /* мягкая тень под чёлкой — иначе волосы обрываются плоским кантом */
+    const hg = g.createLinearGradient(0, hairY - f * 0.18, 0, hairY + f * 0.10);
+    hg.addColorStop(0, 'rgba(20,12,10,.30)');
+    hg.addColorStop(1, 'rgba(20,12,10,0)');
+    g.fillStyle = hg;
+    g.beginPath(); g.ellipse(cx, hairY - f * 0.02, f * 0.50, f * 0.20, 0, 0, Math.PI * 2); g.fill();
     if (female) {
       g.fillStyle = hc;
       for (const s of [-1, 1]) {
@@ -407,7 +432,9 @@ export function createModels(THREE, cfg) {
       }
     }
 
-    const ey = cy - f * 0.09, ex = f * 0.20, ew = f * 0.155, eh = f * 0.082;
+    /* Глаз занимает около пятой части ширины лица. При 0.155·f они
+       читались кукольными — 26° долготы вместо живых 14–18°. */
+    const ey = cy - f * 0.09, ex = f * 0.195, ew = f * 0.108, eh = f * 0.058;
     const irises = ['#4a3524', '#3d5a46', '#2f4f6b', '#5a3f2a', '#6b6357'];
     const iris = irises[Math.floor(rnd() * irises.length)];
     for (const s of [-1, 1]) {
@@ -425,8 +452,10 @@ export function createModels(THREE, cfg) {
       g.strokeStyle = 'rgba(44,26,20,.8)';
       g.lineWidth = Math.max(1.5, f * 0.024); g.lineCap = 'round';
       g.beginPath(); g.ellipse(x, ey, ew, eh, 0, Math.PI * 1.03, Math.PI * 1.97); g.stroke();
-      g.strokeStyle = hc;
-      g.lineWidth = f * (female ? 0.032 : 0.052);
+      /* Бровь цветом в волос терялась на светлых шевелюрах. Берём
+         тёмный нейтральный тон: именно брови делают лицо лицом. */
+      g.strokeStyle = 'rgba(46,28,20,.88)';
+      g.lineWidth = f * (female ? 0.030 : 0.044);
       const outer = x + s * ew * 1.15, inner = x - s * ew * 1.15;
       g.beginPath(); g.moveTo(outer, ey - eh * 2.1);
       g.quadraticCurveTo(x, ey - eh * 3.3, inner, ey - eh * 2.6); g.stroke();
@@ -991,6 +1020,98 @@ export function createModels(THREE, cfg) {
      шея, голова с лицом, причёска или головной убор.
      В userData отдаём ручки, за которые сцена дёргает анимацию:
      голова (взгляд и мигание), челюсть (речь), грудь (дыхание). */
+  /* -----------------------------------------------------------------------
+     ФОРМА ГОЛОВЫ
+     Одна функция на всё: по ней лепится череп, по ней же сажаются уши,
+     веки, волосы и шляпы. Пока размеры задавались числами вручную,
+     они неизбежно расходились с головой — отсюда и брались козырьки.
+     ----------------------------------------------------------------------- */
+  const HEAD_R = 0.205;
+
+  function sstep(a, b, x) {
+    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  }
+
+  /* Множитель радиуса черепа в направлении (nx, ny, nz). */
+  function headShape(nx, ny, nz, female) {
+    let k = 1;
+
+    /* Череп чуть выше, чем шире; виски поджаты. */
+    k *= 1 + 0.052 * ny - 0.030 * nx * nx * sstep(0, 0.5, ny);
+
+    /* Затылок полнее лба. */
+    k *= 1 + 0.055 * sstep(0, -0.7, nz) * (0.45 + 0.275 * (ny + 1));
+
+    /* Челюсть сужается книзу. */
+    const low = sstep(-0.05, -0.95, ny);
+    k *= 1 - (female ? 0.30 : 0.24) * low * low;
+
+    /* Подбородок выдаётся вперёд. */
+    k += 0.055 * low * sstep(0.15, 0.95, nz);
+
+    /* Надбровные дуги. */
+    k += 0.016 * sstep(0.55, 1, nz) * Math.exp(-Math.pow((ny - 0.26) / 0.16, 2));
+
+    /* Скулы. */
+    k += 0.020 * sstep(0.30, 0.95, nz) * Math.exp(-Math.pow((ny + 0.02) / 0.20, 2))
+       * sstep(0.30, 0.85, Math.abs(nx));
+
+    /* Нос — вытянут из той же сетки, а не приставлен конусом. */
+    const nd = Math.acos(Math.max(-1, Math.min(1, nz * 0.985 - ny * 0.17)));
+    k += 0.082 * Math.exp(-Math.pow(nd / 0.20, 2)) * Math.exp(-Math.pow(nx / 0.17, 2));
+
+    /* Глазницы: лёгкая впадина, чтобы нарисованные глаза сидели в орбитах. */
+    k -= 0.013 * sstep(0.45, 0.95, nz)
+       * Math.exp(-Math.pow((ny - 0.13) / 0.13, 2))
+       * Math.exp(-Math.pow((Math.abs(nx) - 0.30) / 0.17, 2));
+
+    return k;
+  }
+
+  /* Точка на поверхности черепа. grow > 1 — чуть над кожей. */
+  function headPoint(nx, ny, nz, female, grow) {
+    const l = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+    nx /= l; ny /= l; nz /= l;
+    const k = headShape(nx, ny, nz, female) * (grow || 1) * HEAD_R;
+    return new THREE.Vector3(nx * k, ny * k * 1.045, nz * k * 0.985);
+  }
+
+  /* Лепим готовую сферу (или её кусок) по форме черепа.
+     UV не трогаем: развёртка лица остаётся на своём месте. */
+  function sculptHead(geo, female, grow) {
+    const pos = geo.attributes.position;
+    const g = grow || 1;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const l = Math.sqrt(x * x + y * y + z * z) || 1;
+      const nx = x / l, ny = y / l, nz = z / l;
+      const k = headShape(nx, ny, nz, female) * g * HEAD_R;
+      pos.setXYZ(i, nx * k, ny * k * 1.045, nz * k * 0.985);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  /* Морф «рот открыт»: нижняя часть лица опускается и чуть подаётся
+     вперёд. Раньше роль челюсти играл отдельный шар, и при разговоре
+     он разъезжался с головой. */
+  function jawMorph(geo) {
+    const pos = geo.attributes.position;
+    const arr = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const l = Math.sqrt(x * x + y * y + z * z) || 1;
+      const w = sstep(-0.02, -0.75, y / l) * sstep(-0.45, 0.30, z / l);
+      arr[i * 3] = x * (1 - 0.035 * w);
+      arr[i * 3 + 1] = y - 0.052 * w;
+      arr[i * 3 + 2] = z + 0.014 * w;
+    }
+    geo.morphAttributes.position = [new THREE.Float32BufferAttribute(arr, 3)];
+    return geo;
+  }
+
   function buildFigure(color, hatKind, seed, opts) {
     opts = opts || {};
     const female = opts.sex === 'f';
@@ -1100,7 +1221,8 @@ export function createModels(THREE, cfg) {
       grp.add(lap);
     }
 
-    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.070, 0.104, 0.085, sg(18, 10)), shirt);
+    /* Был шире шеи и читался как слюнявчик. Сейчас это ворот сорочки. */
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.061, 0.086, 0.062, sg(18, 10)), shirt);
     collar.position.set(0, 1.045, -0.156);
     collar.rotation.x = -0.05; grp.add(collar);
     const tie = new THREE.Mesh(loft([
@@ -1167,80 +1289,122 @@ export function createModels(THREE, cfg) {
     headBox.scale.setScalar(0.56);
     headPivot.add(headBox);
 
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.205, sg(32, 16), sg(24, 12)), faceM);
-    head.scale.set(0.97, 1.09, 0.95);
-    head.castShadow = true; headBox.add(head);
+    /* Одна сетка на всю голову: лоб, скулы, нос, челюсть и подбородок
+       вылеплены из сферы. Пересекающихся шаров больше нет, а значит
+       нет и ступенек с тенями поперёк лица. */
+    const headGeo = jawMorph(sculptHead(
+      new THREE.SphereGeometry(1, sg(44, 20), sg(32, 15)), female));
+    const head = new THREE.Mesh(headGeo, faceM);
+    head.castShadow = true;
+    headBox.add(head);
+    if (head.morphTargetInfluences && head.morphTargetInfluences.length) {
+      head.morphTargetInfluences[0] = 0;
+    }
 
-    /* Веки: две тонкие «шапочки» цвета кожи. Опускаются при мигании. */
+    /* Веки — не шапочки перед лицом, а кусок той же поверхности черепа,
+       поднятый на полтора процента над кожей. Поэтому веко повторяет
+       кривизну глазницы и не торчит козырьком. */
     const lids = [];
     for (const s of [-1, 1]) {
-      const lid = new THREE.Mesh(new THREE.SphereGeometry(0.048, sg(14, 7), sg(10, 5), 0, Math.PI * 2, 0, Math.PI / 2), skin);
-      lid.position.set(s * 0.062, 0.022, 0.186);
-      lid.rotation.x = Math.PI / 2.1;
-      lid.scale.set(1, 0.5, 1);
+      const dx = s * 0.34, dy = 0.13, dz = 0.93;
+      const dl = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const phi = Math.atan2(dz / dl, -dx / dl);
+      const theta = Math.acos(dy / dl);
+      const lid = new THREE.Mesh(sculptHead(
+        new THREE.SphereGeometry(1, sg(14, 7), sg(10, 5),
+          phi - 0.32, 0.64, theta - 0.24, 0.40), female, 1.015), skin);
       lid.visible = false;
       headBox.add(lid);
       lids.push(lid);
     }
 
-    const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.155, sg(20, 10), sg(14, 8)), skin);
-    jaw.scale.set(0.95, 0.78, 0.92);
-    jaw.position.set(0, -0.105, 0.022);
+    /* Совместимость: раньше сцена двигала отдельный меш челюсти.
+       Теперь рот открывает морф, а эта пустая группа осталась точкой
+       крепления для старого кода анимации. */
+    const jaw = new THREE.Object3D();
     headBox.add(jaw);
 
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.031, 0.072, sg(12, 6)), skin);
-    nose.rotation.x = Math.PI / 2;
-    nose.position.set(0, -0.012, 0.196);
-    headBox.add(nose);
-
+    /* Уши сажаются на саму поверхность черепа, а не на глазок. */
     for (const s of [-1, 1]) {
-      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.042, sg(12, 6), sg(10, 5)), skin);
-      ear.scale.set(0.42, 1.05, 0.78);
-      ear.position.set(s * 0.196, -0.01, -0.012);
+      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.045, sg(14, 7), sg(12, 6)), skin);
+      /* Прижаты к черепу: при тёмных волосах крупное ухо цвета кожи
+         читалось светлой шишкой сбоку головы. */
+      ear.scale.set(0.32, 0.84, 0.64);
+      ear.position.copy(headPoint(s, -0.05, -0.07, female, 0.86));
+      ear.rotation.z = -s * 0.10;
       headBox.add(ear);
     }
 
     /* ---- головной убор или причёска ---- */
     const hat = new THREE.Group();
+    /* Ширина головы на линии лба — по ней меряется любой головной убор.
+       Раньше радиусы были зашиты числами, и шляпа висела над черепом. */
+    const fitR = headPoint(1, 0.42, 0, female, 1).x;
+    const crownTop = headPoint(0, 1, 0, female, 1).y;
+
     if (hatKind === 'fedora') {
-      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.36, 0.032, sg(28, 14)), dark);
-      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.185, 0.21, 0.25, sg(28, 14)), dark);
-      top.position.y = 0.14;
-      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.216, 0.216, 0.058, sg(28, 14)),
+      const seatY = crownTop * 0.36;
+      const brim = new THREE.Mesh(
+        new THREE.CylinderGeometry(fitR * 1.74, fitR * 1.82, 0.026, sg(32, 16)), dark);
+      brim.position.y = seatY;
+      /* тулья накрывает макушку с запасом, а не парит над ней */
+      const hCrown = (crownTop - seatY) + 0.075;
+      const crown = new THREE.Mesh(
+        new THREE.CylinderGeometry(fitR * 1.00, fitR * 1.09, hCrown, sg(30, 15)), dark);
+      crown.position.y = seatY + hCrown / 2;
+      const band = new THREE.Mesh(
+        new THREE.CylinderGeometry(fitR * 1.11, fitR * 1.11, 0.048, sg(30, 15)),
         new THREE.MeshStandardMaterial({ color: 0x1c1618, roughness: 0.74 }));
-      band.position.y = 0.048;
-      brim.castShadow = top.castShadow = true;
-      hat.add(brim, top, band);
-      hat.position.set(0, 0.15, -0.01);
-      hat.rotation.z = 0.05;
+      band.position.y = seatY + 0.030;
+      brim.castShadow = crown.castShadow = true;
+      hat.add(brim, crown, band);
+      hat.rotation.set(-0.05, 0, 0.045);
+      hat.position.set(0, 0, -0.012);
     } else if (hatKind === 'cap') {
-      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.222, sg(24, 12), sg(16, 8), 0, Math.PI * 2, 0, Math.PI / 2), dark);
-      const peak = new THREE.Mesh(new THREE.CylinderGeometry(0.228, 0.228, 0.028, sg(22, 11), 1, false, 0, Math.PI), dark);
-      peak.position.set(0, 0.004, 0.155); peak.rotation.y = Math.PI;
+      /* кепка — тот же череп, раздутый на шесть процентов */
+      const dome = new THREE.Mesh(sculptHead(
+        new THREE.SphereGeometry(1, sg(28, 14), sg(18, 9), 0, Math.PI * 2, 0, Math.PI * 0.54),
+        female, 1.06), dark);
       dome.castShadow = true;
+      const peak = new THREE.Mesh(
+        new THREE.CylinderGeometry(fitR * 0.98, fitR * 1.04, 0.024, sg(24, 12), 1, false, 0, Math.PI), dark);
+      peak.position.set(0, crownTop * 0.30, fitR * 0.80);
+      peak.rotation.set(0.12, Math.PI, 0);
       hat.add(dome, peak);
-      hat.position.set(0, 0.04, -0.01);
     } else {
-      /* волосы: шапка + затылок + отдельные пряди, чтобы силуэт не был «литым» */
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.216, sg(24, 12), sg(18, 9), 0, Math.PI * 2, 0, Math.PI * 0.58), hairM);
-      cap.position.set(0, -0.005, -0.012);
-      cap.scale.set(1, 1.05, 1);
-      cap.castShadow = true; hat.add(cap);
-      const nape = new THREE.Mesh(new THREE.SphereGeometry(0.208, sg(20, 10), sg(14, 7), 0, Math.PI * 2, Math.PI * 0.3, Math.PI * 0.42), hairM);
-      nape.position.set(0, -0.005, -0.052);
+      /* Волосы тоже лепятся по черепу. Раньше это была полусфера
+         радиусом 0,216 при голове шириной 0,199: по бокам она торчала
+         козырьком, а на макушке тонула в черепе. */
+      const cap = new THREE.Mesh(sculptHead(
+        new THREE.SphereGeometry(1, sg(32, 16), sg(22, 11), 0, Math.PI * 2, 0,
+          Math.PI * (female ? 0.60 : 0.54)), female, 1.035), hairM);
+      cap.castShadow = true;
+      hat.add(cap);
+
+      /* затылок: сзади волосы спускаются ниже */
+      const nape = new THREE.Mesh(sculptHead(
+        new THREE.SphereGeometry(1, sg(24, 12), sg(16, 8),
+          Math.PI * 1.04, Math.PI * 0.92, Math.PI * 0.22,
+          Math.PI * (female ? 0.54 : 0.40)), female, 1.028), hairM);
       hat.add(nape);
-      const strands = LOWQ ? 5 : 11;
-      for (let k = 0; k < strands; k++) {
-        const a = (k / strands) * Math.PI * 2;
-        const len = 0.1 + rnd() * (female ? 0.4 : 0.12);
-        const lock = new THREE.Mesh(new THREE.CapsuleGeometry(0.026, len, sg(6, 3), sg(10, 5)), hairM);
-        lock.position.set(Math.sin(a) * 0.17, -0.02 - len * 0.35, Math.cos(a) * 0.17 - 0.02);
-        lock.rotation.set(rnd() * 0.2 - 0.1, a, Math.sin(a) * 0.2);
+
+      /* Пряди только по затылку и вплотную к черепу. Раньше они шли
+         по всему кругу, включая лицо, и торчали в стороны рогами. */
+      const strands = LOWQ ? 3 : 7;
+      for (let k2 = 0; k2 < strands; k2++) {
+        const a = Math.PI * (0.55 + (k2 / (strands - 1)) * 0.90);
+        const dx = Math.sin(a), dz = Math.cos(a);
+        const len = 0.09 + rnd() * (female ? 0.30 : 0.06);
+        const lock = new THREE.Mesh(new THREE.CapsuleGeometry(0.024, len, sg(6, 3), sg(10, 5)), hairM);
+        const p = headPoint(dx, -0.30, dz, female, 0.98);
+        lock.position.set(p.x * 0.94, p.y - len * 0.40, p.z * 0.94);
+        lock.rotation.set(0.06, 0, -dx * 0.30);
         hat.add(lock);
       }
       if (female) {
-        const bun = new THREE.Mesh(new THREE.SphereGeometry(0.105, sg(18, 9), sg(14, 7)), hairM);
-        bun.position.set(0, -0.03, -0.215);
+        const bun = new THREE.Mesh(new THREE.SphereGeometry(0.10, sg(18, 9), sg(14, 7)), hairM);
+        const bp = headPoint(0, 0.10, -1, female, 0.98);
+        bun.position.set(0, bp.y, bp.z - 0.040);
         hat.add(bun);
       }
     }
@@ -1249,6 +1413,20 @@ export function createModels(THREE, cfg) {
     grp.userData = {
       torso, head, headPivot, jaw, hat, lids,
       restJawY: jaw.position.y,
+      /* Речь и мигание отдаются наружу ручками: сцена не должна
+         знать, чем именно открывается рот. */
+      talk(open) {
+        const inf = head.morphTargetInfluences;
+        if (inf && inf.length) inf[0] = Math.max(0, Math.min(1, open));
+      },
+      talkAmt() {
+        const inf = head.morphTargetInfluences;
+        return (inf && inf.length) ? inf[0] : 0;
+      },
+      blink(closed) {
+        const on = closed > 0.5;
+        for (const l of lids) l.visible = on;
+      },
       /* Дыхание: торс чуть раздаётся в грудь и на волос поднимается.
          Ручка отдаётся наружу, чтобы сцена не знала про сечения. */
       breathe(k) {

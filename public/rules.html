@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0809">
+<meta name="color-scheme" content="dark">
+
+<title>Правила игры Мафия: роли, ночь и день, состав на 6–20 игроков</title>
+<meta name="description" content="Полные правила «Мафии»: роли — мафия, дон, шериф, доктор, мирные; порядок ночи и дня, голосование, условия победы и точный состав ролей на 6–20 человек.">
+<meta name="keywords" content="мафия правила, роли в мафии, шериф, доктор, дон, сколько мафии на 10 игроков, мафия онлайн">
+<link rel="canonical" href="/rules.html">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Мафия — вечер в шести лицах">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:title" content="Правила игры Мафия: роли, ночь и день, состав на 6–20 игроков">
+<meta property="og:description" content="Роли, порядок хода, голосование и условия победы — коротко и без воды.">
+<meta property="og:image" content="/img/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Правила игры Мафия">
+<meta name="twitter:description" content="Роли, ночь и день, голосование, состав на 6–20 игроков.">
+<meta name="twitter:image" content="/img/og-image.png">
+
+<link rel="icon" href="/img/mask.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/theatre.css">
+<link rel="stylesheet" href="/css/app.css">
+
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","inLanguage":"ru-RU","mainEntity":[
+{"@type":"Question","name":"Сколько игроков нужно для игры в Мафию?","acceptedAnswer":{"@type":"Answer","text":"От 6 до 20 человек. С ботами можно играть одному: остальные места занимают соседи с характером и памятью на чужие слова."}},
+{"@type":"Question","name":"Сколько мафии берётся на стол?","acceptedAnswer":{"@type":"Answer","text":"Чёрных ролей — целая часть от (число игроков + 1) делённого на 4, но не меньше одного. На 6 игроков — 1 мафия, на 8 — 2, на 12 — 3 (из них дон), на 20 — 5. Мирных всегда строго больше."}},
+{"@type":"Question","name":"Как побеждают город и мафия?","acceptedAnswer":{"@type":"Answer","text":"Город побеждает, когда выбыла вся мафия. Мафия побеждает, когда её стало не меньше, чем мирных: тогда любое голосование она выигрывает."}},
+{"@type":"Question","name":"Чем дон отличается от мафии?","acceptedAnswer":{"@type":"Answer","text":"Дон — глава мафии. При ничьей в ночном выборе решает его голос. Шерифу проверка показывает дона как мафию. Дон выделяется, когда чёрных трое и больше — то есть от 12 игроков."}},
+{"@type":"Question","name":"Может ли доктор лечить себя?","acceptedAnswer":{"@type":"Answer","text":"Да, но нельзя лечить одного и того же игрока две ночи подряд — и себя в том числе."}},
+{"@type":"Question","name":"Нужна ли регистрация, чтобы играть?","acceptedAnswer":{"@type":"Answer","text":"Нет. Для игры с ботами не нужно даже имени. Для игры по сети достаточно назваться — ни почты, ни пароля."}}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+{"@type":"ListItem","position":1,"name":"Главная","item":"/"},
+{"@type":"ListItem","position":2,"name":"Правила игры","item":"/rules.html"}]}
+</script>
+
+<style>
+  .prose{max-width:74ch}
+  .prose h2{font-family:var(--serif);font-size:var(--t-xl);color:var(--paper);
+    margin:var(--s7) 0 var(--s3);letter-spacing:-.01em}
+  .prose h3{font-family:var(--serif);font-size:var(--t-md);color:var(--paper-dim);
+    margin:var(--s5) 0 var(--s2)}
+  .prose p{color:var(--paper-dim);margin:0 0 var(--s3);line-height:1.62}
+  .prose ul,.prose ol{color:var(--paper-dim);margin:0 0 var(--s3);padding-left:1.35em;line-height:1.62}
+  .prose li{margin:0 0 var(--s2)}
+  .prose strong{color:var(--paper);font-weight:600}
+  .crumbs{display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap;
+    font-size:var(--t-xs);color:var(--paper-faint);margin-bottom:var(--s4)}
+  .crumbs a{color:var(--gold-soft);text-decoration:none}
+  .crumbs a:hover{text-decoration:underline}
+  .roles{display:grid;gap:var(--s3);grid-template-columns:repeat(auto-fit,minmax(232px,1fr));
+    margin:var(--s4) 0 var(--s5)}
+  .role{border:1px solid var(--line);border-radius:var(--r);padding:var(--s4);
+    background:rgba(255,255,255,.018)}
+  .role .g{font-size:var(--t-xl);line-height:1;display:block;margin-bottom:var(--s2)}
+  .role h3{margin:0 0 var(--s1);font-size:var(--t-md)}
+  .role p{margin:0;font-size:var(--t-sm);color:var(--paper-faint)}
+  .role.black{border-color:rgba(158,42,58,.42)}
+  .role.town{border-color:rgba(214,178,106,.30)}
+  .tbl{width:100%;border-collapse:collapse;font-size:var(--t-sm);margin:var(--s3) 0 var(--s5)}
+  .tbl th,.tbl td{text-align:left;padding:var(--s2) var(--s3);border-bottom:1px solid var(--line-soft)}
+  .tbl th{color:var(--gold-soft);font-weight:600;font-size:var(--t-xs);
+    text-transform:uppercase;letter-spacing:.07em}
+  .tbl td{color:var(--paper-dim)}
+  .tbl tr:last-child td{border-bottom:0}
+  .wrapx{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .cta{display:flex;gap:var(--s3);flex-wrap:wrap;margin-top:var(--s5)}
+  .toc{display:flex;gap:var(--s2);flex-wrap:wrap;margin:var(--s4) 0 var(--s2)}
+  .toc a{font-size:var(--t-xs);color:var(--paper-dim);text-decoration:none;
+    border:1px solid var(--line);border-radius:999px;padding:7px 14px;min-height:34px;
+    display:inline-flex;align-items:center}
+  .toc a:hover{border-color:var(--gold-soft);color:var(--paper)}
+  /* «Главная» в хлебных крошках — полноценная кнопка возврата,
+     а не тонкая строчка текста: на телефоне в неё надо попасть пальцем. */
+  .crumbs{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2)}
+  .crumbs a{display:inline-flex;align-items:center;min-height:44px;padding:0 2px}
+</style>
+</head>
+<body>
+<div class="plasterwall"></div>
+<div class="filmgrain"></div>
+<div class="houselights"></div>
+
+<header class="topbar">
+  <a class="brand" href="/">Мафия</a>
+  <span class="brand-sub">правила игры</span>
+  <div class="spacer"></div>
+  <a class="btn ghost sm" href="/bots.html">С ботами</a>
+  <a class="btn primary sm" href="/online.html">По сети</a>
+</header>
+
+<main class="shell">
+  <nav class="crumbs" aria-label="Где я">
+    <a href="/">Главная</a><span aria-hidden="true">→</span><span>Правила игры</span>
+  </nav>
+
+  <h1>Правила игры<em>чтобы сесть за стол, достаточно прочитать первые два абзаца</em></h1>
+  <p class="lede">«Мафия» — игра на разговор. Город не знает, кто среди него чужой,
+    и вынужден искать виноватого вслепую. Мафия знает всё и молчит.
+    Никаких бросков костей: выигрывает тот, кого убедили слушать.</p>
+
+  <nav class="toc" aria-label="Содержание">
+    <a href="#short">Коротко</a>
+    <a href="#roles">Роли</a>
+    <a href="#night">Ночь</a>
+    <a href="#day">День и голосование</a>
+    <a href="#win">Победа</a>
+    <a href="#table">Состав на 6–20</a>
+    <a href="#modes">Режимы</a>
+    <a href="#faq">Вопросы</a>
+  </nav>
+
+  <div class="prose">
+
+    <h2 id="short">Коротко: один круг игры</h2>
+    <ol>
+      <li>Каждый получает тайную роль. Мафия видит своих, город — нет.</li>
+      <li><strong>Ночь.</strong> Мафия выбирает жертву, шериф проверяет одного игрока,
+        доктор кого-то лечит.</li>
+      <li><strong>Утро.</strong> Город узнаёт, кто не дошёл до рассвета.</li>
+      <li><strong>День.</strong> Все говорят по кругу, потом голосуют. Кто собрал больше всех — выходит из игры.</li>
+      <li>Снова ночь — и так до победы одной из сторон.</li>
+    </ol>
+
+    <h2 id="roles">Роли</h2>
+    <p>Роли делятся на две стороны: <strong>мафия</strong> и <strong>город</strong>.
+      Никто, кроме мафии, своих не знает.</p>
+
+    <div class="roles">
+      <div class="role black">
+        <span class="g" aria-hidden="true">🎩</span>
+        <h3>Мафия</h3>
+        <p>Ночью вместе с сообщниками выбирает жертву. Знает своих.</p>
+      </div>
+      <div class="role black">
+        <span class="g" aria-hidden="true">♠</span>
+        <h3>Дон</h3>
+        <p>Глава мафии. Его голос решает при ничьей в ночном выборе.
+          Проверка шерифа показывает его как мафию.</p>
+      </div>
+      <div class="role town">
+        <span class="g" aria-hidden="true">★</span>
+        <h3>Шериф</h3>
+        <p>Ночью проверяет одного игрока и узнаёт, мафия он или нет.</p>
+      </div>
+      <div class="role town">
+        <span class="g" aria-hidden="true">✚</span>
+        <h3>Доктор</h3>
+        <p>Ночью лечит одного игрока. Можно себя, но не одного и того же
+          две ночи подряд.</p>
+      </div>
+      <div class="role town">
+        <span class="g" aria-hidden="true">⌂</span>
+        <h3>Мирный</h3>
+        <p>Особых умений нет — только голос, логика и умение читать людей.</p>
+      </div>
+    </div>
+
+    <h2 id="night">Ночь</h2>
+    <p>Свет гаснет, и город замолкает. Порядок ходов всегда один и тот же:</p>
+    <ol>
+      <li><strong>Мафия сговаривается.</strong> Сообщники видят друг друга и выбирают жертву.
+        Если голоса разошлись поровну, решает дон; если дона нет — выбор случаен.</li>
+      <li><strong>Шериф проверяет.</strong> Одно имя за ночь. Ответ короткий:
+        «мафия» или «не мафия», без уточнения роли.</li>
+      <li><strong>Доктор лечит.</strong> Если он угадал цель мафии, ночь проходит без потерь.</li>
+    </ol>
+    <p>Все ночные действия тайные. Утром город узнаёт только результат —
+      кто выбыл, и выбыл ли вообще кто-нибудь.</p>
+
+    <h2 id="day">День и голосование</h2>
+    <p>Днём все живые говорят по кругу — один за другим, без перебиваний.
+      Можно рассказать правду, можно соврать, можно выдать себя за шерифа —
+      ограничений нет.</p>
+    <ul>
+      <li>После круга речей начинается голосование. Голосуют только живые, открыто.</li>
+      <li>Отдать голос можно любому, кроме себя. Можно воздержаться.</li>
+      <li>Кто собрал больше всего голосов — выходит из игры. Роль вышедшего объявляется.</li>
+      <li>При равном числе голосов днём никто не выходит: город не смог решить.</li>
+      <li>Вышедшие молчат до конца партии и не подсказывают.</li>
+    </ul>
+
+    <h2 id="win">Когда партия заканчивается</h2>
+    <ul>
+      <li><strong>Город победил</strong> — выбыла вся мафия, включая дона.</li>
+      <li><strong>Мафия победила</strong> — чёрных стало не меньше, чем мирных.
+        Дальше любое голосование она выигрывает, и игра останавливается сразу.</li>
+    </ul>
+
+    <h2 id="table">Состав ролей на 6–20 игроков</h2>
+    <p>Состав считается сам и не требует настройки. Чёрных берётся целая часть
+      от (игроки + 1) ⁄ 4, но не меньше одного. Дон выделяется из мафии, когда чёрных
+      трое или больше; второй доктор появляется на 14 игроках, второй шериф — на 16.</p>
+    <div class="wrapx">
+      <table class="tbl">
+        <caption class="note" style="text-align:left;padding:0 0 var(--s2)">Мирных всегда строго больше, чем чёрных — это проверяется тестами.</caption>
+        <thead>
+          <tr><th>Игроков</th><th>Мафия</th><th>Дон</th><th>Шериф</th><th>Доктор</th><th>Мирные</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>6</td><td>1</td><td>—</td><td>1</td><td>1</td><td>3</td></tr>
+          <tr><td>8</td><td>2</td><td>—</td><td>1</td><td>1</td><td>4</td></tr>
+          <tr><td>10</td><td>2</td><td>—</td><td>1</td><td>1</td><td>6</td></tr>
+          <tr><td>12</td><td>2</td><td>1</td><td>1</td><td>1</td><td>7</td></tr>
+          <tr><td>14</td><td>2</td><td>1</td><td>1</td><td>2</td><td>8</td></tr>
+          <tr><td>16</td><td>3</td><td>1</td><td>2</td><td>2</td><td>8</td></tr>
+          <tr><td>18</td><td>3</td><td>1</td><td>2</td><td>2</td><td>10</td></tr>
+          <tr><td>20</td><td>4</td><td>1</td><td>2</td><td>2</td><td>11</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="modes">Два режима</h2>
+    <h3>Вечер с соседями — партия с ботами</h3>
+    <p>Игра одному, без имени и регистрации. Соседи за столом — со своим характером
+      и памятью: они запоминают, кто на кого показал, обижаются, врут и держатся за свою версию.
+      Четыре уровня выдержки соперников и сюжет на вечер.</p>
+    <h3>Стол на живых людей — игра по сети</h3>
+    <p>На 6–20 человек. Можно нажать <strong>«Быстрая игра»</strong> — и вас посадят
+      за самый полный открытый стол; можно выбрать стол вручную из списка или
+      открыть свой и позвать людей ссылкой. Есть голосовой чат, переписка
+      и добор ботами, если людей не хватило.</p>
+
+    <h2 id="faq">Частые вопросы</h2>
+    <h3>Нужна ли регистрация?</h3>
+    <p>Нет. Для игры с ботами не нужно даже имени. Для игры по сети достаточно
+      назваться: ни почты, ни пароля. Имя остаётся в браузере.</p>
+    <h3>Как позвать друзей?</h3>
+    <p>Откройте стол и отправьте ссылку-приглашение — она сажает человека сразу
+      за ваш стол. Коды вводить не нужно.</p>
+    <h3>А если игроков не хватает?</h3>
+    <p>Доберите свободные места ботами одной кнопкой. Когда приходит живой игрок,
+      он занимает место бота.</p>
+    <h3>Можно ли играть с телефона?</h3>
+    <p>Да. Сайт работает в браузере на телефоне, планшете и компьютере,
+      а его можно добавить на главный экран как приложение.</p>
+
+    <div class="cta">
+      <a class="btn primary lg" href="/online.html">Сесть за стол по сети</a>
+      <a class="btn lg" href="/bots.html">Партия с ботами</a>
+      <a class="btn ghost lg" href="/">На главную</a>
+    </div>
+  </div>
+</main>
+</body>
+</html>

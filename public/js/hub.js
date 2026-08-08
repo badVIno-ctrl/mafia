@@ -24,12 +24,17 @@
 
   function renderLobby(lobby) {
     var users = lobby.users || [];
-    var online = users.filter(function (u) { return u.online; }).length + 1;
-    $('quickStat').textContent = online + ' ' + API.plural(online, 'игрок онлайн', 'игрока онлайн', 'игроков онлайн') +
-      ' · всего зарегистрировано ' + (users.length + 1);
-
+    var rooms = lobby.rooms || [];
     var invites = lobby.invites || [];
+    var online = users.filter(function (u) { return u.online; }).length + 1;
+
+    $('quickStat').textContent = online + ' ' + API.plural(online, 'игрок онлайн', 'игрока онлайн', 'игроков онлайн') +
+      (rooms.length
+        ? ' · ' + rooms.length + ' ' + API.plural(rooms.length, 'открытый стол ждёт', 'открытых стола ждут', 'открытых столов ждут') + ' людей'
+        : ' · открытых столов пока нет');
+
     var html = '';
+
     invites.forEach(function (i) {
       html += '<div class="item" style="border-color:var(--line-warm)">' +
         '<span class="avatar">' + Icons.svg('envelope', { size: 18 }) + '</span>' +
@@ -37,10 +42,27 @@
         '<span class="muted">(' + i.players + '/' + i.size + ')</span></span>' +
         '<a class="btn primary sm" href="/online.html?room=' + encodeURIComponent(i.roomId) + '">Принять</a></div>';
     });
-    if (!users.length && !invites.length) {
-      html += '<div class="empty">Пока вы единственный зарегистрированный игрок.<br>' +
-        'Откройте комнату и пришлите друзьям адрес сайта и код комнаты.</div>';
+
+    /* Главное, чего здесь не хватало: видно, куда можно сесть прямо
+       с главной — без чужих ссылок и без переписки со знакомыми. */
+    rooms.slice(0, 6).forEach(function (r) {
+      var n = r.humans || 0;
+      html += '<div class="item">' +
+        '<span class="avatar">' + API.esc(API.initial(r.host)) + '</span>' +
+        '<span class="nm">' + API.esc(r.title) +
+        '<span class="muted"> — ' + n + ' ' + API.plural(n, 'человек', 'человека', 'человек') +
+        ' из ' + r.size + '</span></span>' +
+        '<a class="btn primary sm" href="/online.html?join=' + encodeURIComponent(r.invite) + '">Сесть</a></div>';
+    });
+
+    if (!rooms.length && !invites.length) {
+      html += users.length
+        ? '<div class="empty">Открытых столов сейчас нет. Нажмите «Стол на живых людей» — ' +
+            'ваш стол сразу появится в общем зале, и к вам смогут подсесть.</div>'
+        : '<div class="empty">Пока вы здесь один. Откройте стол по сети — его увидят все, кто зайдёт после вас.<br>' +
+            'А чтобы не ждать — сыграйте вечер с соседями-ботами.</div>';
     }
+
     users.slice(0, 30).forEach(function (u) {
       html += '<div class="item">' +
         '<span class="avatar">' + API.esc(API.initial(u.name)) + '</span>' +
@@ -68,12 +90,57 @@
       .then(function () { $('btnReg').disabled = false; });
   }
 
+  /* Своё окно вместо prompt(): системное выпадает из оформления, не переводится
+     и на телефоне выглядит как ошибка сайта. Закрывается по Esc, по фону
+     и кнопкой — три привычных способа передумать. */
+  function askName(current) {
+    return new Promise(function (resolve) {
+      var back = document.createElement('div');
+      back.className = 'modalback';
+      back.innerHTML =
+        '<div class="modalbox panel pad lit" role="dialog" aria-modal="true" aria-labelledby="askTtl">' +
+          '<h3 id="askTtl" style="margin:0 0 var(--s2)">Новое имя за столом</h3>' +
+          '<p class="note" style="margin:0 0 var(--s3)">От 2 до 16 символов. Под этим именем вас позовут за стол.</p>' +
+          '<input class="inp" id="askInp" maxlength="16" autocomplete="nickname" aria-label="Новое имя">' +
+          '<div class="row" style="margin-top:var(--s4);justify-content:flex-end;flex-wrap:wrap">' +
+            '<button class="btn ghost" id="askNo">Отмена</button>' +
+            '<button class="btn primary" id="askYes">Сохранить</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(back);
+
+      var inp = back.querySelector('#askInp');
+      var last = document.activeElement;
+      inp.value = current || '';
+      setTimeout(function () { inp.focus(); inp.select(); }, 30);
+
+      function close(value) {
+        document.removeEventListener('keydown', onKey);
+        back.remove();
+        if (last && last.focus) last.focus();
+        resolve(value);
+      }
+      function onKey(e) {
+        if (e.key === 'Escape') { e.preventDefault(); close(null); }
+        if (e.key === 'Enter' && document.activeElement === inp) { e.preventDefault(); close(inp.value); }
+      }
+      document.addEventListener('keydown', onKey);
+      back.querySelector('#askNo').addEventListener('click', function () { close(null); });
+      back.querySelector('#askYes').addEventListener('click', function () { close(inp.value); });
+      back.addEventListener('mousedown', function (e) { if (e.target === back) close(null); });
+    });
+  }
+
   function rename() {
-    var name = prompt('Новое имя за столом:', API.user.name);
-    if (name == null) return;
-    API.call('/api/rename', { name: name.trim() })
-      .then(function (r) { API.save(r.user); showHub(); API.toast('Имя обновлено'); })
-      .catch(API.fail);
+    askName(API.user.name).then(function (name) {
+      if (name == null) return;
+      name = name.trim();
+      if (name.length < 2) { API.toast('Имя от 2 до 16 символов', 'bad'); return; }
+      if (name === API.user.name) return;
+      API.call('/api/rename', { name: name })
+        .then(function (r) { API.save(r.user); showHub(); API.toast('Теперь вы ' + r.user.name); })
+        .catch(API.fail);
+    });
   }
 
   /* --- знаки на афише --- */
@@ -86,7 +153,7 @@
   }
 
   /* --- старт --- */
-  var curtain = window.Curtain ? Curtain.show({ title: 'Мафия', note: 'Поднимаем занавес' }) : null;
+  var curtain = window.Curtain ? Curtain.show({ title: 'Мафия', note: 'Готовим стол…' }) : null;
   if (curtain) curtain.progress(0.5);
   paintSigns();
   API.load();

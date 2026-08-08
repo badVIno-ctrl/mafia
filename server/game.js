@@ -388,9 +388,16 @@ class Game {
     this.winner = winner;
     this.phase = 'over';
     this.deadline = now();
+    /* В протокол пишем причину числами: игрок должен понять, почему
+       партия закончилась именно сейчас, а не разгадывать метафору. */
+    const mafiaAlive = this.alive().filter(p => this.isMafia(p.id)).length;
+    const townAlive = this.alive().length - mafiaAlive;
+    const mafiaTotal = this.players.filter(p => this.isMafia(p.id)).length;
     this.pushLog('end', winner === 'town'
-      ? 'Город победил: вся мафия мертва. ' + this.scenario.finaleTown
-      : 'Мафия победила. ' + this.scenario.finaleMafia);
+      ? 'Город победил: вся мафия (' + mafiaTotal + ') выбыла из игры.'
+      : 'Мафия победила: её осталось ' + mafiaAlive + ', мирных — ' + townAlive +
+        '. Город больше не может её переголосовать.');
+    this.pushLog('story', winner === 'town' ? this.scenario.finaleTown : this.scenario.finaleMafia);
     return true;
   }
 
@@ -436,7 +443,11 @@ class Game {
       winner: this.winner,
       scenario: {
         id: this.scenario.id, title: this.scenario.title, place: this.scenario.place,
-        rule: this.scenario.rule, prologue: this.scenario.prologue
+        rule: this.scenario.rule, prologue: this.scenario.prologue,
+        /* Чем закончилась история. Отдаём только после конца партии:
+           до этого оба текста — спойлер. */
+        finaleTown: revealAll ? this.scenario.finaleTown : null,
+        finaleMafia: revealAll ? this.scenario.finaleMafia : null
       },
       composition: this.composition,
       compositionLabel: C.compositionLabel(this.players.length),

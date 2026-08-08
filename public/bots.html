@@ -9,8 +9,35 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Мафия">
-<meta name="description" content="Сюжетная «Мафия» за круглым столом: живые собеседники, ночные сцены и развязка.">
-<title>Мафия</title>
+<meta name="description" content="Мафия с ботами онлайн: игра одному без регистрации. Соседи за столом спорят, врут и запоминают, кто на кого показал. Сюжет вечера, живая 3D-сцена, озвучка разными голосами.">
+<meta name="keywords" content="мафия с ботами, мафия одному, мафия против компьютера, мафия без регистрации, мафия офлайн, мафия в браузере">
+<title>Мафия с ботами — играть одному без регистрации</title>
+<link rel="canonical" href="/bots.html">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="format-detection" content="telephone=no">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Мафия — вечер в шести лицах">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:url" content="/bots.html">
+<meta property="og:title" content="Мафия с ботами — играть одному">
+<meta property="og:description" content="Соседи со своим характером и памятью на чужие слова. Сюжет вечера и живая 3D-сцена.">
+<meta property="og:image" content="/img/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Мафия с ботами — играть одному">
+<meta name="twitter:description" content="Соседи со своим характером и памятью на чужие слова.">
+<meta name="twitter:image" content="/img/og-image.png">
+<link rel="manifest" href="/manifest.webmanifest">
+
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","name":"Мафия с ботами","url":"/bots.html",
+ "inLanguage":"ru-RU","isPartOf":{"@type":"WebSite","name":"Мафия — вечер в шести лицах","url":"/"},
+ "breadcrumb":{"@type":"BreadcrumbList","itemListElement":[
+   {"@type":"ListItem","position":1,"name":"Главная","item":"/"},
+   {"@type":"ListItem","position":2,"name":"Игра с ботами","item":"/bots.html"}]}}
+</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23140d10'/%3E%3Cpath d='M32 15c7.2 0 11.4 5.2 12.2 14.6C49.6 31 53 33 53 35.2 53 38.4 43.6 41 32 41S11 38.4 11 35.2c0-2.2 3.4-4.2 8.8-5.6C20.6 20.2 24.8 15 32 15z' fill='%23c9a227'/%3E%3Cpath d='M20.5 30.4c3.3-1 7.3-1.5 11.5-1.5s8.2.5 11.5 1.5c-.6-8.3-4.4-12.6-11.5-12.6s-10.9 4.3-11.5 12.6z' fill='%23140d10' opacity='.55'/%3E%3Ccircle cx='24' cy='50' r='3.2' fill='%23a8202b'/%3E%3Ccircle cx='32' cy='50' r='3.2' fill='%23e8dcc6'/%3E%3Ccircle cx='40' cy='50' r='3.2' fill='%23a8202b'/%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23140d10'/%3E%3Cpath d='M32 15c7.2 0 11.4 5.2 12.2 14.6C49.6 31 53 33 53 35.2 53 38.4 43.6 41 32 41S11 38.4 11 35.2c0-2.2 3.4-4.2 8.8-5.6C20.6 20.2 24.8 15 32 15z' fill='%23c9a227'/%3E%3Cpath d='M20.5 30.4c3.3-1 7.3-1.5 11.5-1.5s8.2.5 11.5 1.5c-.6-8.3-4.4-12.6-11.5-12.6s-10.9 4.3-11.5 12.6z' fill='%23140d10' opacity='.55'/%3E%3Ccircle cx='24' cy='50' r='3.2' fill='%23a8202b'/%3E%3Ccircle cx='32' cy='50' r='3.2' fill='%23e8dcc6'/%3E%3Ccircle cx='40' cy='50' r='3.2' fill='%23a8202b'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/css/fonts.css">
@@ -85,9 +112,13 @@ body.night #vignette{opacity:1;background:radial-gradient(ellipse at 50% 46%,rgb
   padding:0 14px;border-bottom:1px solid var(--line);
   background:linear-gradient(180deg,rgba(8,6,9,.94),rgba(8,6,9,.55) 70%,transparent);
   backdrop-filter:blur(6px)}
+/* Логотип — это ещё и кнопка «на главную»: человек не должен искать
+   выход в меню. Поэтому у него размер под палец и нет подчёркивания. */
 #brand{font-family:var(--serif);font-size:17px;letter-spacing:.34em;text-transform:uppercase;
   color:var(--paper);padding-right:16px;margin-right:4px;white-space:nowrap;
+  text-decoration:none;display:inline-flex;align-items:center;min-height:44px;
   text-shadow:0 0 18px rgba(201,162,39,.35)}
+#brand:hover,#brand:focus-visible{color:#fff}
 #brand b{color:var(--gold);font-weight:400}
 .stat{display:flex;flex-direction:column;justify-content:center;padding:0 14px;border-left:1px solid var(--line-soft);min-width:74px}
 .stat .k{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--paper-faint)}
@@ -327,6 +358,10 @@ body.installed #btnInstall{display:none}
 @media (pointer:coarse){
   .tbtn{width:42px;height:42px}
   .btn,.opt,button{min-height:44px}
+  /* Крестики панелей: правило выше тянуло только высоту, ширина
+     оставалась 30px — в такой крестик палецом не попасть. На сенсорных
+     экранах делаем полноценный квадрат 44x44, на мыши остаётся аккуратный 30px. */
+  .panelClose{width:44px;height:44px}
 }
 /* ---------- мобильный / узкий экран ---------- */
 #mobTabs{display:none;position:fixed;z-index:7;left:12px;bottom:16px;flex-direction:column;gap:7px}
@@ -366,7 +401,8 @@ body.installed #btnInstall{display:none}
   #endBox{padding:16px 14px}
 }
 @media (max-width:390px){
-  #brand{display:none}
+  /* Не прячем логотип: это единственный видимый выход на главную. */
+  #brand{font-size:12px;letter-spacing:.05em;padding-right:6px;margin-right:0}
   .stat{font-size:13px;padding:0 4px}
   #bubbles .bubble{max-width:64vw;font-size:13px}
   #bbTitle{font-size:14px}
@@ -562,7 +598,8 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
 }
 
 @media (max-width:380px){
-  #brand{display:none}
+  /* Не прячем логотип: это единственный видимый выход на главную. */
+  #brand{font-size:12px;letter-spacing:.05em;padding-right:6px;margin-right:0}
   .stat{padding:0 6px}
   .stat .v{font-size:13px}
 }
@@ -573,6 +610,83 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
 }
 
 #log,#leftpanel,#bbBody,.sheetBox,#endBox,#storyBox,.screen{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+/* =========================================================================
+   СЮЖЕТНЫЙ ТАКТ
+   Пауза в партии — это не зависание, а время на чтение. Раньше
+   об этом нигде не говорилось: текст уходил в правую панель, а на
+   телефоне она закрыта. Теперь то, что надо прочитать, показывается
+   прямо на сцене.
+   ========================================================================= */
+#storyBeat{position:fixed;z-index:7;left:0;right:0;bottom:calc(140px + var(--sab));
+  display:flex;justify-content:center;padding:0 16px;pointer-events:none}
+#storyBeat[hidden]{display:none}
+#sbCard{position:relative;width:min(620px,100%);padding:13px 16px 14px 17px;
+  background:linear-gradient(97deg,rgba(58,22,32,.95),rgba(12,9,12,.9) 64%);
+  border:1px solid var(--line-soft);border-left:2px solid var(--gold);
+  border-radius:2px 12px 12px 2px;box-shadow:0 20px 50px rgba(0,0,0,.55);
+  backdrop-filter:blur(7px);opacity:0;transform:translateY(14px);
+  transition:opacity 300ms cubic-bezier(.2,.9,.3,1),transform 300ms cubic-bezier(.2,.9,.3,1)}
+#storyBeat.in #sbCard{opacity:1;transform:none}
+#sbKind{display:block;margin-bottom:6px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--gold);opacity:.9}
+#sbText{margin:0;font-family:var(--serif);font-size:16px;line-height:1.5;color:var(--paper);min-height:1.5em}
+#sbText::after{content:'';display:inline-block;width:7px;height:1em;margin-left:3px;vertical-align:-2px;
+  background:var(--gold);opacity:0}
+#storyBeat.typing #sbText::after{animation:sbCaret 880ms steps(1) infinite}
+@keyframes sbCaret{0%,49%{opacity:.8}50%,100%{opacity:0}}
+
+/* живой индикатор рядом с «Дальше»: сразу видно, что игра жива */
+#pdNow{display:flex;align-items:center;gap:9px;min-height:42px;padding:0 13px 0 11px;
+  border:1px solid var(--line-soft);border-left:2px solid var(--gold);border-radius:2px 9px 9px 2px;
+  background:rgba(8,6,9,.9);backdrop-filter:blur(8px);box-shadow:0 10px 30px rgba(0,0,0,.5);
+  max-width:min(44vw,300px);overflow:hidden}
+#pdLbl{font-size:12.5px;line-height:1.2;color:var(--paper-dim);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.pdPulse{display:flex;align-items:flex-end;gap:3px;height:14px;flex:none}
+.pdPulse i{width:3px;height:4px;border-radius:1px;background:var(--gold);opacity:.4;
+  animation:pdBar 1150ms cubic-bezier(.37,0,.63,1) infinite}
+.pdPulse i:nth-child(2){animation-delay:150ms}
+.pdPulse i:nth-child(3){animation-delay:310ms}
+@keyframes pdBar{0%,100%{height:4px;opacity:.35}45%{height:14px;opacity:1}}
+
+/* обратный отсчёт — тонкая линия по низу кнопки, а не заливка */
+#nextProg{top:auto;bottom:0;height:2px;background:var(--gold);
+  box-shadow:0 0 12px rgba(226,180,120,.55)}
+
+/* одноразовая подсказка при первой паузе */
+#pdCoach{position:absolute;right:0;bottom:calc(100% + 12px);width:min(310px,76vw);
+  padding:13px 14px 14px;text-align:left;background:var(--ink-2);border:1px solid var(--line);
+  border-radius:12px 12px 3px 12px;box-shadow:var(--shadow);
+  animation:pdCoachIn 420ms cubic-bezier(.2,.9,.3,1) both}
+#pdCoach[hidden]{display:none}
+#pdCoach b{display:block;margin-bottom:5px;color:var(--gold-soft);font-size:13.5px;font-weight:500}
+#pdCoach p{margin:0;color:var(--paper-dim);font-size:13px;line-height:1.45}
+#pdGot{margin-top:11px;min-height:36px;padding:0 13px;border:1px solid var(--line);border-radius:2px;
+  background:transparent;color:var(--paper);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+  transition:.16s}
+#pdGot:hover{color:var(--gold);border-color:var(--gold)}
+#pdCoach::after{content:'';position:absolute;right:28px;top:100%;width:10px;height:10px;
+  background:var(--ink-2);border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+  transform:translateY(-6px) rotate(45deg)}
+@keyframes pdCoachIn{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
+
+@media (max-width:860px){
+  #paceDock{flex-direction:column;align-items:flex-end;gap:6px}
+  #pdNow{min-height:34px;max-width:min(56vw,230px);padding:0 11px 0 9px}
+  #pdLbl{font-size:12px}
+  #pdCoach{width:min(270px,72vw)}
+  #storyBeat{bottom:calc(118px + var(--sab));padding:0 10px}
+  #sbCard{padding:11px 13px 12px 14px}
+  #sbText{font-size:15px}
+  #sbKind{font-size:12px;letter-spacing:.16em}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .pdPulse i{animation:none;height:10px;opacity:.85}
+  #pdCoach{animation:none}
+  #sbCard{transition:none}
+  #storyBeat.typing #sbText::after{animation:none}
+}
 </style>
 </head>
 <body>
@@ -583,7 +697,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
 
 <!-- ================= ВЕРХНЯЯ ПАНЕЛЬ ================= -->
 <header id="topbar" class="hud">
-  <div id="brand">Ма<b>ф</b>ия</div>
+  <a id="brand" href="/" title="На главную" aria-label="Мафия — на главную">Ма<b>ф</b>ия</a>
   <div id="topStats">
     <div class="stat"><span class="k">День</span><span class="v" id="stDay">—</span></div>
     <div class="stat"><span class="k">Фаза</span><span class="v" id="stPhase">—</span></div>
@@ -659,9 +773,28 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
 </div>
 
 <!-- ================= ТЕМП ПОВЕСТВОВАНИЯ ================= -->
+<!-- Сюжетная подпись: то, что сейчас нужно прочитать, видно на самой сцене,
+     а не только в протоколе, который на телефоне закрыт. -->
+<div id="storyBeat" hidden aria-live="polite">
+  <div id="sbCard">
+    <span id="sbKind">Рассказ</span>
+    <p id="sbText"></p>
+  </div>
+</div>
+
 <div id="paceDock" hidden>
+  <div id="pdCoach" hidden>
+    <b>Это не зависание</b>
+    <p>Сейчас идёт рассказ — игра даёт время прочитать, что случилось за столом.
+       Партия продолжится сама. Если уже прочитали — нажмите «Дальше».</p>
+    <button class="pdGot" type="button" id="pdGot">Понятно</button>
+  </div>
+  <div id="pdNow">
+    <span class="pdPulse" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span id="pdLbl">Идёт рассказ</span>
+  </div>
   <button class="pdBtn icon" id="pauseBtn" title="Пауза" aria-label="Пауза">⏸</button>
-  <button class="pdBtn" id="nextBtn" title="Дальше"><span id="nextProg"></span><span class="lbl">Дальше ▸</span></button>
+  <button class="pdBtn" id="nextBtn" title="Дальше" aria-label="Дальше"><span id="nextProg"></span><span class="lbl">Дальше ▸</span></button>
 </div>
 
 <!-- ================= МЕНЮ ================= -->
@@ -1250,11 +1383,82 @@ const Pace = (() => {
     if(!on && pr) pr.style.width = '0%';
   }
 
+  const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* Подпись сбоку от кнопки: чем именно занята игра в эту секунду. */
+  let lastLabel = 'Идёт рассказ';
+  function setLabel(text){
+    lastLabel = text || 'Идёт рассказ';
+    const el = q('pdLbl');
+    if(el) el.textContent = lastLabel;
+  }
+
+  /* Сюжетная подпись на сцене. Без неё на узком экране текст рассказа
+     вообще не виден: он уходит в закрытую панель протокола. */
+  let typeTimer = 0, fullText = '';
+  function caption(text, kind){
+    const wrap = q('storyBeat'), box = q('sbText'), kd = q('sbKind');
+    if(!wrap || !box) return;
+    if(typeTimer){ clearInterval(typeTimer); typeTimer = 0; }
+    if(!text){
+      fullText = '';
+      wrap.classList.remove('in', 'typing');
+      return;
+    }
+    fullText = text;
+    if(kd) kd.textContent = kind || 'Рассказ';
+    wrap.hidden = false;
+    wrap.classList.add('in');
+    if(reduced()){
+      box.textContent = text;
+      wrap.classList.remove('typing');
+      return;
+    }
+    /* Текст появляется буквами: сразу видно, что что-то происходит.
+       Скорость связана с выбранным темпом повествования. */
+    box.textContent = '';
+    wrap.classList.add('typing');
+    const step = Math.max(8, Math.round(15 * typeFactor()));
+    let i = 0;
+    typeTimer = setInterval(() => {
+      if(paused) return;
+      i += 2;
+      box.textContent = text.slice(0, i);
+      if(i >= text.length){
+        clearInterval(typeTimer);
+        typeTimer = 0;
+        wrap.classList.remove('typing');
+      }
+    }, step);
+  }
+
+  /* Первая пауза за всю жизнь — объясняем, что происходит. Дальше молчим. */
+  const COACH_KEY = 'mafia-pace-coach-v1';
+  let coachDone = false;
+  function coach(){
+    if(coachDone) return;
+    coachDone = true;
+    let seen = false;
+    try { seen = localStorage.getItem(COACH_KEY) === '1'; } catch(e){}
+    if(seen) return;
+    const c = q('pdCoach');
+    if(!c) return;
+    c.hidden = false;
+    const close = () => {
+      c.hidden = true;
+      try { localStorage.setItem(COACH_KEY, '1'); } catch(e){}
+    };
+    const b = q('pdGot');
+    if(b) b.addEventListener('click', close, { once: true });
+    setTimeout(close, 12000);
+  }
+
   function finish(){
     const c = cur;
     cur = null;
     if(raf){ cancelAnimationFrame(raf); raf = 0; }
     dock(false);
+    caption(null);
     if(c) c.resolve();
   }
 
@@ -1274,13 +1478,15 @@ const Pace = (() => {
   }
 
   /* пауза фиксированной длины с кнопкой «Дальше» */
-  function hold(ms){
+  function hold(ms, label){
     if(cur) finish();
     ms = Math.round(ms || 0);
     if(ms < 60) return Promise.resolve();
+    setLabel(label);
     return new Promise(resolve => {
       cur = { resolve, total: ms, left: ms, startedAt: performance.now() };
       dock(true);
+      coach();
       if(!raf) raf = requestAnimationFrame(tick);
     });
   }
@@ -1291,13 +1497,30 @@ const Pace = (() => {
     const base = Math.min(17000, Math.max(minMs || 900, 620 + n * 45));
     return Math.round(base * mult);
   }
-  const beat = (text, minMs) => hold(readMs(text, minMs));
+  function beat(text, minMs, label){
+    const p = hold(readMs(text, minMs), label);
+    /* подпись ставим после hold(): он гасит предыдущую */
+    if(cur) caption(text, label);
+    return p;
+  }
   function bubbleHold(text, holdMs){
     const base = (holdMs === undefined) ? 1500 : holdMs;
     return Math.max(Math.round(base * mult), readMs(text, 900));
   }
 
-  const skip = () => { if(cur) finish(); };
+  function skip(){
+    /* Первое нажатие дописывает фразу целиком, второе — идёт дальше.
+       Случайный клик не съедает текст, который не успели прочитать. */
+    if(typeTimer){
+      clearInterval(typeTimer);
+      typeTimer = 0;
+      const box = q('sbText'), wrap = q('storyBeat');
+      if(box) box.textContent = fullText;
+      if(wrap) wrap.classList.remove('typing');
+      return;
+    }
+    if(cur) finish();
+  }
   const pending = () => !!cur;
   const isPaused = () => paused;
   function togglePause(force){
@@ -1308,13 +1531,16 @@ const Pace = (() => {
       b.classList.toggle('on', paused);
       b.title = paused ? 'Продолжить' : 'Пауза';
     }
+    const lb = q('pdLbl');
+    if(lb) lb.textContent = paused ? 'Пауза' : lastLabel;
     if(cur) cur.startedAt = performance.now();
     return paused;
   }
-  function clear(){ if(cur) finish(); paused = false; togglePause(false); dock(false); }
+  function clear(){ if(cur) finish(); caption(null); paused = false; togglePause(false); dock(false); }
 
   return { load, setMult, getMult, paint, hold, beat, readMs, bubbleHold,
-           skip, pending, togglePause, isPaused, clear, typeFactor };
+           skip, pending, togglePause, isPaused, clear, typeFactor,
+           setLabel, caption };
 })();
 
 /* =========================================================================
@@ -2444,12 +2670,10 @@ function validKillTargets(){
    замыкания иначе как публичным заявлением самого персонажа.
    ============================================================ */
 
-const HELPER = {
-  url: 'https://api.mistral.ai/v1/chat/completions',
-  key: 'oFWh0FTRcjjFiOusxkOKdCc52jwp0mdK',
-  primary: 'mistral-large-latest',
-  spare: 'mistral-small-latest'
-};
+/* Обращаемся только к своему серверу. Ключ доступа лежит там, в
+   переменной окружения, и в браузер не попадает. Раньше он был
+   вписан в эту страницу открытым текстом и уезжал каждому игроку. */
+const HELPER = { url: '/api/helper' };
 
 let helperCalls = 0, helperFails = 0, helperOff = false, helperWarned = false;
 
@@ -2464,7 +2688,7 @@ const AI = {
    таймаут, молчаливый откат к заготовкам движка */
 async function askHelper(system, user, temperature, budget){
   if(!AI.live()) return null;
-  const models = [HELPER.primary, HELPER.spare];
+  const models = ['primary', 'spare'];
   for(let attempt = 0; attempt < models.length; attempt++){
     const ctrl = new AbortController();
     /* Ждём ответа не больше семи секунд. Двадцать две секунды на две
@@ -2475,7 +2699,7 @@ async function askHelper(system, user, temperature, budget){
       helperCalls++;
       const r = await fetch(HELPER.url, {
         method: 'POST',
-        headers: { 'Content-Type':'application/json', 'Authorization':'Bearer ' + HELPER.key },
+        headers: { 'Content-Type':'application/json' },
         body: JSON.stringify({
           model: models[attempt],
           temperature: temperature,
@@ -2486,6 +2710,9 @@ async function askHelper(system, user, temperature, budget){
         signal: ctrl.signal
       });
       clearTimeout(timer);
+      /* 503 — помощник на сервере выключен (нет ключа). Не долбимся
+         второй моделью, а сразу уходим на свои заготовки: они играют целую партию. */
+      if(r.status === 503){ helperOff = true; return null; }
       if(!r.ok) throw new Error('HTTP ' + r.status);
       const data = await r.json();
       const raw = data && data.choices && data.choices[0] && data.choices[0].message
@@ -3558,7 +3785,7 @@ async function actOne(token){
     if(token !== gameToken) return;
     const who = p.isHuman ? (p.name + ' — это вы') : p.name;
     const job = p.job ? (', ' + p.job) : '';
-    UI.log('story', who + job + '. ' + (p.detail || '') + '.', 'Круг лиц');
+    UI.log('story', who + job + '. ' + (p.detail || '') + '.', 'Кто за столом');
     await wait(240);
   }
   if(token !== gameToken) return;
@@ -4028,7 +4255,7 @@ const UI = (() => {
       await wait((13 + Math.random()*17) * Pace.typeFactor());
     }
     el.querySelector('.caret').style.display = 'none';
-    await Pace.hold(Pace.bubbleHold(text, holdMs));
+    await Pace.hold(Pace.bubbleHold(text, holdMs), 'Говорят за столом');
     el.classList.remove('in');
     await wait(320);
     host.removeChild(el);
@@ -4036,12 +4263,22 @@ const UI = (() => {
     if(k >= 0) bubbles.splice(k, 1);
   }
   function positionBubbles(){
+    /* Пузырь центрируется по месту за столом (translateX(-50%)), поэтому
+       у крайних мест он выезжал за левый край: на экране 320px реплика
+       финала уезжала на -64px и читалась наполовину. Держим пузырь внутри
+       кадра с отступом в восемь пикселей и не даём ему уйти выше шапки.
+       Если пузырь шире экрана, он встаёт ровно по центру. */
+    const vw = window.innerWidth, vh = window.innerHeight, pad = 8;
     bubbles.forEach(b => {
       const p = Scene3D.project(b.idx);
       if(!p || !p.visible){ b.el.style.opacity = '0'; return; }
       b.el.style.opacity = '';
-      b.el.style.left = p.x + 'px';
-      b.el.style.top = p.y + 'px';
+      const halfW = b.el.offsetWidth / 2, h = b.el.offsetHeight;
+      const minX = Math.min(vw / 2, halfW + pad);
+      const maxX = Math.max(vw / 2, vw - halfW - pad);
+      const minY = Math.min(vh - pad, h + pad);
+      b.el.style.left = Math.max(minX, Math.min(maxX, p.x)) + 'px';
+      b.el.style.top = Math.max(minY, Math.min(vh - pad, p.y)) + 'px';
     });
   }
 
@@ -4481,7 +4718,7 @@ async function dawn(token, res){
   /* утренняя хроника города */
   const dawnLine = addEvent('dawn', pick(DAWN_LINES));
   UI.log('story', dawnLine, 'Утренняя хроника');
-  await Pace.beat(dawnLine, 1400);
+  await Pace.beat(dawnLine, 1400, 'Утро');
 
   /* знамение сюжета: чем дальше, тем меньше это похоже на игру */
   if(G.story){
@@ -4489,14 +4726,14 @@ async function dawn(token, res){
     if(omen){
       addEvent('omen', omen);
       UI.log('story', omen, G.story.scenario.title);
-      await Pace.beat(omen, 1300);
+      await Pace.beat(omen, 1300, 'Примета');
     }
   }
 
   if(res.victim === null){
     const calmLine = res.saved ? 'Этой ночью все выжили: доктор успел вовремя.' : 'Этой ночью никто не погиб.';
     UI.log('sys', calmLine);
-    await Pace.beat(calmLine, 1300);
+    await Pace.beat(calmLine, 1300, 'Утро');
     if(res.saved) addEvent('saved', 'Покушение сорвалось: кто-то успел раньше убийцы.');
   } else {
     const r = ROLES[res.victim];
@@ -4505,7 +4742,7 @@ async function dawn(token, res){
       gw(res.victim, 'his') + ' роль: ' + ROLE_INFO[r].ru + '.';
     UI.log('death', deathLine);
     await Scene3D.killAnim(res.victim, r);
-    await Pace.beat(deathLine, 1900);
+    await Pace.beat(deathLine, 1900, 'Что было ночью');
     if(res.victim === G.humanIdx){
       UI.toast('Вы погибли. Теперь вы наблюдатель и видите всё.');
       UI.log('sys', 'Вы выбыли из игры, но остаётесь за столом наблюдателем.');
@@ -4520,9 +4757,9 @@ async function dawn(token, res){
     const clue = makeClue();
     if(clue){
       addEvent('clue', 'Улика: ' + clue.text + '.');
-      const clueLine = 'Следствие без следователя: ' + clue.text + '. Верить или нет — решать столу.';
+      const clueLine = 'Улика: ' + clue.text + '. Это не доказательство — верить ей или нет, решаете вы.';
       UI.log('story', clueLine, 'Улика');
-      await Pace.beat(clueLine, 1500);
+      await Pace.beat(clueLine, 1500, 'Улика');
     }
     if(G.day >= 2 && Math.random() < 0.55){
       const note = makeNote();
@@ -4819,13 +5056,13 @@ async function votingRound(token, candidates, isRevote){
 
   if(!res.leaders.length || res.max === 0){
     UI.log('sys', 'Все воздержались — казни не будет.');
-    await Pace.hold(Math.round(1400 * Pace.getMult()));
+    await Pace.hold(Math.round(1400 * Pace.getMult()), 'Считаем голоса');
     return null;
   }
   if(res.tie){
     const tieLine = 'Равное число голосов у: ' + res.leaders.map(nameOf).join(', ') + '.';
     UI.log('vote', tieLine);
-    await Pace.beat(tieLine, 1500);
+    await Pace.beat(tieLine, 1500, 'Голоса разделились');
     return 'tie';
   }
   return res.leaders[0];
@@ -4845,7 +5082,7 @@ async function executePlayer(token, idx){
   const execLine = nameOf(idx) + ' ' + gw(idx, 'executed') + '. Роль: ' + ROLE_INFO[r].ru + '.';
   UI.log('death', execLine);
   await Scene3D.killAnim(idx, r);
-  await Pace.beat(execLine, 2000);
+  await Pace.beat(execLine, 2000, 'Решение стола');
   if(idx === G.humanIdx){
     UI.toast('Вас казнили. Досматриваете партию как наблюдатель.');
     UI.log('sys', 'Вы выбыли из игры, но остаётесь наблюдателем.');
@@ -4871,7 +5108,7 @@ async function endGame(token, winner){
     : 'Мафии стало не меньше, чем мирных. Мафия победила.';
   Panels.open('right');
   UI.log('sys', finLine);
-  await Pace.beat(finLine, 1800);
+  await Pace.beat(finLine, 1800, 'Развязка');
   const you = ROLES[G.humanIdx];
   const youWon = winner === 'town' ? you !== ROLE.MAFIA : you === ROLE.MAFIA;
   if(youWon) Sound.chordWin(); else Sound.chordLose();
@@ -4880,7 +5117,7 @@ async function endGame(token, winner){
     tail = epilogue(winner);
     addEvent('epilogue', tail);
     UI.log('story', tail, 'Эпилог — ' + G.story.scenario.title);
-    await Pace.beat(tail, 3000);
+    await Pace.beat(tail, 3000, 'Что было дальше');
   }
   /* РАЗВЯЗКА. Сначала говорит тот, кто позвал, потом всё переворачивается. */
   enterAct(3);
@@ -4889,7 +5126,7 @@ async function endGame(token, winner){
     if(fin){
       addEvent('reveal', fin);
       UI.log('horror', fin, 'Тот, кто позвал');
-      await Pace.beat(fin, 3000);
+      await Pace.beat(fin, 3000, 'Чем всё кончилось');
       tail = (tail ? tail + '\n\n' : '') + fin;
     }
   }
@@ -4898,7 +5135,7 @@ async function endGame(token, winner){
     if(tw){
       addEvent('twist', tw);
       UI.log('horror', tw, 'Развязка · ' + G.twist.title);
-      await Pace.beat(tw, 3000);
+      await Pace.beat(tw, 3000, 'Последний поворот');
       tail = (tail ? tail + '\n\n' : '') + tw;
     }
   }
@@ -5295,23 +5532,39 @@ const Install = (() => {
     if(!('serviceWorker' in navigator)) return 'unsupported';
     if(location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return 'insecure';
     const code = [
-      "const C='mafia-v1';",
+      "const C='mafia-v3';",
       "self.addEventListener('install', e => { self.skipWaiting(); });",
-      "self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));",
+      "self.addEventListener('activate', e => e.waitUntil((async () => {",
+      "  const keys = await caches.keys();",
+      "  await Promise.all(keys.filter(k => k !== C).map(k => caches.delete(k)));",
+      "  await self.clients.claim();",
+      "})()));",
       "self.addEventListener('fetch', e => {",
-      "  if(e.request.method !== 'GET') return;",
+      "  const req = e.request;",
+      "  if(req.method !== 'GET') return;",
+      "  let u;",
+      "  try { u = new URL(req.url); } catch(err){ return; }",
+      "  /* Чужие домены, api и живой поток событий не трогаем вовсе. */",
+      "  if(u.origin !== self.location.origin) return;",
+      "  if(u.pathname.indexOf('/api/') === 0) return;",
+      "  if((req.headers.get('accept') || '').indexOf('text/event-stream') >= 0) return;",
       "  e.respondWith((async () => {",
       "    try {",
-      "      const net = await fetch(e.request);",
-      "      const c = await caches.open(C);",
-      "      c.put(e.request, net.clone());",
+      "      const net = await fetch(req);",
+      "      /* В кэш кладём только успешные свои ответы. */",
+      "      if(net && net.ok && net.type === 'basic'){",
+      "        try { const c = await caches.open(C); await c.put(req, net.clone()); } catch(err){}",
+      "      }",
       "      return net;",
       "    } catch(err){",
-      "      const hit = await caches.match(e.request);",
+      "      const hit = await caches.match(req);",
       "      if(hit) return hit;",
-      "      const page = await caches.match(new Request('./'));",
-      "      if(page) return page;",
-      "      throw err;",
+      "      if(req.mode === 'navigate'){",
+      "        const page = await caches.match(new Request('./'));",
+      "        if(page) return page;",
+      "      }",
+      "      /* Раньше здесь был throw — каждый сбой сети падал в консоль. */",
+      "      return new Response('', { status: 504, statusText: 'offline' });",
       "    }",
       "  })());",
       "});"

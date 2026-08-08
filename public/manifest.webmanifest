@@ -1,0 +1,25 @@
+{
+  "name": "Мафия — вечер в шести лицах",
+  "short_name": "Мафия",
+  "description": "Сюжетная «Мафия»: живая 3D-сцена, озвучка разными голосами, игра с ботами или по сети на 6–20 человек.",
+  "lang": "ru",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0809",
+  "theme_color": "#0a0809",
+  "categories": ["games", "entertainment", "social"],
+  "icons": [
+    { "src": "/img/mask.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/img/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Играть с ботами", "short_name": "С ботами", "url": "/bots.html" },
+    { "name": "Играть по сети", "short_name": "По сети", "url": "/online.html" },
+    { "name": "Правила игры", "short_name": "Правила", "url": "/rules.html" }
+  ]
+}

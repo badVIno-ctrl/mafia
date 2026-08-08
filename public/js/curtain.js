@@ -36,7 +36,7 @@
       '<div class="curtain-whisper" id="curtainWhisper"></div>' +
       '</div>' +
       '<div class="curtain-foot">' +
-      '<div class="curtain-note" id="curtainNote">' + (opts.note || 'Поднимаем занавес') + '</div>' +
+      '<div class="curtain-note" id="curtainNote">' + (opts.note || 'Готовим стол…') + '</div>' +
       '<div class="curtain-thread"><i id="curtainBar"></i></div>' +
       '</div>';
     document.body.appendChild(root);

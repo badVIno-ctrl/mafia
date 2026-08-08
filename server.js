@@ -5,6 +5,7 @@
    ========================================================================= */
 'use strict';
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -98,6 +99,9 @@ function roomView(room, forUserId) {
     started: !!g,
     finished: g ? g.finished : false,
     autoStart: room.autoStart,
+    /* 'public' — стол объявлен в общем зале, сесть можно без ссылки.
+       'invite' — прежнее поведение: одна ссылка, одна дверь. */
+    visibility: room.visibility || 'invite',
     members: room.members.map(id => {
       const u = users.get(id);
       return {
@@ -130,9 +134,26 @@ function lobbyView(userId) {
       .sort((a, b) => (isOnline(b) - isOnline(a)) || a.name.localeCompare(b.name, 'ru'))
       .slice(0, 200)
       .map(publicUser),
-    /* Открытых столов в списке больше нет: чужая комната — не проходной
-       двор. Игрок видит только те, куда его позвали. */
-    rooms: [],
+    /* Общий зал: открытые столы, за которые можно сесть без ссылки. Так
+       новый игрок находит соперников, ничего ни у кого не спрашивая.
+       Закрытый стол в этот список не попадает — он живёт только по ссылке. */
+    rooms: [...rooms.values()]
+      .filter(r => r.visibility === 'public' && !r.game && humansIn(r).length > 0 &&
+        (r.members.length < Math.min(C.MAX_PLAYERS, r.size) || r.members.some(Bots.isBotId)))
+      .sort((a, b) => (b.members.length - a.members.length) || (a.createdAt - b.createdAt))
+      .slice(0, 40)
+      .map(r => ({
+        roomId: r.id, invite: r.invite, title: r.title,
+        host: (users.get(r.hostId) || {}).name || '—',
+        players: r.members.length,
+        humans: humansIn(r).length,
+        bots: r.members.filter(Bots.isBotId).length,
+        size: r.size,
+        free: Math.max(0, r.size - r.members.length),
+        scenario: (C.scenarioById(r.scenarioId) || {}).title || '—',
+        autoStart: r.autoStart,
+        waitingSec: Math.round((Date.now() - r.createdAt) / 1000)
+      })),
     invites: [...rooms.values()].filter(r => r.invites.indexOf(userId) >= 0).map(r => ({
       roomId: r.id, invite: r.invite, title: r.title,
       from: (users.get(r.hostId) || {}).name || '—', players: r.members.length, size: r.size
@@ -209,6 +230,7 @@ const MIME = {
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json',
+  '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
   '.woff2': 'font/woff2', '.woff': 'font/woff'
 };
@@ -239,27 +261,97 @@ function auth(req, url) {
   return u || null;
 }
 
+/* Кэш. Шрифты и three.js не меняются — им год и immutable; страницам —
+   обязательная сверка с сервером. Раньше всё уходило с no-store, и браузер
+   заново тянул шестнадцать файлов шрифтов на каждый переход. */
+function cacheFor(pathname, ext) {
+  if (ext === '.woff2' || ext === '.woff' || /^\/(fonts|vendor)\//.test(pathname))
+    return 'public, max-age=31536000, immutable';
+  if (ext === '.css' || ext === '.js' || ext === '.svg' || ext === '.png')
+    return 'public, max-age=3600, must-revalidate';
+  return 'no-cache';
+}
+
+function sendAsset(res, code, buf, pathname) {
+  const ext = path.extname(pathname);
+  res.writeHead(code, {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': cacheFor(pathname, ext),
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin'
+  });
+  res.end(buf);
+}
+
+/* Канонический адрес берём из запроса (или из SITE_URL за прокси),
+   чтобы sitemap и robots были верными на любом домене без правок. */
+function siteOrigin(req) {
+  if (process.env.SITE_URL) return String(process.env.SITE_URL).replace(/\/+$/, '');
+  const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
+  const host = (req.headers['x-forwarded-host'] || req.headers.host || 'localhost').split(',')[0].trim();
+  return proto + '://' + host;
+}
+
 function serveStatic(req, res, pathname) {
   let rel = decodeURIComponent(pathname);
-  if (rel === '/' ) rel = '/index.html';
+  if (rel === '/') rel = '/index.html';
+  /* Адреса без расширения читаются лучше и лучше индексируются:
+     /online и /bots — те же страницы, что и /online.html, /bots.html. */
+  if (/^\/(online|bots|rules)$/.test(rel)) rel += '.html';
   const file = path.join(PUBLIC, path.normalize(rel).replace(/^([.][.][/\\])+/, ''));
   if (!file.startsWith(PUBLIC)) return send(res, 403, { error: 'forbidden' });
   fs.readFile(file, (err, buf) => {
     if (err) {
-      // всё неизвестное — на главную
-      fs.readFile(path.join(PUBLIC, 'index.html'), (e2, home) => {
-        if (e2) return send(res, 404, 'Not found', 'text/plain; charset=utf-8');
-        send(res, 200, home, MIME['.html']);
+      /* Честные 404. Раньше любой мусорный адрес отдавал главную с кодом
+         200 — поисковики считают это дублями и режут весь сайт. */
+      fs.readFile(path.join(PUBLIC, '404.html'), (e2, page) => {
+        if (e2) return send(res, 404, 'Страница не найдена', 'text/plain; charset=utf-8');
+        res.writeHead(404, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' });
+        res.end(page);
       });
       return;
     }
-    send(res, 200, buf, MIME[path.extname(file)] || 'application/octet-stream');
+    sendAsset(res, 200, buf, file);
   });
 }
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://' + (req.headers.host || 'localhost'));
   const p = url.pathname;
+
+  /* ---------- служебные файлы для поисковиков ----------
+     Генерируются на лету, чтобы адреса были абсолютными и верными
+     на любом домене — ничего не надо править руками при выкладке. */
+  if (p === '/robots.txt') {
+    const o = siteOrigin(req);
+    const txt = 'User-agent: *\n' +
+      'Allow: /\n' +
+      'Disallow: /api/\n' +
+      'Disallow: /online.html?join=\n' +
+      '\nSitemap: ' + o + '/sitemap.xml\n';
+    res.writeHead(200, { 'Content-Type': MIME['.txt'], 'Cache-Control': 'public, max-age=3600' });
+    return res.end(txt);
+  }
+
+  if (p === '/sitemap.xml') {
+    const o = siteOrigin(req);
+    const today = new Date().toISOString().slice(0, 10);
+    const pages = [
+      { u: '/', pr: '1.0' },
+      { u: '/bots.html', pr: '0.9' },
+      { u: '/online.html', pr: '0.9' },
+      { u: '/rules.html', pr: '0.7' }
+    ];
+    const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+      pages.map(x => '  <url>\n    <loc>' + o + x.u + '</loc>\n' +
+        '    <lastmod>' + today + '</lastmod>\n' +
+        '    <changefreq>weekly</changefreq>\n' +
+        '    <priority>' + x.pr + '</priority>\n  </url>').join('\n') +
+      '\n</urlset>\n';
+    res.writeHead(200, { 'Content-Type': MIME['.xml'], 'Cache-Control': 'public, max-age=3600' });
+    return res.end(xml);
+  }
 
   if (!p.startsWith('/api/')) return serveStatic(req, res, p);
 
@@ -320,6 +412,40 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true, user: { id: me.id, name: me.name, token: me.token } });
     }
 
+    /* ---------- языковой помощник (прокси) ----------
+       Ключ живёт только здесь, в переменной окружения MISTRAL_API_KEY.
+       Раньше он лежал открытым текстом в public/bots.html и уезжал в
+       браузер каждому, кто открыл страницу. Если ключа нет, отвечаем
+       503, и клиент тихо играет на своих заготовках — партия не страдает. */
+    if (p === '/api/helper' && req.method === 'POST') {
+      const key = process.env.MISTRAL_API_KEY || '';
+      if (!key) return send(res, 503, { error: 'helper-off' });
+
+      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?';
+      if (!helperAllow(String(ip).split(',')[0].trim()))
+        return send(res, 429, { error: 'Слишком много запросов' });
+
+      const msgs = Array.isArray(body.messages) ? body.messages.slice(0, 8) : null;
+      if (!msgs) return send(res, 400, { error: 'Нет сообщений' });
+
+      try {
+        const upstream = await helperFetch(key, {
+          model: body.model === 'spare' ? 'mistral-small-latest' : 'mistral-large-latest',
+          temperature: Math.max(0, Math.min(1.5, Number(body.temperature) || 0.8)),
+          max_tokens: Math.max(64, Math.min(1200, Number(body.max_tokens) || 700)),
+          response_format: { type: 'json_object' },
+          messages: msgs.map(m => ({
+            role: m.role === 'system' ? 'system' : 'user',
+            content: String(m.content || '').slice(0, 6000)
+          }))
+        });
+        res.writeHead(upstream.status || 502, { 'Content-Type': MIME['.json'], 'Cache-Control': 'no-store' });
+        return res.end(upstream.body || '{}');
+      } catch (e) {
+        return send(res, 502, { error: 'helper-unreachable' });
+      }
+    }
+
     /* ---------- лобби ---------- */
     const me = auth(req, url);
     if (!me) return send(res, 401, { error: 'Нет авторизации' });
@@ -341,6 +467,9 @@ const server = http.createServer(async (req, res) => {
         invites: [],
         bots: [],
         size,
+        /* По умолчанию стол открыт: иначе новый игрок сидит один и ждёт,
+           пока ему кто-нибудь пришлёт ссылку. Закрыть — одним переключателем. */
+        visibility: body.visibility === 'invite' ? 'invite' : 'public',
         autoStart: body.autoStart !== false,
         scenarioId: body.scenarioId || (C.scenariosFor(size)[0] || C.SCENARIOS[0]).id,
         chat: [],
@@ -356,6 +485,54 @@ const server = http.createServer(async (req, res) => {
     const roomId = body.roomId || url.searchParams.get('roomId');
     const room = roomId ? rooms.get(roomId) : (me.roomId ? rooms.get(me.roomId) : null);
 
+    /* ---------- быстрая игра ----------
+       Одна кнопка вместо переписки: сажаем игрока за самый полный
+       открытый стол — там партия начнётся раньше всего. Если таких нет,
+       открываем новый и объявляем его в общем зале. */
+    if (p === '/api/rooms/quick' && req.method === 'POST') {
+      const best = [...rooms.values()]
+        .filter(r => r.visibility === 'public' && !r.game && humansIn(r).length > 0 &&
+          r.members.indexOf(me.id) < 0 &&
+          (r.members.length < Math.min(C.MAX_PLAYERS, r.size) || r.members.some(Bots.isBotId)))
+        .sort((a, b) => (b.members.length - a.members.length) || (a.createdAt - b.createdAt))[0];
+
+      if (best) {
+        /* Место живого человека важнее места бота: если свободных
+           стульев нет, один сосед-бот встаёт. */
+        if (best.members.length >= Math.min(C.MAX_PLAYERS, best.size)) dropBots(best, 1);
+        leaveRoom(me);
+        best.members.push(me.id);
+        best.invites = best.invites.filter(i => i !== me.id);
+        best.chat.push({ system: true, text: me.name + ' подсел за стол из общего зала.', ts: Date.now() });
+        me.roomId = best.id;
+        pushAll(best);
+        return send(res, 200, { room: roomView(best, me.id), joined: true });
+      }
+
+      leaveRoom(me);
+      const size = Math.max(C.MIN_PLAYERS, Math.min(C.MAX_PLAYERS, Number(body.size) || 8));
+      const room2 = {
+        id: uid('r'),
+        invite: crypto.randomBytes(12).toString('base64url'),
+        title: 'Стол ' + me.name,
+        hostId: me.id,
+        members: [me.id],
+        invites: [],
+        bots: [],
+        size,
+        visibility: 'public',
+        autoStart: true,
+        scenarioId: (C.scenariosFor(size)[0] || C.SCENARIOS[0]).id,
+        chat: [],
+        game: null,
+        createdAt: Date.now()
+      };
+      rooms.set(room2.id, room2);
+      me.roomId = room2.id;
+      pushAll(room2);
+      return send(res, 200, { room: roomView(room2, me.id), joined: false });
+    }
+
     if (p === '/api/rooms/state') {
       if (!room) return send(res, 404, { error: 'Комната не найдена' });
       return send(res, 200, { room: roomView(room, me.id) });
@@ -367,8 +544,9 @@ const server = http.createServer(async (req, res) => {
       if (!target) return send(res, 404, { error: 'Комната не найдена — попросите ссылку заново' });
       /* Дверь одна: либо ссылка-приглашение, либо личное приглашение хозяина,
          либо вы уже за этим столом. */
-      const allowed = !!inviteToken || target.members.indexOf(me.id) >= 0 || target.invites.indexOf(me.id) >= 0;
-      if (!allowed) return send(res, 403, { error: 'В эту комнату пускают только по ссылке-приглашению' });
+      const allowed = !!inviteToken || target.visibility === 'public' ||
+        target.members.indexOf(me.id) >= 0 || target.invites.indexOf(me.id) >= 0;
+      if (!allowed) return send(res, 403, { error: 'Этот стол закрыт — попросите у хозяина ссылку-приглашение' });
       if (target.game) return send(res, 409, { error: 'Партия уже идёт' });
       if (target.members.indexOf(me.id) < 0) {
         /* Место, занятое ботом, освобождается для человека: за этим и нужна
@@ -435,6 +613,7 @@ const server = http.createServer(async (req, res) => {
       if (body.scenarioId !== undefined) room.scenarioId = body.scenarioId;
       if (body.size !== undefined) room.size = Math.max(C.MIN_PLAYERS, Math.min(C.MAX_PLAYERS, Number(body.size) || 8));
       if (body.autoStart !== undefined) room.autoStart = !!body.autoStart;
+      if (body.visibility !== undefined) room.visibility = body.visibility === 'invite' ? 'invite' : 'public';
       if (body.title !== undefined) room.title = String(body.title).slice(0, 40);
       pushAll(room);
       return send(res, 200, { room: roomView(room, me.id) });
@@ -515,6 +694,44 @@ const server = http.createServer(async (req, res) => {
     return send(res, 500, { error: 'Внутренняя ошибка: ' + e.message });
   }
 });
+
+/* Простой ограничитель: чужой ключ не должен стать бесплатным API для всего
+   интернета — больше шестидесяти обращений в минуту с одного адреса не пройдёт. */
+const helperHits = new Map();
+function helperAllow(ip) {
+  const now = Date.now();
+  const rec = helperHits.get(ip) || { n: 0, until: now + 60000 };
+  if (now > rec.until) { rec.n = 0; rec.until = now + 60000; }
+  rec.n++;
+  helperHits.set(ip, rec);
+  if (helperHits.size > 5000) helperHits.clear();
+  return rec.n <= 60;
+}
+
+function helperFetch(key, payload) {
+  return new Promise((resolve, reject) => {
+    const data = Buffer.from(JSON.stringify(payload), 'utf8');
+    const rq = https.request({
+      hostname: 'api.mistral.ai',
+      path: '/v1/chat/completions',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': data.length,
+        Authorization: 'Bearer ' + key
+      }
+    }, r => {
+      let s = '';
+      r.setEncoding('utf8');
+      r.on('data', c => { s += c; if (s.length > 2e6) r.destroy(); });
+      r.on('end', () => resolve({ status: r.statusCode, body: s }));
+    });
+    /* Семь секунд — и довольно: долгая тишина за столом хуже короткой реплики. */
+    rq.setTimeout(7000, () => rq.destroy(new Error('timeout')));
+    rq.on('error', reject);
+    rq.end(data);
+  });
+}
 
 function leaveRoom(user) {
   if (!user.roomId) return;
