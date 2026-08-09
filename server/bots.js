@@ -474,6 +474,16 @@ function tick(room, now) {
       if (job.kind === 'night') {
         const a = nightAction(game, me, sus);
         if (a && a.target) { game.action(me.id, a.type, a.target); changed = true; }
+        /* «Следствие»: способ выбирает мафия, и бот выбирает его как игрок —
+           обычно тихо, но если город уже поджимает, идёт грубо и быстро,
+           чтобы врач не успел. Без этого выбора ночь всегда была бы «тихой»
+           и режим потерял бы половину смысла. */
+        if (game.mode === 'inquest' && game.isMafia(me.id) && !game.nightMethod) {
+          const pressed = game.aliveMafia().length * 2 >= game.alive().length;
+          const method = pressed ? 'rough' : (chance(0.35) ? 'clean' : 'quiet');
+          game.action(me.id, 'method', method);
+          changed = true;
+        }
       } else if (job.kind === 'vote') {
         const t = voteChoice(game, me, sus);
         if (t) {

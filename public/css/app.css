@@ -66,6 +66,18 @@
   color:var(--tallow);font-weight:600;font-size:var(--t-xs);
 }
 .act.second{background:linear-gradient(180deg,rgba(20,17,16,.9),rgba(8,7,7,.94))}
+/* Третий режим — новый, и на афише это должно быть видно без слова «новое»:
+   тёплая кромка и метка «новый режим» в углу. */
+.act.third{
+  background:linear-gradient(180deg,rgba(28,20,18,.94),rgba(10,8,8,.96));
+  border-color:var(--line-warm);
+}
+.act.third::before{
+  content:"новый режим";position:absolute;top:0;right:0;z-index:1;
+  padding:4px 10px;border-bottom-left-radius:var(--r);
+  font:600 10px/1.4 var(--sans);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink);background:var(--tallow);
+}
 
 /* --------------------------- кто сейчас на сайте --------------------------- */
 .now{margin-top:var(--s6)}
@@ -116,3 +128,27 @@ a:focus-visible,button:focus-visible,input:focus-visible,[tabindex]:focus-visibl
   .brand-sub{display:none}
   .topbar{padding-left:var(--s4);padding-right:var(--s4);gap:var(--s2)}
 }
+
+/* =========================================================================
+   Экспертиза («Следствие»): окно «кого и по какой примете проверить».
+   Обычный лист поверх сцены — своего компонента здесь не нужно.
+   ========================================================================= */
+.sheet{
+  position:fixed;inset:0;z-index:40;display:grid;place-items:center;
+  background:rgba(6,5,6,.72);padding:var(--s4);
+}
+.sheet .expert{
+  max-width:640px;width:100%;max-height:80vh;overflow:auto;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+  padding:var(--s5);box-shadow:0 24px 60px rgba(0,0,0,.6);
+}
+.sheet .expert h3{margin:0 0 var(--s2)}
+.sheet .grid2{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+  gap:var(--s2);margin:var(--s4) 0;
+}
+.sheet .grid2 .btn{justify-content:flex-start;text-align:left}
+@media (max-width:520px){ .sheet .grid2{grid-template-columns:1fr} }
+
+/* Разделитель внутри ряда кнопок: способ и экспертиза стоят отдельной группой. */
+.actiondock .sep{display:inline-block;width:1px;align-self:stretch;background:var(--line);margin:0 var(--s2)}

@@ -35,7 +35,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
 async function startServer(){
   const srv = spawn('node', ['server.js'], {
-    cwd: ROOT, env: { ...process.env, PORT: String(PORT) }, stdio: ['ignore', 'pipe', 'pipe']
+    cwd: ROOT, env: { ...process.env, PORT: String(PORT), MAFIA_DATA: require('os').tmpdir() + '/mafia-test-users-e2eplay.json' }, stdio: ['ignore', 'pipe', 'pipe']
   });
   /* Ждём не строку в логе, а реальный ответ по HTTP. */
   const deadline = Date.now() + 25000;

@@ -212,7 +212,13 @@
     }).slice(0, 60);
 
     if (!list.length) {
-      setHTML(box, '<div class="empty">Никого не нашлось. Пришлите друзьям ссылку — они назовутся и появятся здесь.</div>');
+      /* Список показывает только тех, кто сейчас на сайте, поэтому пустота
+         здесь — обычное дело, и объяснить её надо по-разному: «никого нет»
+         и «по вашему запросу никого нет» — это две разные новости. */
+      setHTML(box, '<div class="empty">' + (q
+        ? 'По запросу «' + API.esc(q) + '» на сайте никого нет.'
+        : 'Кроме вас на сайте сейчас никого. Пришлите друзьям ссылку на стол — ' +
+          'они откроют её, назовутся и сразу появятся здесь.') + '</div>');
       return;
     }
     box._html = null;
@@ -230,8 +236,14 @@
   }
 
   function renderRoom(room) {
+    var wasStarted = state.room && state.room.started;
     state.room = room;
-    if (room && room.started) { show('game'); renderGame(room.game); return; }
+    if (room && room.started) {
+      /* Новая партия начинается в 2D: плоский стол встаёт сразу и одинаково
+         у всех. Кто хочет объём — нажмёт кнопку «3D». */
+      if (!wasStarted) ViewMode.resetForNewGame();
+      show('game'); renderGame(room.game); return;
+    }
     var st = stg();
     if (st) { st.dispose(); state.marks.clear(); }
     if (st || !state.stage) { state.stage = null; state.seatsKey = ''; }
@@ -256,6 +268,7 @@
       setText($('sizeVal'), String(room.size));
       $('autoStart').checked = room.autoStart;
       $('openTable').checked = room.visibility !== 'invite';
+      if ($('modeInquest')) $('modeInquest').checked = room.mode === 'inquest';
       $('btnStart').disabled = !room.canStart;
       setText($('btnStart'), room.canStart ? 'Начать партию (' + room.members.length + ')' : 'Нужно хотя бы шесть человек');
       /* Добор ботами: сколько мест осталось — столько и предлагаем занять. */
@@ -566,7 +579,9 @@
 
   /* ---------------------------- карта роли ---------------------------- */
   function renderRole(g, you) {
-    var key = JSON.stringify([you.role, you.alive, (you.partners || []).length, (you.checks || []).length]);
+    var iq = g.inquest || null;
+    var key = JSON.stringify([you.role, you.alive, (you.partners || []).length, (you.checks || []).length,
+      iq ? (iq.myTraitsRu || []).join(',') : '']);
     if (state.roleKey === key) return;
     state.roleKey = key;
     var h = '<div class="role">' + ico(Icons.role(you.role), 22) +
@@ -583,6 +598,14 @@
           (c.isMafia ? 'мафия' : 'мирный') + '</b>';
       }).join('; ') + '</div>';
     }
+    /* «Следствие»: свои приметы — половина игры. Их надо держать на виду
+       рядом с ролью, а не искать в правилах: именно про них придётся
+       врать, и именно по ним вас будут ловить. */
+    if (iq && iq.myTraitsRu && iq.myTraitsRu.length) {
+      h += '<div class="known"><b>Ваши приметы:</b> ' +
+        iq.myTraitsRu.map(function (t) { return API.esc(t); }).join(', ') +
+        '<span class="muted"> — их знаете только вы. Улики называют приметы того, кто убивал.</span></div>';
+    }
     if (you.alive === false && !g.finished) h += '<div class="known muted">Вы выбыли, но видите всё.</div>';
     setHTML($('rolePane'), h);
   }
@@ -590,7 +613,9 @@
   /* ---------------------------- кнопки действий ---------------------------- */
   function renderActions(g, you, room) {
     var act = you.canAct;
-    var key = [g.finished, act, you.ready, you.myVote, you.healBlocked, you.alive, g.speakerId].join('|');
+    var iq = g.inquest || null;
+    var key = [g.finished, act, you.ready, you.myVote, you.healBlocked, you.alive, g.speakerId,
+      iq ? [iq.method, iq.expertDone, iq.expertVotes, iq.clues.length].join(',') : ''].join('|');
     if (state.actionsKey === key) return;
     state.actionsKey = key;
 
@@ -607,6 +632,24 @@
     } else if (act === 'talk') {
       a = '<button class="btn sm ' + (you.ready ? 'on' : '') + '" id="btnReady">' +
         (you.ready ? 'Готов' : 'Я высказался') + '</button>';
+    }
+
+    /* Способ убийства: решение мафии, и оно стоит рядом с выбором жертвы. */
+    if (iq && act === 'kill') {
+      a += '<span class="sep"></span><span class="pill">Способ:</span>' +
+        (iq.methods || []).map(function (m) {
+          return '<button class="btn sm ' + (iq.method === m.id ? 'on' : '') +
+            '" data-method="' + m.id + '" title="' + API.esc(m.note) + '">' + API.esc(m.ru) + '</button>';
+        }).join('');
+    }
+
+    /* Экспертиза: одна в день и только вместе со всем столом. Кнопка
+       появляется днём и только когда есть что проверять. */
+    if (iq && act === 'talk' && you.alive && iq.clues.length) {
+      a += '<span class="sep"></span>' + (iq.expertDone
+        ? '<span class="pill">Экспертиза на сегодня сделана</span>'
+        : '<button class="btn sm" id="btnExpert">Заказать экспертизу' +
+          (iq.expertVotes ? ' (' + iq.expertVotes + ' из ' + iq.expertNeed + ')' : '') + '</button>');
     }
     setHTML($('actions'), a);
   }
@@ -836,7 +879,8 @@
   }
 
   document.addEventListener('click', function (e) {
-    var el = e.target.closest('[data-join],[data-sit],[data-invite],[data-kick],[data-scen],[data-target],[data-tab],[data-say],[data-panel]');
+    var el = e.target.closest('[data-join],[data-sit],[data-invite],[data-kick],[data-scen],[data-target],' +
+      '[data-tab],[data-say],[data-panel],[data-method],[data-expert]');
     if (el) {
       if (el.dataset.join) return call('/api/rooms/join', { roomId: el.dataset.join });
       /* Сесть за открытый стол — без ссылки и без приглашения. */
@@ -858,11 +902,54 @@
         return;
       }
       if (el.dataset.panel) return openPanel(el.dataset.panel);
+      if (el.dataset.method) return act('method', el.dataset.method);
+      if (el.dataset.expert) return act('expert', el.dataset.expert);
       if (el.dataset.target) return el.dataset.target === 'skip' ? act('vote', 'skip') : pickTarget(el.dataset.target);
     }
+    /* Экспертиза заказывается парой «кого» и «по какой примете»: город
+       складывается, и один факт становится общим. Спрашиваем в два шага,
+       чтобы не строить отдельного окна. */
+    if (e.target.closest('#btnExpert')) return askExpert();
     if (e.target.closest('#btnReady')) return act('ready', null);
     if (e.target.closest('#btnPass')) return act('pass', null);
     if (e.target.closest('#btnRestart')) return call('/api/rooms/restart');
+  });
+
+  /* Экспертиза: выбираем, кого и по какой примете проверить. Список примет
+     — только те, что уже всплывали в уликах: проверять то, о чём улик не
+     было, режим не позволяет, и это правило игры, а не ограничение окна. */
+  function askExpert() {
+    var g = state.game;
+    if (!g || !g.inquest) return;
+    var iq = g.inquest;
+    var alive = g.players.filter(function (p) { return p.alive; });
+    var traits = [];
+    iq.clues.forEach(function (c) {
+      if (!traits.some(function (t) { return t.id === c.traitId; })) {
+        traits.push({ id: c.traitId, text: c.text });
+      }
+    });
+    if (!traits.length || !alive.length) return API.toast('Проверять пока нечего', 'bad');
+
+    var h = '<div class="expert"><h3>Экспертиза</h3>' +
+      '<p class="note">Один факт в день, и заказать его должен весь стол: ' +
+      'нужно ' + iq.expertNeed + ' голоса из ' + alive.length + '. ' +
+      'Выберите, кого проверить и по какой примете из улик.</p>' +
+      '<div class="grid2">';
+    alive.forEach(function (p) {
+      traits.forEach(function (t) {
+        h += '<button class="btn sm" data-expert="' + p.id + ':' + t.id + '">' +
+          API.esc(p.name) + ' · ' + API.esc(t.text) + '</button>';
+      });
+    });
+    h += '</div><button class="btn ghost sm" id="expertClose">Закрыть</button></div>';
+    var box = $('expertBox');
+    setHTML(box, h);
+    box.hidden = false;
+  }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('#expertClose') || e.target.id === 'expertBox') $('expertBox').hidden = true;
+    if (e.target.closest('[data-expert]')) $('expertBox').hidden = true;
   });
 
   /* Быстрая игра: одна кнопка вместо переписки со знакомыми. Сервер сам
@@ -891,9 +978,27 @@
   });
 
   $('btnCreate').addEventListener('click', function () {
-    call('/api/rooms/create', { size: 8, autoStart: true, visibility: 'public' })
-      .then(function (r) { if (r) { renderRoom(r.room); API.toast('Стол открыт — его видно в общем зале'); } });
+    /* Режим выбирают до партии: адрес ?mode=inquest приводит человека сразу
+       к столу «Следствия» — по такой ссылке зовут в этот режим с главной. */
+    var wantInquest = false;
+    try { wantInquest = new URLSearchParams(location.search).get('mode') === 'inquest'; } catch (e) { }
+    call('/api/rooms/create', {
+      size: 8, autoStart: true, visibility: 'public',
+      mode: wantInquest ? 'inquest' : 'classic'
+    }).then(function (r) {
+      if (!r) return;
+      renderRoom(r.room);
+      API.toast(r.room.mode === 'inquest'
+        ? 'Стол «Следствия» открыт — его видно в общем зале'
+        : 'Стол открыт — его видно в общем зале');
+    });
   });
+  if ($('modeInquest')) {
+    $('modeInquest').addEventListener('change', function () {
+      call('/api/rooms/config', { mode: this.checked ? 'inquest' : 'classic' })
+        .then(function (r) { if (r) renderRoom(r.room); });
+    });
+  }
   $('btnBots').addEventListener('click', function () {
     call('/api/rooms/bots', { on: true }).then(function (r) {
       if (r) { renderRoom(r.room); API.toast('Соседи сели за стол'); }
@@ -950,13 +1055,15 @@
     var btn = $('btnView');
     if (!btn) return;
     var flat = ViewMode.isFlat();
-    /* Знак показывает то, что стоит на сцене сейчас, а подпись обещает то,
-       что произойдёт по нажатию: так кнопка не врёт ни в одном состоянии. */
-    setHTML(btn, ico(ViewMode.icon(), 20));
-    btn.title = ViewMode.title() + ' · ' + ViewMode.action();
+    /* На кнопке написан тот вид, который она включит: стоишь в 2D — читаешь
+       «3D». Подсказка говорит то же словами. Никаких театральных названий:
+       «2D» и «3D» понимает любой игрок без объяснений. */
+    setHTML(btn, ico(ViewMode.icon(ViewMode.next()), 18) +
+      '<b class="vlabel">' + ViewMode.short() + '</b>');
+    btn.className = 'iconbtn viewbtn';
+    btn.title = ViewMode.action();
     btn.setAttribute('aria-label', ViewMode.action());
-    btn.setAttribute('aria-pressed', flat ? 'true' : 'false');
-    btn.style.color = flat ? 'var(--tallow)' : '';
+    btn.setAttribute('aria-pressed', ViewMode.isDeep() ? 'true' : 'false');
     btn.disabled = ViewMode.locked();
     btn.hidden = false;
   }
@@ -965,9 +1072,7 @@
     $('btnView').addEventListener('click', function () {
       if (ViewMode.locked()) return API.toast(ViewMode.action(), 'bad');
       var mode = ViewMode.toggle();
-      API.toast(mode === ViewMode.FLAT
-        ? 'Писаный задник: плоские фигуры на подставках'
-        : 'Глубокая сцена: выгородка, свет и объёмные фигуры');
+      API.toast(mode === ViewMode.FLAT ? '2D-вид: плоский стол' : '3D-вид: объёмная сцена');
     });
   }
   ViewMode.onChange(function () {

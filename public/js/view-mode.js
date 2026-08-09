@@ -1,25 +1,32 @@
 /* =============================================================================
-   view-mode.js — какая декорация стоит на сцене.
+   view-mode.js — какой вид стоит на сцене: 2D или 3D.
 
-   В театре одну и ту же пьесу играют по-разному: можно выстроить выгородку в
-   глубину, а можно повесить писаный задник и вынести плоские фигуры на
-   подставках. Здесь ровно этот выбор и живёт — один для обеих страниц.
+   Правило простое, и оно должно читаться без объяснений: партия всегда
+   начинается в 2D-виде. Плоский стол встаёт мгновенно, работает на любом
+   телефоне и никогда не показывает недорисованную фигуру. Кто хочет объём —
+   нажимает одну кнопку и переключается на 3D-вид.
 
-   Базовый вид — глубокая сцена. Плоский включается кнопкой и запоминается.
-   Порядок решения:
-     1. адрес: ?view=flat | ?view=deep (то же, что 2d | 3d) — сильнее всего,
-        чтобы ссылкой можно было позвать человека сразу в нужный вид;
-     2. прошлый выбор игрока из localStorage;
-     3. глубокая сцена.
-   Если в браузере нет WebGL, выбора нет вовсе: остаётся плоский задник, и
-   кнопка честно говорит почему.
+   Слова тоже простые. Раньше эти два состояния назывались «писаный задник» и
+   «глубокая сцена»: красиво, но игрок не знал, что он получит по нажатию.
+   Теперь на кнопке написано «3D», а во всплывающей подсказке — ровно то, что
+   произойдёт: «Переключить на 3D-вид».
+
+   Порядок решения при загрузке страницы:
+     1. адрес: ?view=3d | ?view=2d — сильнее всего, чтобы ссылкой можно было
+        позвать человека сразу в нужный вид;
+     2. 2D — всегда.
+   Выбор нарочно не запоминается между партиями: «начал новую игру — видишь
+   2D» важнее, чем «сайт помнит мой прошлый выбор». Внутри партии выбор,
+   разумеется, держится: переключение живёт в памяти страницы.
+
+   Если в браузере нет WebGL, выбора нет вовсе: остаётся 2D, и кнопка честно
+   говорит почему.
    ============================================================================= */
 (function (w) {
   'use strict';
 
-  var KEY = 'mafia.scene.view';
-  var DEEP = 'deep';
-  var FLAT = 'flat';
+  var DEEP = 'deep';      /* 3D-вид: объёмная сцена */
+  var FLAT = 'flat';      /* 2D-вид: плоский стол */
 
   var listeners = [];
   var forced = null;      /* причина, по которой выбора нет */
@@ -47,17 +54,10 @@
     try { return normalize(new URLSearchParams(w.location.search).get('view')); }
     catch (e) { return null; }
   }
-  function fromStore() {
-    try { return normalize(w.localStorage.getItem(KEY)); }
-    catch (e) { return null; }
-  }
-  function store(mode) {
-    try { w.localStorage.setItem(KEY, mode); } catch (e) { /* приватный режим */ }
-  }
 
   function resolve() {
     if (!webglOk()) { forced = 'no-webgl'; return FLAT; }
-    return fromUrl() || fromStore() || DEEP;
+    return fromUrl() || FLAT;
   }
 
   function paintBody(mode) {
@@ -85,20 +85,22 @@
     locked: function () { return !!ViewMode.lockedBy(); },
 
     /** Сменить вид. Возвращает итоговый режим — он может не совпасть с просьбой. */
-    set: function (mode, opts) {
+    set: function (mode) {
       var want = normalize(mode);
       if (!want) return ViewMode.get();
       if (forced && want !== FLAT) return ViewMode.get();
       var prev = ViewMode.get();
       if (want === prev) return prev;
       current = want;
-      if (!(opts && opts.temporary)) store(want);
       paintBody(want);
       listeners.forEach(function (fn) {
         try { fn(want, prev); } catch (e) { /* один слушатель не роняет остальные */ }
       });
       return want;
     },
+
+    /** Новая партия начинается в 2D — всегда и на обеих страницах. */
+    resetForNewGame: function () { return ViewMode.set(FLAT); },
 
     toggle: function () { return ViewMode.set(ViewMode.isFlat() ? DEEP : FLAT); },
 
@@ -110,13 +112,15 @@
       return function () { listeners = listeners.filter(function (x) { return x !== fn; }); };
     },
 
-    /* Названия. Одни и те же слова на обеих страницах и в озвучке. */
-    title: function (mode) { return (mode || ViewMode.get()) === FLAT ? 'Плоский задник' : 'Глубокая сцена'; },
+    /* Названия. Одни и те же слова на обеих страницах: 2D и 3D понимает каждый. */
+    title: function (mode) { return (mode || ViewMode.get()) === FLAT ? '2D-вид' : '3D-вид'; },
+    /** Короткая надпись на кнопке — это тот вид, который она включит. */
+    short: function () { return ViewMode.isFlat() ? '3D' : '2D'; },
     icon: function (mode) { return (mode || ViewMode.get()) === FLAT ? 'stageflat' : 'stagedeep'; },
-    /* Подпись кнопки: она обещает то, что произойдёт по нажатию. */
+    /* Подсказка кнопки: она обещает то, что произойдёт по нажатию. */
     action: function () {
-      if (forced === 'no-webgl') return 'В этом браузере нет WebGL — играем на плоском заднике';
-      return ViewMode.isFlat() ? 'Поставить глубокую сцену' : 'Повесить плоский задник';
+      if (forced === 'no-webgl') return 'В этом браузере нет 3D — играем в 2D-виде';
+      return ViewMode.isFlat() ? 'Переключить на 3D-вид' : 'Переключить на 2D-вид';
     }
   };
 

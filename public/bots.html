@@ -140,6 +140,10 @@ body.night #vignette{opacity:1;background:radial-gradient(ellipse at 50% 46%,rgb
 @media (prefers-reduced-motion:reduce){ .tbtn{transition:color .16s var(--ease)} .tbtn:hover{transform:none} }
 .tbtn.on{color:var(--gold);border-color:var(--gold)}
 .tbtn.wide{width:auto;padding:0 13px;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
+/* Кнопка вида: знак плюс надпись того вида, который она включит. Надпись
+   читается мгновенно — «3D» не нужно расшифровывать. */
+.tbtn.viewbtn{width:auto;padding:0 9px;gap:5px;display:inline-flex;align-items:center;justify-content:center}
+.tbtn.viewbtn .vlabel{font-family:var(--sans,inherit);font-size:12px;font-weight:600;letter-spacing:.08em}
 
 /* явный выход из вида сверху — чтобы нельзя было застрять в режиме */
 #topExit{position:fixed;z-index:9;left:50%;transform:translateX(-50%);
@@ -748,7 +752,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
   <div id="topspace"></div>
   <button class="tbtn deskOnly" id="btnMute" title="Звук" aria-label="Звук" data-ico="sound"></button>
   <button class="tbtn deskOnly" id="btnVoice" title="Читать реплики вслух" aria-label="Читать реплики вслух" data-ico="mask"></button>
-  <button class="tbtn deskOnly" id="btnView" title="Вид сцены" aria-label="Вид сцены" aria-pressed="false"></button>
+  <button class="tbtn deskOnly" id="btnView" title="Переключить на 3D-вид" aria-label="Переключить на 3D-вид" aria-pressed="false"></button>
   <button class="tbtn on deskOnly" id="btnLight" title="Яркость сцены" aria-label="Свет" data-ico="candle"></button>
   <button class="tbtn deskOnly" id="btnTop" title="Вид сверху — весь стол" aria-label="Вид сверху — весь стол" aria-pressed="false">⍟</button>
   <button class="tbtn deskOnly" id="btnInstall" title="Установить игру на устройство" aria-label="Установить игру на устройство" hidden>⤓</button>
@@ -848,7 +852,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
     <div class="sheetGrid">
       <button class="mItem" id="mRole"><b>Моя роль</b><small>Карта и тайные записи</small></button>
       <button class="mItem" id="mLog"><b>Протокол</b><small>Всё, что сказано за столом</small></button>
-      <button class="mItem" id="mView"><b>Декорация</b><small id="mViewSt">Глубокая сцена</small></button>
+      <button class="mItem" id="mView"><b>Вид сцены</b><small id="mViewSt">2D-вид</small></button>
       <button class="mItem" id="mTop"><b>Вид сверху</b><small>Весь стол целиком</small></button>
       <button class="mItem" id="mLight"><b>Свет</b><small id="mLightSt">Полный</small></button>
       <button class="mItem" id="mSound"><b>Звук</b><small id="mSoundSt">Включён</small></button>
@@ -1096,7 +1100,12 @@ let modelsBuilt = false;
    загрузчик вызывает её, когда three.js действительно пришёл. */
 let buildModels = null;
 async function ensureThree(){
-  if(THREE && THREE.Vector3) return true;
+  /* Проверять надо не «есть ли THREE», а «настоящая ли это библиотека».
+     Заглушка ниже отвечает функцией на любое обращение, в том числе на
+     Vector3, — и с прежней проверкой ensureThree честно докладывал, что
+     three.js уже загружен. Партия начинается в 2D, заглушка ставится
+     сразу, и кнопка «3D» после этого не работала вовсе. */
+  if(THREE && THREE.Vector3 && !THREE.__stub) return true;
   if(!webglSupported()){ SCENE_FALLBACK_REASON = 'no-webgl'; return false; }
   if(!threeReady){
     threeReady = (async () => {
@@ -1118,14 +1127,14 @@ async function ensureThree(){
   return threeReady;
 }
 
-/* Базовый вид — глубокая сцена; плоский задник берётся из выбора игрока или
-   из отсутствия WebGL. Решение принимает один общий модуль view-mode.js. */
+/* Партия начинается в 2D: плоский стол встаёт мгновенно и работает везде.
+   3D игрок включает сам кнопкой. Решение принимает общий модуль view-mode.js. */
 USE_2D = window.ViewMode ? window.ViewMode.isFlat() : false;
 if(!USE_2D){
   const okThree = await ensureThree();
   if(!okThree){
     USE_2D = true;
-    if(window.ViewMode) window.ViewMode.set('flat', { temporary: true });
+    if(window.ViewMode) window.ViewMode.set('flat');
   }
 }
 
@@ -1138,6 +1147,7 @@ if(!THREE){
   const stub = function(){ return {}; };
   THREE = new Proxy({}, {
     get(_, k){
+      if(k === '__stub') return true;
       if(k === 'Vector3'){
         return function Vector3(x, y, z){ this.x = x || 0; this.y = y || 0; this.z = z || 0; };
       }
@@ -1804,7 +1814,7 @@ const Sound = (() => {
    ========================================================================= */
 let MODELS = null;
 let LOWQ = false, sg = (hi) => hi;
-let cvs, texFromCanvas, roundRect, disposeTree, feltCanvas, faceCanvas,
+let cvs, texFromCanvas, roundRect, disposeTree, feltCanvas,
     cardBackCanvas, cardFaceCanvas, nameCanvas, crossCanvas,
     buildFigure, buildChair, buildRoomShared, buildLampShared, buildTableShared;
 
@@ -1812,7 +1822,7 @@ function initModels(){
   MODELS = createModels(THREE, { ROLE, ROLE_INFO });
   LOWQ = MODELS.LOWQ; sg = MODELS.sg;
   cvs = MODELS.cvs; texFromCanvas = MODELS.texFromCanvas; roundRect = MODELS.roundRect;
-  disposeTree = MODELS.disposeTree; feltCanvas = MODELS.feltCanvas; faceCanvas = MODELS.faceCanvas;
+  disposeTree = MODELS.disposeTree; feltCanvas = MODELS.feltCanvas;
   cardBackCanvas = MODELS.cardBackCanvas; cardFaceCanvas = MODELS.cardFaceCanvas;
   nameCanvas = MODELS.nameCanvas; crossCanvas = MODELS.crossCanvas;
   buildFigure = MODELS.buildFigure; buildChair = MODELS.buildChair;
@@ -1823,7 +1833,10 @@ function initModels(){
 /* Собираем мастерскую один раз и ровно тогда, когда three.js уже загружен:
    библиотека приходит либо при старте, либо позже — по кнопке вида. */
 buildModels = initModels;
-if(THREE && THREE.Vector3 && !modelsBuilt){ initModels(); modelsBuilt = true; }
+/* Мастерскую собираем только на настоящей библиотеке. С заглушкой она
+   собиралась вхолостую, объявляла себя готовой — и по нажатию «3D» сцена
+   пыталась строить комнату функциями-пустышками. */
+if(THREE && THREE.Vector3 && !THREE.__stub && !modelsBuilt){ initModels(); modelsBuilt = true; }
 
 /* =========================================================================
    SCENE · комната, стол, свет, места, карты, камера
@@ -1844,6 +1857,7 @@ const Scene3DGL = (() => {
   let pixelCap = 2, fpsAcc = 0, fpsN = 0, lastAdapt = 0, degraded = false, lastFrame = 0;       // куда вернуть камеру при выходе из вида сверху
   let fillLights = [];
   let brightMode = true;   // «полный свет»: видно весь стол и карты
+  let nightNow = false;    // ночь ли за столом: фигуры дышат реже и склоняются
   let seats = [];
   let tableGroup = null, deckGroup = null;
   let backTex = null;
@@ -1858,11 +1872,14 @@ const Scene3DGL = (() => {
   function init(container){
     V = new THREE.Vector3();
     renderer = new THREE.WebGLRenderer({ antialias: !LOWQ, powerPreference:'high-performance' });
-    pixelCap = LOWQ ? 1.5 : 2;
+    /* Плотность пикселей и тени — две самые дорогие настройки. На телефоне
+       обе режем сразу, не дожидаясь, пока счётчик кадров просядет: первые
+       секунды партии игрок и запоминает. */
+    pixelCap = LOWQ ? 1.4 : (MODELS.TIER === 'mid' ? 1.8 : 2);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pixelCap));
     renderer.setSize(container.clientWidth || window.innerWidth, container.clientHeight || window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = LOWQ ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    renderer.shadowMap.enabled = !LOWQ;
+    renderer.shadowMap.type = MODELS.TIER === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.42;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -1893,8 +1910,12 @@ const Scene3DGL = (() => {
     buildRoom();
     buildLamp();
 
-    ambient = new THREE.AmbientLight(0x6a6070, 1.35);
-    hemi = new THREE.HemisphereLight(0x8fa0bb, 0x3a2c26, 1.05);
+    /* Свет: комната с одной лампой над столом. Раньше ambient 1.35 и три
+       заполняющих по 14–22 заливали сцену ровным светом — тёмный костюм
+       становился светлым, кожа фарфоровой, тени исчезали. Значения ровно
+       те же, что в сетевой партии (stage3d.js): один свет на две страницы. */
+    ambient = new THREE.AmbientLight(0x6a6070, 0.46);
+    hemi = new THREE.HemisphereLight(0x8fa0bb, 0x3a2c26, 0.36);
     moon = new THREE.DirectionalLight(0x5878b8, 0.0);
     moon.position.set(-6, 7, -5);
     redGlow = new THREE.PointLight(0xff2b2b, 0, 9, 2);
@@ -1902,17 +1923,18 @@ const Scene3DGL = (() => {
 
     /* заполняющий свет: лица и карты не должны уходить в чёрное пятно */
     fillLights = [];
-    [[0, 2.6, 3.4, 0xffd7ad, 22], [-3.2, 2.4, -2.2, 0x9db4de, 14], [3.2, 2.4, -2.2, 0xdda98a, 14]].forEach(cfg => {
+    [[0, 2.6, 3.4, 0xffd7ad, 5.4], [-3.2, 2.4, -2.2, 0x9db4de, 3.6], [3.2, 2.4, -2.2, 0xdda98a, 3.6]].forEach(cfg => {
       const l = new THREE.PointLight(cfg[3], cfg[4], 12, 2);
       l.position.set(cfg[0], cfg[1], cfg[2]);
       fillLights.push(l);
       scene.add(l);
     });
-    /* мягкий вертикальный свет прямо на стол — чтобы читались карты */
-    tableLight = new THREE.SpotLight(0xfff0d6, 30, 7, Math.PI/2.8, 0.9, 1.2);
-    tableLight.position.set(0, 3.3, 0.5);
-    tableLight.target.position.set(0, 0.8, 0);
-    scene.add(tableLight, tableLight.target);
+    /* Отсвет от сукна: тёплая точка чуть выше стола. Лампа висит сверху,
+       поэтому без этого света лица сидящих оказываются в собственной тени.
+       В жизни их освещает свет, отражённый от стола, — здесь ровно он. */
+    tableLight = new THREE.PointLight(0xffe0b4, 3.6, 3.2, 2);
+    tableLight.position.set(0, 0.94, 0);
+    scene.add(tableLight);
 
     scene.add(ambient, hemi, moon, redGlow);
 
@@ -2184,14 +2206,15 @@ const Scene3DGL = (() => {
      мерцание накала лампа считает сама в animate(), и если писать прямо
      в intensity, следующий кадр всё равно перезапишет. */
   function lightsTo(night, dur){
+    nightNow = !!night;
     const from = {
       spot: lamp.baseSpot, point: lamp.basePoint, amb: ambient.intensity,
       hemi: hemi.intensity, moon: moon.intensity, fog: scene.fog.density,
       glow: lamp.glowLevel
     };
     const to = night
-      ? { spot:5,  point:1.2,  amb:0.62, hemi:0.60, moon:1.5, fog:0.044, fill:4,  table:5 }
-      : { spot:34, point:6,    amb:1.35, hemi:1.05, moon:0.0, fog:0.020, fill:17, table:30 };
+      ? { spot:5,  point:1.2,  amb:0.18, hemi:0.17, moon:1.1, fog:0.044, fill:0.9, table:0.8 }
+      : { spot:34, point:6,    amb:0.46, hemi:0.36, moon:0.0, fog:0.020, fill:5.4, table:3.6 };
     const cFrom = new THREE.Color(ambient.color.getHex());
     const cTo   = new THREE.Color(night ? 0x3c4c74 : 0x6a6070);
     const hFrom = new THREE.Color(hemi.color.getHex());
@@ -2420,10 +2443,17 @@ const Scene3DGL = (() => {
     /* Живая лампа и живая свеча: качание, мерцание накала, пыль в луче. */
     if(lamp) lamp.animate(now, frameDt);
     if(tableRig) tableRig.animate(now);
+    /* Жизнь фигур: дыхание, мигание, речь, качание волос, перенос веса.
+       Всё это считает мастерская (models3d.js), а страница только говорит,
+       что происходит: кто говорит, кто выбыл, ночь ли на дворе. Раньше
+       здесь фигура «оживала» одним подпрыгиванием во время речи. */
     for(const s of seats){
+      const u = s.figure.userData;
+      if(u.animate){
+        u.animate(now, frameDt, { speaking: s.speaking && !s.dead, dead: s.dead, night: nightNow });
+      }
       if(s.speaking && !s.dead){
-        s.figure.position.y = Math.sin(now*0.006)*0.022;
-        s.figure.rotation.z = Math.sin(now*0.0042)*0.035;
+        s.figure.position.y += Math.sin(now*0.006)*0.010;
       }
       if(!s.dead) s.plate.position.y = PLATE_Y + Math.sin(now*0.0013 + s.idx)*0.01;
     }
@@ -4810,6 +4840,13 @@ function resumeGame(){
 
 async function startGame(opts){
   const token = ++gameToken;
+  /* Новая партия всегда начинается в 2D. Если прошлую играли в 3D, вид
+     возвращается к плоскому столу до раздачи, а не посреди пролога. */
+  if(window.ViewMode && !window.ViewMode.isFlat()){
+    window.ViewMode.resetForNewGame();
+    await Scene3D.switchTo('flat');
+    paintViewBtn();
+  }
   UI.hideEnd();
   UI.hideStory();
   UI.clearLog();
@@ -5545,8 +5582,8 @@ function syncTopBtn(){
   const flat = window.ViewMode ? window.ViewMode.isFlat() : false;
   el('btnTop').classList.toggle('on', on);
   el('btnTop').setAttribute('aria-pressed', on ? 'true' : 'false');
-  /* Вид сверху на плоском заднике распрямляет овал, на глубокой сцене
-     поднимает камеру — подпись должна отличаться. */
+  /* Вид сверху в 2D распрямляет овал, в 3D поднимает камеру — подпись
+     должна отличаться. */
   el('btnTop').title = flat
     ? (on ? 'Вернуть стол вполоборота' : 'Распрямить стол в план')
     : (on ? 'Вернуться к столу' : 'Вид сверху — весь стол');
@@ -5556,12 +5593,15 @@ function syncTopBtn(){
 function paintViewBtn(){
   const b = el('btnView');
   if(!b || !window.ViewMode) return;
-  const flat = window.ViewMode.isFlat();
-  b.innerHTML = Icons.svg(window.ViewMode.icon(), { size: 18 });
-  b.title = window.ViewMode.title() + ' · ' + window.ViewMode.action();
+  /* На кнопке написан тот вид, который она включит: стоишь в 2D — читаешь
+     «3D», и подсказка говорит «Переключить на 3D-вид». */
+  b.innerHTML = Icons.svg(window.ViewMode.icon(window.ViewMode.next()), { size: 17 }) +
+    '<b class="vlabel">' + window.ViewMode.short() + '</b>';
+  b.classList.add('viewbtn');
+  b.title = window.ViewMode.action();
   b.setAttribute('aria-label', window.ViewMode.action());
-  b.setAttribute('aria-pressed', flat ? 'true' : 'false');
-  b.classList.toggle('on', flat);
+  b.setAttribute('aria-pressed', window.ViewMode.isDeep() ? 'true' : 'false');
+  b.classList.toggle('on', window.ViewMode.isDeep());
   b.disabled = window.ViewMode.locked();
   syncTopBtn();
 }
@@ -5577,13 +5617,11 @@ function wireChrome(){
     const got = await Scene3D.switchTo(want === 'flat' ? 'flat' : 'deep');
     el('btnView').disabled = false;
     if(got !== (want === 'flat' ? 'flat' : 'deep')){
-      UI.toast('Глубокую сцену поднять не удалось — остаёмся на плоском заднике.');
-      window.ViewMode.set('flat', { temporary: true });
+      UI.toast('3D-вид поднять не удалось — остаёмся в 2D.');
+      window.ViewMode.set('flat');
     } else {
       window.ViewMode.set(want);
-      UI.toast(want === 'flat'
-        ? 'Писаный задник: плоские фигуры на подставках.'
-        : 'Глубокая сцена: выгородка, свет и объёмные фигуры.');
+      UI.toast(want === 'flat' ? '2D-вид: плоский стол.' : '3D-вид: объёмная сцена.');
     }
     paintViewBtn();
     syncTopBtn();
@@ -5715,7 +5753,7 @@ function wireChrome(){
   const menu = el('menuSheet');
   const syncMenu = () => {
     el('mSoundSt').textContent = el('btnMute').classList.contains('on') ? 'Включён' : 'Выключен';
-    el('mViewSt').textContent = window.ViewMode ? window.ViewMode.title() : 'Глубокая сцена';
+    el('mViewSt').textContent = window.ViewMode ? window.ViewMode.title() : '2D-вид';
     el('mLightSt').textContent = el('btnLight').classList.contains('on') ? 'Полный' : 'Приглушённый';
     el('mInstall').hidden = !!document.body.classList.contains('installed');
   };

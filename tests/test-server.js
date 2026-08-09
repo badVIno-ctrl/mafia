@@ -23,7 +23,7 @@ async function api(pathname, opts = {}) {
 (async () => {
   console.log('\n=== ТЕСТ 3: сетевой слой ===');
   const srv = spawn('node', [path.join(__dirname, '..', 'server.js')], {
-    env: Object.assign({}, process.env, { PORT: String(PORT) }),
+    env: Object.assign({}, process.env, { PORT: String(PORT), MAFIA_DATA: require('os').tmpdir() + '/mafia-test-users-server.json' }),
     stdio: ['ignore', 'pipe', 'pipe']
   });
   srv.stderr.on('data', d => console.log('  [server stderr] ' + d));

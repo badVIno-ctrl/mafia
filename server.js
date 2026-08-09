@@ -16,7 +16,14 @@ const Bots = require('./server/bots.js');
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const ROOT = __dirname;
 const PUBLIC = path.join(ROOT, 'public');
-const DATA_FILE = path.join(ROOT, 'data', 'users.json');
+/* Где лежат аккаунты. Путь выведен в переменную окружения по одной причине:
+   тесты поднимают настоящий сервер и заводят настоящие имена. Пока файл был
+   один, каждый прогон дописывал в него сотни «Гость7» и «Голосci90A», они
+   попадали в репозиторий и потом честно показывались живому игроку в списке
+   «Кто есть на сайте». Тест теперь пишет в свой файл в /tmp. */
+const DATA_FILE = process.env.MAFIA_DATA
+  ? path.resolve(process.env.MAFIA_DATA)
+  : path.join(ROOT, 'data', 'users.json');
 
 const ONLINE_MS = 45000;          // считаем человека онлайн, если был активен в это окно
 const EMPTY_ROOM_MS = 15 * 60000; // сколько комната ждёт возвращения последнего игрока
@@ -148,6 +155,7 @@ function roomView(room, forUserId) {
     /* 'public' — стол объявлен в общем зале, сесть можно без ссылки.
        'invite' — прежнее поведение: одна ссылка, одна дверь. */
     visibility: room.visibility || 'invite',
+    mode: room.mode || 'classic',
     /* Видят ли выбывшие ночной шёпот мафии. По умолчанию нет. */
     deadSeeAll: !!room.deadSeeAll,
     members: room.members.map(id => {
@@ -177,9 +185,14 @@ function lobbyView(userId) {
   const me = users.get(userId);
   return {
     me: me ? publicUser(me) : null,
+    /* «Кто есть на сайте» — это ровно те, кто сейчас на сайте: живой человек,
+       чья вкладка отвечала последние сорок пять секунд. Ботов здесь нет
+       никогда: бот живёт внутри комнаты и позвать его нельзя. Раньше сюда
+       попадал каждый, кто когда-либо назвался, — и хозяин комнаты видел
+       список из сотен мёртвых имён, из которых никто не придёт. */
     users: [...users.values()]
-      .filter(u => u.id !== userId && !u.bot)
-      .sort((a, b) => (isOnline(b) - isOnline(a)) || a.name.localeCompare(b.name, 'ru'))
+      .filter(u => u.id !== userId && !u.bot && isOnline(u))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
       .slice(0, 200)
       .map(publicUser),
     /* Общий зал: открытые столы, за которые можно сесть без ссылки. Так
@@ -351,8 +364,16 @@ function startGame(room) {
   if (members.length > C.MAX_PLAYERS) return { error: 'Максимум ' + C.MAX_PLAYERS + ' игроков' };
   const sc = C.scenarioById(room.scenarioId);
   const fits = sc && members.length >= sc.min && members.length <= sc.max;
-  room.game = new Game(members, fits ? room.scenarioId : null, { deadSeeAll: !!room.deadSeeAll });
-  room.chat.push({ system: true, text: 'Партия началась: «' + room.game.scenario.title + '».', ts: Date.now() });
+  room.game = new Game(members, fits ? room.scenarioId : null, {
+    deadSeeAll: !!room.deadSeeAll,
+    mode: room.mode
+  });
+  room.chat.push({
+    system: true,
+    text: 'Партия началась: «' + room.game.scenario.title + '»' +
+      (room.mode === 'inquest' ? ' · режим «Следствие»' : '') + '.',
+    ts: Date.now()
+  });
   pushAll(room);
   return { ok: true };
 }
@@ -461,6 +482,8 @@ const server = http.createServer(async (req, res) => {
       'Allow: /\n' +
       'Disallow: /api/\n' +
       'Disallow: /online.html?join=\n' +
+      /* Служебный стенд фигур: страница для работы над моделями, не для игры. */
+      'Disallow: /figure-lab.html\n' +
       '\nSitemap: ' + o + '/sitemap.xml\n';
     res.writeHead(200, { 'Content-Type': MIME['.txt'], 'Cache-Control': 'public, max-age=3600' });
     return res.end(txt);
@@ -616,6 +639,8 @@ const server = http.createServer(async (req, res) => {
         visibility: body.visibility === 'invite' ? 'invite' : 'public',
         /* Выбывшие читают шёпот мафии только если хозяин это разрешил. */
         deadSeeAll: body.deadSeeAll === true,
+        /* Режим стола: обычная «Мафия» или «Следствие» с приметами и уликами. */
+        mode: body.mode === 'inquest' ? 'inquest' : 'classic',
         autoStart: body.autoStart !== false,
         scenarioId: body.scenarioId || (C.scenariosFor(size)[0] || C.SCENARIOS[0]).id,
         chat: [],
@@ -783,6 +808,7 @@ const server = http.createServer(async (req, res) => {
       if (body.autoStart !== undefined) room.autoStart = !!body.autoStart;
       if (body.visibility !== undefined) room.visibility = body.visibility === 'invite' ? 'invite' : 'public';
       if (body.deadSeeAll !== undefined) room.deadSeeAll = !!body.deadSeeAll;
+      if (body.mode !== undefined) room.mode = body.mode === 'inquest' ? 'inquest' : 'classic';
       if (body.title !== undefined) room.title = String(body.title).slice(0, 40);
       pushAll(room);
       return send(res, 200, { room: roomView(room, me.id) });

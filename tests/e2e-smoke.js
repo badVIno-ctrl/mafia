@@ -19,7 +19,7 @@ function wait(ms){ return new Promise(r => setTimeout(r, ms)); }
 
 async function startServer(){
   const srv = spawn('node', ['server.js'], {
-    cwd: ROOT, env: { ...process.env, PORT: String(PORT) }, stdio: ['ignore', 'pipe', 'pipe']
+    cwd: ROOT, env: { ...process.env, PORT: String(PORT), MAFIA_DATA: require('os').tmpdir() + '/mafia-test-users-e2esmoke.json' }, stdio: ['ignore', 'pipe', 'pipe']
   });
   await new Promise((res, rej) => {
     const t = setTimeout(() => rej(new Error('server timeout')), 8000);

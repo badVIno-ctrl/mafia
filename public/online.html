@@ -400,7 +400,7 @@ body.playing #toast{bottom:96px}
   <span class="brand-sub" id="roomTag" hidden></span>
   <div class="spacer"></div>
   <div class="who"><span class="dot" id="netDot"></span><span id="whoName">—</span></div>
-  <button class="iconbtn" id="btnView" title="Вид сцены" aria-label="Вид сцены" hidden></button>
+  <button class="iconbtn viewbtn" id="btnView" title="Переключить на 3D-вид" aria-label="Переключить на 3D-вид" hidden></button>
   <button class="iconbtn" id="btnMic" title="Голосовой чат" aria-label="Голосовой чат"></button>
   <button class="iconbtn" id="btnTts" title="Озвучивать реплики" aria-label="Озвучивать реплики"></button>
   <button class="iconbtn" id="btnChat" title="Окно чата" aria-label="Окно чата" hidden></button>
@@ -484,6 +484,12 @@ body.playing #toast{bottom:96px}
             <input type="checkbox" id="openTable" checked> Показывать стол в списке открытых
           </label>
           <p class="note" style="margin-top:var(--s2)">Снимете галочку — и за стол сядут только по вашей ссылке.</p>
+          <label class="check" style="margin-top:var(--s3)">
+            <input type="checkbox" id="modeInquest"> Играть в «Следствие»: приметы, улики и экспертиза
+          </label>
+          <p class="note" style="margin-top:var(--s2)">У каждого три приметы, ночь оставляет улики,
+            а днём стол может сложиться и проверить одного человека по одной примете.
+            <a href="/rules.html#inquest">Как это устроено</a></p>
           <div class="row" style="margin-top:var(--s4)">
             <button class="btn" id="btnBots">Добрать ботами</button>
             <button class="btn ghost" id="btnBotsOff" hidden>Убрать ботов</button>
@@ -555,6 +561,9 @@ body.playing #toast{bottom:96px}
     </div>
 
     <div class="finale" id="finale" hidden></div>
+
+    <!-- Экспертиза: окно выбора «кого и по какой примете» в режиме «Следствие» -->
+    <div class="sheet" id="expertBox" hidden></div>
   </div>
 
   <aside class="chatdock" id="chatDock">
