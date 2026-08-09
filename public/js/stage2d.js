@@ -27,7 +27,11 @@ export async function mountFlatStage(container, opts) {
 
   const core = window.createFlatTable(container, {
     onPick: opts.onPick,
-    pixelCap: 2
+    pixelCap: 2,
+    /* Панели интерфейса висят поверх сцены: карта роли слева, док действий
+       снизу. Сцена обязана о них знать, иначе крайние места окажутся под
+       панелью, а подпись ближнего — под кнопками. */
+    avoid: ['#rolePane', '#actionDock', '#phaseband', '.phaseband']
   });
 
   /* Подписи в сетевой партии — это кнопки в DOM над сценой. */

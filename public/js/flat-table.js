@@ -145,7 +145,7 @@
        без этой поправки два места из восьми оказывались прямо под панелями.
        Считаем по живой геометрии: панель закрыли — место вернулось. */
     function avoidInsets() {
-      var res = { left: 0, right: 0 };
+      var res = { left: 0, right: 0, bottom: 0 };
       var list = opts.avoid || [];
       if (!list.length) return res;
       var box = container.getBoundingClientRect();
@@ -159,7 +159,15 @@
         if (cs && (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0)) continue;
         var r = el.getBoundingClientRect();
         if (r.width <= 1 || r.height <= 1) continue;
-        /* Панель мешает, только если заслоняет заметную часть высоты сцены. */
+
+        /* Широкая полоса внизу — это док действий: он отнимает высоту, а не
+           ширину, и без этой поправки табличка ближнего места уезжала под
+           кнопки. Узкая панель у края отнимает ширину. */
+        if (r.width > box.width * 0.6 && r.top > box.top + box.height * 0.55) {
+          res.bottom = Math.max(res.bottom, box.bottom - r.top);
+          continue;
+        }
+        /* Боковая панель мешает, только если заслоняет заметную часть высоты. */
         var vOverlap = Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top);
         if (vOverlap < box.height * 0.22) continue;
         var midX = box.left + box.width / 2;
@@ -168,6 +176,7 @@
       }
       res.left = clamp(res.left, 0, box.width * 0.32);
       res.right = clamp(res.right, 0, box.width * 0.32);
+      res.bottom = clamp(res.bottom, 0, box.height * 0.3);
       return res;
     }
 
@@ -194,8 +203,10 @@
       var padTop = clamp(H * 0.15, 46, 130);
       var padBottom = clamp(H * 0.21, 78, 200);
       var av = avoidInsets();
+      geo.avoid = av;
       var padL = Math.max(padX, av.left + 14);
       var padR = Math.max(padX, av.right + 14);
+      padBottom = Math.max(padBottom, av.bottom + 16);
 
       geo.cx = (padL + (W - padR)) / 2;
       geo.cy = padTop + (H - padTop - padBottom) / 2;
@@ -948,10 +959,13 @@
       var pw = clamp(r * 5.0, 76, 168);
       var ph = clamp(r * 1.42, 21, 32);
       var px = clamp(s.x - pw / 2, 4, Math.max(4, W - pw - 4));
+      /* Нижняя граница — не край кадра, а верх дока действий: подпись ближнего
+         места иначе уезжала под кнопки и обрезалась ровно там, где написано
+         «вы». Отступы интерфейса посчитаны в раскладке. */
+      var floorLimit = Math.max(40, H - (geo.avoid ? geo.avoid.bottom : 0) - ph - 6);
       /* Дальние места подписываем над головой: под ними лежит сукно, и
          табличка уезжала прямо на стол. Ближние — под подставкой. */
-      var py = clamp(s.behind ? s.y - r * 2.5 - ph : s.y + r * 1.42,
-        4, Math.max(4, H - ph - 4));
+      var py = clamp(s.behind ? s.y - r * 2.5 - ph : s.y + r * 1.42, 4, floorLimit);
 
       ctx.save();
       ctx.globalAlpha = dead ? 0.6 : fade;
@@ -1001,7 +1015,8 @@
         var meta = ROLE_VIS[s.revealed];
         var cw = clamp(r * 4.4, 64, 148), chh = clamp(r * 1.2, 17, 26);
         var cx = clamp(s.x - cw / 2, 4, Math.max(4, W - cw - 4));
-        var cy = clamp(s.behind ? py - chh - 3 : py + ph + 3, 4, Math.max(4, H - chh - 4));
+        var cy = clamp(s.behind ? py - chh - 3 : py + ph + 3, 4,
+          Math.max(4, H - (geo.avoid ? geo.avoid.bottom : 0) - chh - 4));
         ctx.save();
         roundRect(cx, cy, cw, chh, 2);
         ctx.fillStyle = 'rgba(241,236,225,.93)';
