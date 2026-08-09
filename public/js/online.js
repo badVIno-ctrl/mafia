@@ -171,7 +171,7 @@
             '<span class="sub2">' + людей + ' ' + API.plural(людей, 'человек', 'человека', 'человек') +
               (r.bots ? ' и ' + r.bots + ' ' + API.plural(r.bots, 'бот', 'бота', 'ботов') : '') +
               ' из ' + r.size + ' · ' + API.esc(r.scenario) + ' · ' + waitLabel(r.waitingSec) + '</span>' +
-            '<span class="seatbar"><i style="width:' + pct + '%"></i></span>' +
+            '<span class="seatbar"><i style="--fill:' + (pct / 100).toFixed(3) + '"></i></span>' +
           '</span>' +
           '<button class="btn primary sm" data-sit="' + r.roomId + '">Сесть</button>' +
           '</div>');
@@ -488,7 +488,7 @@
         setText(el.querySelector('.nm'), p.name + (p.id === you.id ? ' · вы' : ''));
         setText(el.querySelector('.sub'), subFor(g, p));
         var lvl = state.levels.get(p.id) || 0;
-        el.querySelector('.lvl').style.width = Math.round(Math.min(1, lvl) * 100) + '%';
+        el.querySelector('.lvl').style.setProperty('--lvl', Math.min(1, lvl).toFixed(3));
       });
     state.marks.clear();
     for (var i = 0; i < box.children.length; i++) state.marks.set(box.children[i].dataset.k, box.children[i]);
@@ -815,7 +815,7 @@
     var t = $('gTimer');
     setText(t, API.mmss(left));
     setCls(t, 'warn', left <= 10);
-    $('gBar').style.width = total ? Math.max(0, Math.min(100, left / total * 100)) + '%' : '0%';
+    $('gBar').style.setProperty('--left', total ? Math.max(0, Math.min(1, left / total)).toFixed(3) : '0');
   }
 
   /* =======================================================================
@@ -1058,7 +1058,7 @@
       onLevel: function (id, lvl) {
         state.levels.set(id, lvl);
         var el = state.marks.get(id);
-        if (el) el.querySelector('.lvl').style.width = Math.round(Math.min(1, lvl) * 100) + '%';
+        if (el) el.querySelector('.lvl').style.setProperty('--lvl', Math.min(1, lvl).toFixed(3));
         if (lvl > 0.14) markSpeaking(id, 700);
       },
       onError: function (e) { API.toast('Голос: ' + (e && e.message ? e.message : 'сбой соединения'), 'bad'); }
@@ -1225,7 +1225,16 @@
         }
         renderRoom(room);
       },
-      signal: function (pkt) { if (state.rtc) state.rtc.handleSignal(pkt); }
+      signal: function (pkt) { if (state.rtc) state.rtc.handleSignal(pkt); },
+      /* Сверка часов. Полное состояние стола сервер присылает только когда за
+         столом что-то произошло; секунды приходят отдельным коротким событием,
+         и его достаточно, чтобы отсчёт не расходился. */
+      tick: function (t) {
+        if (!t || !state.game || !state.room || t.roomId !== state.room.id) return;
+        state.game.secondsLeft = t.secondsLeft;
+        state.game.phaseSeconds = t.phaseSeconds;
+        paintTimer(t.secondsLeft, t.phaseSeconds);
+      }
     });
     $('netDot').classList.remove('off');
   });

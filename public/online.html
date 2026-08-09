@@ -65,7 +65,13 @@
 .tblrow .ttl{display:block;font-size:var(--t-sm);color:var(--paper);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tblrow .sub2{display:block;font-size:var(--t-2xs);color:var(--paper-faint);margin-top:2px}
 .seatbar{width:100%;height:4px;border-radius:2px;background:rgba(255,255,255,.07);overflow:hidden;margin-top:6px}
-.seatbar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold-soft),var(--gold));transition:width var(--norm) var(--ease)}
+/* Заполнение растягиваем преобразованием, а не шириной: width на каждый кадр
+   заставляет браузер пересчитывать раскладку и красить заново, transform —
+   только композицию. Для полосы, которая тянется на каждом обновлении зала,
+   это разница между рывками и ровным движением. */
+.seatbar i{display:block;height:100%;width:100%;transform-origin:left center;
+  transform:scaleX(var(--fill,0));background:linear-gradient(90deg,var(--gold-soft),var(--gold));
+  transition:transform var(--norm) var(--ease)}
 #openTables .item,#roomList .item{align-items:center}
 @media (max-width:520px){ .tblrow .btn{flex:1 1 100%} }
 
@@ -122,8 +128,19 @@
 .mark.pickable:hover{border-color:var(--tallow);background:rgba(38,28,20,.9)}
 .mark.picked{border-color:var(--tallow);background:linear-gradient(180deg,rgba(226,180,120,.22),rgba(226,180,120,.06))}
 .mark.mafia{border-color:rgba(196,86,58,.6)}
-.mark.talking{border-color:var(--verdigris);box-shadow:0 0 14px rgba(123,162,149,.35)}
-.mark .lvl{display:block;height:2px;margin-top:4px;border-radius:2px;background:var(--verdigris);width:0;transition:width .12s linear}
+/* Говорящий. Ореол вокруг плашки заменён на то, как это выглядело бы в
+   комнате со свечой: светлая кромка сверху, где падает свет, тень снизу и
+   медный кант. Цветное свечение без смещения — самая узнаваемая примета
+   машинного интерфейса, и в театре ему взяться неоткуда. */
+.mark.talking{border-color:var(--verdigris);
+  box-shadow:inset 0 1px 0 rgba(241,236,225,.22), 0 6px 18px rgba(0,0,0,.5);
+  background:linear-gradient(180deg,rgba(123,162,149,.16),rgba(10,8,9,.9))}
+/* Уровень голоса приходит десять раз в секунду на каждого игрока. На столе из
+   двадцати человек это двести пересчётов раскладки в секунду, если тянуть
+   ширину. Тянем масштаб. */
+.mark .lvl{display:block;height:2px;margin-top:4px;border-radius:2px;background:var(--verdigris);
+  width:100%;transform-origin:left center;transform:scaleX(var(--lvl,0));
+  transition:transform .12s linear}
 .mark .flags{display:flex;gap:4px;justify-content:center;margin-top:3px;color:var(--plaster-faint)}
 
 /* Режим жетонов: на сцене остаются только номера мест, а имена читаются
@@ -154,7 +171,9 @@
 .timer{font-family:var(--mono);font-size:var(--t-xl);color:var(--tallow);min-width:66px;text-align:right}
 .timer.warn{color:var(--ember-soft)}
 .thread{position:absolute;left:0;right:0;bottom:0;height:2px;background:rgba(241,236,225,.08);border-radius:0 0 var(--r-lg) var(--r-lg);overflow:hidden}
-.thread i{display:block;height:100%;background:linear-gradient(90deg,var(--tallow-dim),var(--tallow));transition:width .9s linear}
+.thread i{display:block;height:100%;width:100%;transform-origin:left center;
+  transform:scaleX(var(--left,1));background:linear-gradient(90deg,var(--tallow-dim),var(--tallow));
+  transition:transform .9s linear}
 
 /* Карта роли — слева */
 .rolepane{
@@ -525,7 +544,7 @@ body.playing #toast{bottom:96px}
       <div class="spacer"></div>
       <span class="pill" id="gAlive">—</span>
       <div class="timer" id="gTimer">0:00</div>
-      <div class="thread"><i id="gBar" style="width:100%"></i></div>
+      <div class="thread"><i id="gBar" style="--left:1"></i></div>
     </div>
 
     <aside class="rolepane" id="rolePane"></aside>

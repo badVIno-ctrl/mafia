@@ -221,16 +221,73 @@ function sseSend(client, event, data) {
   } catch (e) { /* клиент отвалился */ }
 }
 
-function pushLobby() {
-  clients.forEach(c => sseSend(c, 'lobby', lobbyView(c.userId)));
+/* Дешёвый отпечаток строки: нужен, чтобы не пересылать то, что клиент уже
+   знает. Криптостойкость здесь не требуется — совпадение отпечатков у двух
+   разных состояний стоит лишнего пропущенного кадра, не больше. */
+function fingerprint(text) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
 }
-function pushRoom(room) {
+
+function pushLobby() {
   clients.forEach(c => {
-    if (room.members.indexOf(c.userId) >= 0 || room.invites.indexOf(c.userId) >= 0) {
-      sseSend(c, 'room', roomView(room, c.userId));
-    }
+    const data = lobbyView(c.userId);
+    const fp = fingerprint(JSON.stringify(data));
+    if (c.lobbyFp === fp) return;      // в зале ничего не изменилось
+    c.lobbyFp = fp;
+    sseSend(c, 'lobby', data);
   });
 }
+
+function pushRoom(room) {
+  clients.forEach(c => {
+    if (room.members.indexOf(c.userId) < 0 && room.invites.indexOf(c.userId) < 0) return;
+    const data = roomView(room, c.userId);
+    /* Из отпечатка исключаем обратный отсчёт: он меняется каждую секунду, и
+       из-за него полное состояние стола уходило каждому игроку постоянно, хотя
+       за столом ничего не происходило. Секунды клиент отсчитывает сам, а
+       сверяется по короткому событию tick (см. ниже). */
+    const sec = data.game ? data.game.secondsLeft : null;
+    if (data.game) data.game.secondsLeft = 0;
+    const fp = fingerprint(JSON.stringify(data));
+    if (data.game) data.game.secondsLeft = sec;
+    if (c.roomFp === fp && c.roomId === room.id) return;
+    c.roomFp = fp;
+    c.roomId = room.id;
+    sseSend(c, 'room', data);
+  });
+}
+
+/* Короткая сверка часов. Раньше вместо неё раз в пять секунд уходило полное
+   состояние комнаты — с чатом, протоколом и составом, — только чтобы игрок
+   увидел верные секунды. На столе из двадцати человек это десятки килобайт
+   каждые пять секунд каждому. */
+function pushTimers() {
+  const byRoom = new Map();
+  rooms.forEach(room => {
+    if (!room.game || room.game.finished) return;
+    byRoom.set(room.id, {
+      roomId: room.id,
+      phase: room.game.phase,
+      day: room.game.day,
+      secondsLeft: room.game.secondsLeft(),
+      phaseSeconds: room.game.phaseSeconds(),
+      speakerId: room.game.phase === 'speech' ? room.game.speaker : null
+    });
+  });
+  if (!byRoom.size) return;
+  clients.forEach(c => {
+    const u = users.get(c.userId);
+    const room = u && u.roomId ? rooms.get(u.roomId) : null;
+    const data = room ? byRoom.get(room.id) : null;
+    if (data) sseSend(c, 'tick', data);
+  });
+}
+
 function pushAll(room) { pushRoom(room); pushLobby(); }
 
 /* ============================= такт игр ============================= */
@@ -280,9 +337,11 @@ setInterval(() => {
   });
 }, 1000);
 
-// раз в 5 секунд — пуш таймеров и онлайн-статусов
+/* Раз в пять секунд: сверка часов у играющих и обновление зала. Полное
+   состояние стола здесь больше не рассылается — только то, что действительно
+   меняется само по себе. */
 setInterval(() => {
-  rooms.forEach(room => { if (room.game && !room.game.finished) pushRoom(room); });
+  pushTimers();
   pushLobby();
 }, 5000);
 

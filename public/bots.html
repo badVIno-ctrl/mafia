@@ -117,7 +117,10 @@ body.night #vignette{opacity:1;background:radial-gradient(ellipse at 50% 46%,rgb
 #brand{font-family:var(--serif);font-size:17px;letter-spacing:.34em;text-transform:uppercase;
   color:var(--paper);padding-right:16px;margin-right:4px;white-space:nowrap;
   text-decoration:none;display:inline-flex;align-items:center;min-height:44px;
-  text-shadow:0 0 18px rgba(201,162,39,.35)}
+  /* Название набрано по извёстке: свет от рампы кладём сверху, тень — вниз.
+     Ровный цветной ореол вокруг буквы — примета машинного оформления, в
+     театральной афише такого свечения не бывает. */
+  text-shadow:0 1px 0 rgba(241,236,225,.14), 0 -1px 0 rgba(0,0,0,.55)}
 #brand:hover,#brand:focus-visible{color:#fff}
 #brand b{color:var(--gold);font-weight:400}
 .stat{display:flex;flex-direction:column;justify-content:center;padding:0 14px;border-left:1px solid var(--line-soft);min-width:74px}
@@ -126,8 +129,15 @@ body.night #vignette{opacity:1;background:radial-gradient(ellipse at 50% 46%,rgb
 .stat .v.warn{color:var(--red)}
 #topspace{flex:1}
 .tbtn{width:38px;height:38px;border:1px solid var(--line);border-radius:2px;display:grid;place-items:center;
-  font-size:15px;color:var(--paper-dim);transition:.18s;margin-left:7px;background:rgba(0,0,0,.3)}
-.tbtn:hover{color:var(--gold);border-color:var(--gold);transform:translateY(-1px)}
+  font-size:15px;color:var(--paper-dim);margin-left:7px;background:rgba(0,0,0,.3);
+  transition:color .16s var(--ease), border-color .16s var(--ease), transform .12s var(--ease-out)}
+/* Кнопки верхнего ряда нажимают десятки раз за партию, поэтому движение здесь
+   почти незаметное: подъём на пиксель и всё. Наведение — только под мышью. */
+@media (hover:hover) and (pointer:fine){
+  .tbtn:hover{color:var(--gold);border-color:var(--gold);transform:translateY(-1px)}
+}
+.tbtn:active{transform:translateY(0)}
+@media (prefers-reduced-motion:reduce){ .tbtn{transition:color .16s var(--ease)} .tbtn:hover{transform:none} }
 .tbtn.on{color:var(--gold);border-color:var(--gold)}
 .tbtn.wide{width:auto;padding:0 13px;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
 
@@ -206,10 +216,32 @@ body.topview #bottomBar{opacity:.28;pointer-events:none;transition:opacity .3s e
 #sayInput{flex:1;min-height:44px;padding:11px 12px;background:rgba(0,0,0,.42);border:1px solid var(--line-soft);
   border-radius:2px;color:var(--paper);outline:none;resize:none;font-size:14px;transition:.16s}
 #sayInput:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,162,39,.1)}
+/* Кнопка. Три правки против машинного вида и рывков:
+     • перечислены конкретные свойства перехода вместо общего transition:.18s —
+       иначе браузер тянет и то, что тянуть нельзя;
+     • ровное цветное свечение на наведении заменено подъёмом и настоящей
+       тенью: свет в этой комнате падает сверху, и предмет, поднявшийся к
+       лампе, кладёт тень вниз, а не светится сам;
+     • наведение включено только там, где есть мышь: на телефоне касание
+       вызывает ложный hover и подсветка залипает после нажатия. */
 .gbtn{padding:0 20px;min-height:44px;border:1px solid var(--gold);border-radius:2px;color:var(--gold-soft);
-  letter-spacing:.14em;text-transform:uppercase;font-size:13px;transition:.18s;position:relative;overflow:hidden;
-  background:linear-gradient(180deg,rgba(201,162,39,.12),rgba(201,162,39,.03))}
-.gbtn:hover{color:var(--ink);background:var(--gold);box-shadow:0 0 26px rgba(201,162,39,.35)}
+  letter-spacing:.14em;text-transform:uppercase;font-size:13px;position:relative;overflow:hidden;
+  background:linear-gradient(180deg,rgba(201,162,39,.12),rgba(201,162,39,.03));
+  transition:color .16s var(--ease), background-color .16s var(--ease),
+             border-color .16s var(--ease), box-shadow .16s var(--ease),
+             transform .12s var(--ease-out)}
+@media (hover:hover) and (pointer:fine){
+  .gbtn:hover{color:var(--ink);background:var(--gold);transform:translateY(-1px);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.28), 0 8px 20px rgba(0,0,0,.55)}
+}
+.gbtn:focus-visible{color:var(--ink);background:var(--gold)}
+/* Нажатие: короткая осадка, 120 мс — ровно столько, чтобы палец почувствовал
+   отклик и не успел заметить задержку. */
+.gbtn:active{transform:translateY(0) scale(.985)}
+@media (prefers-reduced-motion:reduce){
+  .gbtn{transition:color .16s var(--ease), background-color .16s var(--ease)}
+  .gbtn:hover,.gbtn:active{transform:none}
+}
 .gbtn:disabled{opacity:.35;cursor:not-allowed}
 .gbtn.ghost{border-color:var(--line-soft);color:var(--paper-dim);background:none}
 .gbtn.ghost:hover{border-color:var(--gold);color:var(--gold);background:rgba(201,162,39,.08)}
@@ -241,8 +273,12 @@ body.topview #bottomBar{opacity:.28;pointer-events:none;transition:opacity .3s e
   background:radial-gradient(1100px 620px at 50% 8%,rgba(90,22,34,.34),rgba(4,3,5,.97) 62%),#040305}
 .screen.on{display:block}
 .screen .wrap{max-width:920px;margin:0 auto;padding:52px 24px 64px}
+/* Заголовок афиши. Ровное свечение вокруг литер заменено печатным рельефом:
+   свет от рампы кладёт светлую кромку сверху и глухую тень вниз — так
+   выглядит краска по щиту, а не подсвеченный экран. */
 #startscreen h1{font-family:var(--serif);font-size:clamp(38px,8vw,74px);line-height:.94;margin:0;
-  letter-spacing:.16em;text-transform:uppercase;color:var(--paper);text-shadow:0 0 44px rgba(201,162,39,.28)}
+  letter-spacing:.16em;text-transform:uppercase;color:var(--paper);
+  text-shadow:0 1px 0 rgba(241,236,225,.16), 0 -1px 0 rgba(0,0,0,.6), 0 12px 34px rgba(0,0,0,.5)}
 #startscreen h1 em{display:block;font-style:normal;font-size:.3em;letter-spacing:.5em;color:var(--gold);margin-top:14px;text-indent:.5em}
 .lede{max-width:56ch;color:var(--paper-dim);font-size:14.5px;margin:18px 0 0}
 .sect{margin-top:34px}
@@ -636,9 +672,14 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
 @keyframes sbCaret{0%,49%{opacity:.8}50%,100%{opacity:0}}
 
 /* живой индикатор рядом с «Дальше»: сразу видно, что игра жива */
-#pdNow{display:flex;align-items:center;gap:9px;min-height:42px;padding:0 13px 0 11px;
-  border:1px solid var(--line-soft);border-left:2px solid var(--gold);border-radius:2px 9px 9px 2px;
-  background:rgba(8,6,9,.9);backdrop-filter:blur(8px);box-shadow:0 10px 30px rgba(0,0,0,.5);
+/* Живой указатель рядом с «Дальше». Толстая цветная полоса слева — самая
+   узнаваемая примета машинной вёрстки; здесь вместо неё тёплая кромка сверху,
+   как от лампы над столом, и настоящая тень под плашкой. */
+#pdNow{display:flex;align-items:center;gap:9px;min-height:42px;padding:0 13px;
+  border:1px solid var(--line-soft);border-top-color:rgba(226,180,120,.34);
+  border-radius:2px 9px 9px 2px;
+  background:linear-gradient(180deg,rgba(226,180,120,.07),rgba(8,6,9,.92));
+  backdrop-filter:blur(8px);box-shadow:inset 0 1px 0 rgba(241,236,225,.1), 0 10px 30px rgba(0,0,0,.5);
   max-width:min(44vw,300px);overflow:hidden}
 #pdLbl{font-size:12.5px;line-height:1.2;color:var(--paper-dim);white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
