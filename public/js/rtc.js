@@ -17,10 +17,14 @@
 (function (w) {
   'use strict';
 
+  /* Куда обращаться за своим внешним адресом. По умолчанию — никуда: игра
+     должна работать в закрытом контуре без единого обращения наружу, и в
+     локальной сети прямые адреса находятся сами.
+
+     Через интернет прямые адреса за NAT не находятся, поэтому сервер отдаёт
+     свои STUN/TURN в /api/ice (из переменных окружения). Список подставляется
+     до включения микрофона — см. VoiceChat.useIce. */
   var RTC_CFG = {
-    /* Только локальная сеть и прямые адреса: публичные STUN недоступны,
-       когда игра развёрнута в закрытом контуре. Если сервер выставлен в
-       интернет, сюда можно добавить свой STUN/TURN. */
     iceServers: [],
     iceCandidatePoolSize: 2
   };
@@ -175,6 +179,30 @@
         if (local.stream) local.stream.getTracks().forEach(function (t) { t.stop(); });
         local.stream = null; local.analyser = null;
         if (opts.onLevel) opts.onLevel(selfId, 0);
+      },
+
+      /* Подставить сервера ICE, полученные от площадки. Действует на все
+         соединения, которые будут созданы после вызова. */
+      useIce(list) {
+        if (Array.isArray(list) && list.length) RTC_CFG.iceServers = list;
+        return RTC_CFG.iceServers;
+      },
+
+      /* Привести соединения к разрешённому кругу собеседников.
+
+         Это и есть исполнение фаз на стороне звука: наступила ночь — город
+         теряет право слышать друг друга, и все линии, кроме мафиозных,
+         рвутся. Кладём трубку сами, не дожидаясь, пока сервер откажет в
+         следующей записке: иначе уже открытый канал продолжал бы жить. */
+      reconcile(allowed) {
+        var ok = Object.create(null);
+        (allowed || []).forEach(function (id) { ok[id] = true; });
+        Array.from(peers.keys()).forEach(function (id) { if (!ok[id]) drop(id); });
+        Array.from(known).forEach(function (id) { if (!ok[id]) known.delete(id); });
+        if (!running) return;
+        Object.keys(ok).forEach(function (id) {
+          if (id !== selfId && !peers.has(id)) send(id, 'hello', null);
+        });
       },
 
       setMuted(on) {

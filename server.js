@@ -777,11 +777,25 @@ const server = http.createServer(async (req, res) => {
       if (room.members.indexOf(me.id) < 0) return send(res, 403, { error: 'Вы не в этой комнате' });
       const to = String(body.to || '');
       if (room.members.indexOf(to) < 0) return send(res, 404, { error: 'Такого игрока нет в комнате' });
+      /* Голос подчиняется фазам так же, как чат: ночью мафия говорит только со
+         своими, выбывшие — между собой. Проверять это обязан сервер: клиент
+         можно поправить, а записку о знакомстве без сервера не передашь, и
+         значит ночного канала в город не открыть никаким способом. */
+      if (room.game && !room.game.finished && !room.game.voiceAllowed(me.id, to)) {
+        return send(res, 403, { error: 'Сейчас голос с этим игроком не связывает' });
+      }
       const packet = { from: me.id, name: me.name, kind: String(body.kind || ''), data: body.data };
       let delivered = 0;
       clients.forEach(c => { if (c.userId === to) { sseSend(c, 'signal', packet); delivered++; } });
       return send(res, 200, { ok: true, delivered });
     }
+
+    /* Сервера ICE площадки. В локальной сети список пуст и не нужен: браузеры
+       находят друг друга по прямым адресам. Через интернет без STUN (а за
+       строгим NAT — и без TURN) голос не соединится вовсе, поэтому адреса
+       берутся из переменных окружения и отдаются клиенту здесь, а не
+       прошиваются в код страницы. */
+    if (p === '/api/ice') return send(res, 200, { iceServers: iceServers() });
 
     if (p === '/api/rooms/voice' && req.method === 'POST') {
       me.voice = !!body.on;
@@ -804,6 +818,24 @@ const server = http.createServer(async (req, res) => {
     return send(res, 500, { error: 'Внутренняя ошибка: ' + e.message });
   }
 });
+
+/* Сервера ICE из окружения:
+     STUN_URLS=stun:stun.example.org:3478,stun:stun2.example.org:3478
+     TURN_URL=turn:turn.example.org:3478  TURN_USER=...  TURN_PASS=...
+   Ничего не задано — список пуст, и игра остаётся полностью замкнутой. */
+function iceServers() {
+  const out = [];
+  const stun = String(process.env.STUN_URLS || '').split(',').map(x => x.trim()).filter(Boolean);
+  if (stun.length) out.push({ urls: stun });
+  if (process.env.TURN_URL) {
+    out.push({
+      urls: String(process.env.TURN_URL).split(',').map(x => x.trim()).filter(Boolean),
+      username: process.env.TURN_USER || undefined,
+      credential: process.env.TURN_PASS || undefined
+    });
+  }
+  return out;
+}
 
 /* Адрес обращающегося: за прокси настоящий адрес приходит заголовком. */
 function clientIp(req) {

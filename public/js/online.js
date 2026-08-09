@@ -348,6 +348,8 @@
     renderLog(g);
     renderFinale(g);
 
+    syncVoice();
+
     if (stg()) {
       stg().sync({
         phase: g.phase,
@@ -931,10 +933,40 @@
   /* =======================================================================
      голос: микрофон и озвучка
      ======================================================================= */
+  /* Кто вас сейчас слышит. Голос подчиняется фазам, и кнопка обязана это
+     показывать: ночью мирный молчит, мафия говорит своим, выбывший — своим.
+     Иначе человек говорит в пустоту либо, что хуже, думает, что говорит
+     своим, а его слышит весь стол. */
+  function voiceState() {
+    var you = state.game && state.game.you;
+    if (!you || !you.voice) return { channel: 'town', peers: [], why: '' };
+    return you.voice;
+  }
+
+  var VOICE_RU = { town: 'Слышит весь стол', mafia: 'Слышат только свои', ghost: 'Слышат только выбывшие' };
+
   function paintMic() {
-    setHTML($('btnMic'), ico(state.micOn ? 'mic' : 'micoff', 20));
-    $('btnMic').style.color = state.micOn ? 'var(--verdigris)' : '';
-    $('btnMic').title = state.micOn ? 'Микрофон включён' : 'Включить микрофон';
+    var v = voiceState();
+    var open = !!v.channel;
+    var on = state.micOn && open;
+    setHTML($('btnMic'), ico(on ? 'mic' : 'micoff', 20));
+    $('btnMic').style.color = on
+      ? (v.channel === 'mafia' ? 'var(--ember)' : v.channel === 'ghost' ? 'var(--bruise)' : 'var(--verdigris)')
+      : '';
+    $('btnMic').title = !open
+      ? (v.why || 'Сейчас говорить нельзя')
+      : (state.micOn ? 'Микрофон включён · ' + (VOICE_RU[v.channel] || '') : 'Включить микрофон');
+    $('btnMic').setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
+  /* Привести голосовые соединения к тому кругу, который разрешил сервер.
+     Вызывается на каждом обновлении партии: смена фазы рвёт лишние линии. */
+  function syncVoice() {
+    if (!state.rtc) return;
+    var v = voiceState();
+    state.rtc.setMuted(!v.channel);
+    state.rtc.reconcile(v.peers || []);
+    paintMic();
   }
   function paintTts() {
     setHTML($('btnTts'), ico(Voice.enabled ? 'sound' : 'mute', 20));
@@ -942,11 +974,27 @@
     $('btnTts').title = Voice.enabled ? 'Реплики читаются вслух' : 'Читать реплики вслух';
   }
 
+  /* Сервера ICE площадки спрашиваем один раз: без них голос через интернет
+     не соединится, а в локальной сети список пуст и ничего не меняет. */
+  var iceAsked = false;
+  function ensureIce() {
+    if (iceAsked) return Promise.resolve();
+    iceAsked = true;
+    return API.call('/api/ice').then(function (r) {
+      if (r && r.iceServers && r.iceServers.length && state.rtc) state.rtc.useIce(r.iceServers);
+    }).catch(function () { /* нет ответа — остаёмся на прямых адресах */ });
+  }
+
   function ensureRtc() {
     if (state.rtc) return state.rtc;
     state.rtc = createVoiceChat({
       selfId: API.user.id,
       getPeers: function () {
+        /* В партии круг собеседников определяет сервер по фазе и по тому, жив
+           ли игрок. До начала партии в комнате говорят все — это сбор за
+           столом, а не игра. */
+        var v = voiceState();
+        if (state.game) return v.peers || [];
         return state.room ? state.room.members.map(function (m) { return m.id; }) : [];
       },
       signal: function (to, kind, data) {
@@ -965,8 +1013,18 @@
 
   async function toggleMic(want) {
     var on = want === undefined ? !state.micOn : !!want;
+    var v = voiceState();
+    if (on && !v.channel) {
+      API.toast(v.why || 'Сейчас говорить нельзя', 'bad');
+      return;
+    }
     try {
-      if (on) { await ensureRtc().start(); API.toast('Микрофон включён — вас слышат за столом'); }
+      if (on) {
+        ensureRtc();
+        await ensureIce();
+        await state.rtc.start();
+        API.toast('Микрофон включён · ' + (VOICE_RU[v.channel] || 'вас слышат за столом'));
+      }
       else if (state.rtc) { state.rtc.stop(); }
       state.micOn = on;
     } catch (e) {

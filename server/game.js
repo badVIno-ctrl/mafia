@@ -429,6 +429,58 @@ class Game {
     return true;
   }
 
+  /* ------------------------------ голос ------------------------------ */
+  /* С кем игрок может говорить голосом прямо сейчас.
+
+     Голосовой чат до этого ничего не знал ни о фазах, ни о смерти: стол
+     соединялся «каждый с каждым» один раз и так и оставался. Ночью это
+     значило, что мафия договаривается вслух при всём городе, а выбывший
+     продолжает подсказывать живым.
+
+     Правила те же, что у текстовых каналов:
+       ночь    — только мафия между собой, остальные молчат: город спит;
+       выбывшие — между собой;
+       день и конец партии — весь живой стол.
+
+     Список собеседников отдавать безопасно: в нём нет ничего, чего игрок и
+     так не знает. Мафия знает своих, выбывший знает выбывших, город знает
+     живых. Чужие каналы игроку не видны вовсе. */
+  voiceFor(userId) {
+    const me = this.p(userId);
+    const none = { channel: null, peers: [], why: 'Вы не за столом' };
+    if (!me) return none;
+
+    const ids = list => list.filter(p => p.id !== userId).map(p => p.id);
+
+    if (this.finished) {
+      return { channel: 'town', peers: ids(this.players), why: '' };
+    }
+    if (!me.alive) {
+      return {
+        channel: 'ghost',
+        peers: ids(this.players.filter(p => !p.alive)),
+        why: 'Вас слышат только выбывшие'
+      };
+    }
+    if (this.phase === 'night') {
+      if (!this.isMafia(userId)) {
+        return { channel: null, peers: [], why: 'Город спит — микрофон выключен' };
+      }
+      return {
+        channel: 'mafia',
+        peers: ids(this.aliveMafia()),
+        why: 'Вас слышат только свои'
+      };
+    }
+    return { channel: 'town', peers: ids(this.alive()), why: '' };
+  }
+
+  /** Можно ли этим двоим связаться голосом. Решает сервер, не клиент. */
+  voiceAllowed(fromId, toId) {
+    const v = this.voiceFor(fromId);
+    return !!v.channel && v.peers.indexOf(toId) >= 0;
+  }
+
   /* ------------------------------ вид для игрока ------------------------------ */
   viewFor(userId) {
     const me = this.p(userId);
@@ -511,7 +563,8 @@ class Game {
         healBlocked: this.lastHealed[me.id] || null,
         myVote: this.votes[me.id] !== undefined ? this.votes[me.id] : null,
         ready: !!(this.ready && this.ready[me.id]),
-        canAct: this.canAct(me)
+        canAct: this.canAct(me),
+        voice: this.voiceFor(userId)
       };
       if (this.phase === 'night' && iAmMafia) {
         view.mafiaVotes = Object.entries(this.nightActions.kill)

@@ -4,6 +4,12 @@
    Сервер не пропускает через себя звук: он только передаёт участникам
    комнаты записки WebRTC. Проверяем, что записка доходит ровно тому, кому
    адресована, и что посторонний в чужую комнату сигналить не может.
+
+   Отдельная и более важная часть — фазы. Голосовой чат раньше не знал ни о
+   ночи, ни о смерти: стол соединялся «каждый с каждым» один раз и так и
+   оставался. Ночью это значило, что мафия договаривается вслух при всём
+   городе. Правило исполняет сервер: записку о знакомстве между городом и
+   мафией он ночью просто не передаёт, и обойти это правкой клиента нельзя.
    ========================================================================= */
 'use strict';
 const { spawn } = require('child_process');
@@ -67,7 +73,11 @@ function listen(token) {
 
   try {
     const stamp = Date.now().toString(36).slice(-4);
-    const mk = async name => (await api('/api/register', { body: { name } })).json.user;
+    const mk = async name => {
+      const r = await api('/api/register', { body: { name } });
+      if (!r.json || !r.json.user) throw new Error('регистрация не удалась: ' + JSON.stringify(r.json));
+      return r.json.user;
+    };
     const a = await mk('Голос' + stamp + 'A');
     const b = await mk('Голос' + stamp + 'B');
     const c = await mk('Голос' + stamp + 'C');
@@ -119,6 +129,81 @@ function listen(token) {
 
     const voiceOff = await api('/api/rooms/voice', { token: a.token, body: { on: false } });
     ok(voiceOff.json.voice === false, 'микрофон выключается');
+
+    /* --- сервера ICE площадки --- */
+    const ice = await api('/api/ice', { token: a.token });
+    ok(ice.status === 200 && Array.isArray(ice.json.iceServers),
+      'площадка отдаёт список серверов ICE (' + ice.status + ')');
+    ok(ice.json.iceServers.length === 0,
+      'без переменных окружения список пуст: игра остаётся замкнутой');
+
+    /* ==================================================================== */
+    /* ГОЛОС ПО ФАЗАМ                                                       */
+    /* ==================================================================== */
+    /* Стол собираем из живых людей, а не добираем ботами: на шести игроках
+       мафия ровно одна, и она обязана достаться человеку. Иначе проверка
+       «записка между городом и мафией не проходит» зависела бы от случая и
+       молча пропускалась бы в большинстве прогонов. */
+    const d = await mk('Голос' + stamp + 'D');
+    const e6 = await mk('Голос' + stamp + 'E');
+    const f = await mk('Голос' + stamp + 'F');
+    for (const u of [d, e6, f]) {
+      await api('/api/rooms/join', { token: u.token, body: { invite: room.invite } });
+    }
+    const play = await api('/api/rooms/start', { token: a.token, body: {} });
+    ok(play.status === 200, 'партия из шести живых началась (' + play.status + ')');
+
+    const view = (tok) => api('/api/rooms/state', { token: tok }).then(r => r.json.room.game);
+    const gA = await view(a.token);
+    ok(gA.phase === 'prologue' || gA.phase === 'night', 'партия в начальной фазе: ' + gA.phase);
+
+    /* Знакомство: до ночи говорят все живые. */
+    const humans = [a, b, c, d, e6, f];
+    const townVoice = await Promise.all(humans.map(u => view(u.token).then(g => g.you.voice)));
+    townVoice.forEach((v, i) => {
+      ok(v.channel === 'town', 'до ночи ' + humans[i].name + ' говорит со всем столом (' + v.channel + ')');
+    });
+
+    /* Дожидаемся ночи: пролог короткий. */
+    let g = await view(a.token);
+    for (let i = 0; i < 40 && g.phase !== 'night'; i++) { await sleep(600); g = await view(a.token); }
+    ok(g.phase === 'night', 'дошли до ночи (' + g.phase + ')');
+
+    const nightVoices = {};
+    for (const u of humans) {
+      const gg = await view(u.token);
+      nightVoices[u.id] = { role: gg.you.role, voice: gg.you.voice, alive: gg.you.alive };
+    }
+    const alive = humans.filter(u => nightVoices[u.id].alive);
+    const mafia = alive.filter(u => /mafia|don/.test(nightVoices[u.id].role));
+    const town = alive.filter(u => !/mafia|don/.test(nightVoices[u.id].role));
+
+    town.forEach(u => {
+      const v = nightVoices[u.id].voice;
+      ok(v.channel === null, 'ночью мирный молчит: канала нет (' + u.name + ' → ' + v.channel + ')');
+      ok(v.peers.length === 0, 'и собеседников у него ночью нет');
+      ok(!!v.why, 'игроку объясняют, почему микрофон закрыт: «' + v.why + '»');
+    });
+    mafia.forEach(u => {
+      const v = nightVoices[u.id].voice;
+      ok(v.channel === 'mafia', 'ночью мафия говорит со своими (' + u.name + ' → ' + v.channel + ')');
+      const outsiders = v.peers.filter(id => town.some(t => t.id === id));
+      ok(outsiders.length === 0, 'в её кругу нет ни одного мирного');
+    });
+
+    /* Главное: сервер не передаёт записку между городом и мафией ночью. */
+    if (mafia.length && town.length) {
+      const bad = await api('/api/rooms/signal', {
+        token: mafia[0].token, body: { to: town[0].id, kind: 'offer', data: {} }
+      });
+      ok(bad.status === 403, 'ночью записка от мафии к городу не проходит (' + bad.status + ')');
+      const back = await api('/api/rooms/signal', {
+        token: town[0].token, body: { to: mafia[0].id, kind: 'offer', data: {} }
+      });
+      ok(back.status === 403, 'и обратно тоже (' + back.status + ')');
+    } else {
+      ok(true, 'на этом столе живых людей по одну сторону — проверку записки пропускаем');
+    }
 
     earB.stop(); earC.stop();
   } catch (e) {
