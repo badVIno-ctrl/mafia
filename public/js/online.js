@@ -352,36 +352,78 @@
       stg().sync({
         phase: g.phase,
         players: g.players,
-        targets: g.players.filter(function (p) { return canTarget(g, you, p); }).map(function (p) { return p.id; })
+        targets: g.players.filter(function (p) { return canTarget(g, you, p); }).map(function (p) { return p.id; }),
+        /* Ночью мафия видит комнату в кирпичном отсвете — своим об этом
+           говорить не надо, а мирный этого отсвета не увидит никогда. */
+        mafiaGlow: g.phase === 'night' && !!you && you.alive && (you.role === 'mafia' || you.role === 'don')
       });
     }
   }
 
   /* ---------------------------- сцена ---------------------------- */
+  /* Декораций две, контракт один: mount(container, {onPick}) отдаёт объект
+     с setSeats / sync / project / dispose. Клиент не знает, стоит перед ним
+     выгородка в глубину или писаный задник, — и это единственная причина,
+     по которой кнопку вида удалось сделать без перезапуска партии. */
+  function sceneMount(mode) {
+    return mode === ViewMode.FLAT
+      ? import('/js/stage2d.js').then(function (m) { return m.mountFlatStage; })
+      : import('/js/stage3d.js').then(function (m) { return m.mountStage; });
+  }
+
+  function mountScene() {
+    var mode = ViewMode.get();
+    state.stage = 'loading';
+    state.stageMode = mode;
+    sceneMount(mode).then(function (mount) {
+      return mount($('stage'), { onPick: function (id) { pickTarget(id); } });
+    }).then(function (stage) {
+      /* Пока сцена вставала, игрок мог передумать: тогда её сразу убираем. */
+      if (mode !== ViewMode.get()) { try { stage.dispose(); } catch (e) { } return; }
+      state.stage = stage;
+      state.stageBroken = false;
+      state.seatsKey = '';
+      $('flatWrap').hidden = true;
+      $('flatWrap').classList.remove('plain');
+      paintViewBtn();
+      if (state.game) renderGame(state.game);
+    }).catch(function (e) {
+      state.stage = null;
+      console.warn('Сцена не встала (' + mode + '):', e && e.message);
+      /* Глубокая сцена может не подняться на слабом железе. Это не повод
+         показывать таблицу: плоский задник не требует ни WebGL, ни three.js. */
+      if (mode !== ViewMode.FLAT) {
+        API.toast('Глубокая сцена не встала — вешаем плоский задник');
+        ViewMode.set(ViewMode.FLAT);
+        return;
+      }
+      state.stageBroken = true;
+      $('flatWrap').hidden = false;
+      $('flatWrap').classList.add('plain');
+      API.toast('Сцена не поднялась — играем на плоском столе');
+    });
+  }
+
+  /* Смена вида посреди партии: старую декорацию разбираем, новую ставим и
+     сразу отдаём ей текущее состояние. Партия живёт на сервере, поэтому для
+     игрока это просто перемена декораций, а не перезаход. */
+  function remountScene() {
+    if (state.stage && state.stage !== 'loading' && state.stage.dispose) {
+      try { state.stage.dispose(); } catch (e) { /* разбирать нечего */ }
+    }
+    state.stage = null;
+    state.seatsKey = '';
+    state.marks.clear();
+    $('marks').innerHTML = '';
+    $('stage').innerHTML = '';
+    mountScene();
+  }
+
   function ensureStage(g, key) {
     if (state.stageBroken) { state.seatsKey = key; return; }
     if (stg() && state.seatsKey === key) return;
 
-    if (!state.stage) {
-      state.stage = 'loading';
-      import('/js/stage3d.js').then(function (mod) {
-        return mod.mountStage($('stage'), {
-          onPick: function (id) { pickTarget(id); }
-        });
-      }).then(function (stage) {
-        state.stage = stage;
-        state.seatsKey = '';
-        if (state.game) renderGame(state.game);
-      }).catch(function (e) {
-        state.stage = null;
-        state.stageBroken = true;
-        $('flatWrap').hidden = false;
-        $('flatWrap').classList.add('plain');
-        console.warn('3D-сцена недоступна:', e && e.message);
-        API.toast('Сцена не поднялась — играем на плоском столе');
-      });
-      return;
-    }
+    if (!state.stage) { mountScene(); return; }
     if (!stg()) return;
 
     state.seatsKey = key;
@@ -852,6 +894,38 @@
   $('gMsg').addEventListener('keydown', function (e) { if (e.key === 'Enter') sendGame(); });
 
   /* =======================================================================
+     вид сцены: выгородка в глубину или писаный задник
+     ======================================================================= */
+  function paintViewBtn() {
+    var btn = $('btnView');
+    if (!btn) return;
+    var flat = ViewMode.isFlat();
+    /* Знак показывает то, что стоит на сцене сейчас, а подпись обещает то,
+       что произойдёт по нажатию: так кнопка не врёт ни в одном состоянии. */
+    setHTML(btn, ico(ViewMode.icon(), 20));
+    btn.title = ViewMode.title() + ' · ' + ViewMode.action();
+    btn.setAttribute('aria-label', ViewMode.action());
+    btn.setAttribute('aria-pressed', flat ? 'true' : 'false');
+    btn.style.color = flat ? 'var(--tallow)' : '';
+    btn.disabled = ViewMode.locked();
+    btn.hidden = false;
+  }
+
+  if ($('btnView')) {
+    $('btnView').addEventListener('click', function () {
+      if (ViewMode.locked()) return API.toast(ViewMode.action(), 'bad');
+      var mode = ViewMode.toggle();
+      API.toast(mode === ViewMode.FLAT
+        ? 'Писаный задник: плоские фигуры на подставках'
+        : 'Глубокая сцена: выгородка, свет и объёмные фигуры');
+    });
+  }
+  ViewMode.onChange(function () {
+    paintViewBtn();
+    if (!$('gameView').hidden || state.game) remountScene();
+  });
+
+  /* =======================================================================
      голос: микрофон и озвучка
      ======================================================================= */
   function paintMic() {
@@ -986,7 +1060,7 @@
   var curtain = Curtain.show({ title: 'Мафия', note: 'Собираем стол' });
   curtain.progress(0.2);
 
-  paintMic(); paintTts(); paintTabs();
+  paintMic(); paintTts(); paintTabs(); paintViewBtn();
   document.documentElement.style.setProperty('--barH', ($('topbar').offsetHeight || 58) + 'px');
 
   API.load();

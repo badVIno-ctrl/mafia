@@ -21,7 +21,8 @@ const PAGES = ['public/index.html', 'public/online.html', 'public/bots.html'];
 const CSS = ['public/css/theatre.css', 'public/css/app.css', 'public/css/fonts.css'];
 const JS = ['public/js/api.js', 'public/js/hub.js', 'public/js/online.js', 'public/js/icons.js',
   'public/js/voice.js', 'public/js/rtc.js', 'public/js/curtain.js', 'public/js/stage3d.js',
-  'public/js/models3d.js', 'public/js/speech.js', 'public/js/scene2d.js'];
+  'public/js/models3d.js', 'public/js/speech.js', 'public/js/scene2d.js',
+  'public/js/flat-table.js', 'public/js/stage2d.js', 'public/js/view-mode.js'];
 
 /* ---- 1. все файлы на месте ---- */
 [].concat(PAGES, CSS, JS).forEach(f => {
