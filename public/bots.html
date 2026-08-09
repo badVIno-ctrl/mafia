@@ -707,6 +707,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
   <div id="topspace"></div>
   <button class="tbtn deskOnly" id="btnMute" title="Звук" aria-label="Звук" data-ico="sound"></button>
   <button class="tbtn deskOnly" id="btnVoice" title="Читать реплики вслух" aria-label="Читать реплики вслух" data-ico="mask"></button>
+  <button class="tbtn deskOnly" id="btnView" title="Вид сцены" aria-label="Вид сцены" aria-pressed="false"></button>
   <button class="tbtn on deskOnly" id="btnLight" title="Яркость сцены" aria-label="Свет" data-ico="candle"></button>
   <button class="tbtn deskOnly" id="btnTop" title="Вид сверху — весь стол" aria-label="Вид сверху — весь стол" aria-pressed="false">⍟</button>
   <button class="tbtn deskOnly" id="btnInstall" title="Установить игру на устройство" aria-label="Установить игру на устройство" hidden>⤓</button>
@@ -806,6 +807,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
     <div class="sheetGrid">
       <button class="mItem" id="mRole"><b>Моя роль</b><small>Карта и тайные записи</small></button>
       <button class="mItem" id="mLog"><b>Протокол</b><small>Всё, что сказано за столом</small></button>
+      <button class="mItem" id="mView"><b>Декорация</b><small id="mViewSt">Глубокая сцена</small></button>
       <button class="mItem" id="mTop"><b>Вид сверху</b><small>Весь стол целиком</small></button>
       <button class="mItem" id="mLight"><b>Свет</b><small id="mLightSt">Полный</small></button>
       <button class="mItem" id="mSound"><b>Звук</b><small id="mSoundSt">Включён</small></button>
@@ -997,8 +999,10 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
 </div>
 
 <script src="/js/icons.js"></script>
+<script src="/js/view-mode.js"></script>
 <script src="/js/voice.js"></script>
 <script src="/js/speech.js"></script>
+<script src="/js/flat-table.js"></script>
 <script src="/js/scene2d.js"></script>
 <script type="importmap">
 {
@@ -1040,27 +1044,56 @@ function withTimeout(promise, ms, label){
   return Promise.race([promise, timer]).finally(() => clearTimeout(t));
 }
 
-if(!webglSupported()){
-  USE_2D = true;
-  SCENE_FALLBACK_REASON = 'no-webgl';
-} else {
-  try {
-    const [core, orbit] = await withTimeout(Promise.all([
-      import('three'),
-      import('three/addons/controls/OrbitControls.js')
-    ]), 9000, 'three-timeout');
-    THREE = core;
-    OrbitControls = orbit.OrbitControls;
-    if(!THREE || !THREE.Vector3) throw new Error('three-broken');
-  } catch(e){
+/* three.js грузим по требованию. Раньше библиотека тянулась всегда, даже
+   если игрок предпочитает плоский задник, — и наоборот, отказавшись один
+   раз, вернуться к объёмной сцене было уже нельзя: модуль в этой загрузке
+   страницы просто не существовал. Теперь загрузка отложена и повторяема. */
+let threeReady = null;
+let modelsBuilt = false;
+/* Мастерская моделей объявлена внутри игрового замыкания, а загрузка
+   библиотеки — снаружи. Замыкание оставляет здесь ссылку на сборку, и
+   загрузчик вызывает её, когда three.js действительно пришёл. */
+let buildModels = null;
+async function ensureThree(){
+  if(THREE && THREE.Vector3) return true;
+  if(!webglSupported()){ SCENE_FALLBACK_REASON = 'no-webgl'; return false; }
+  if(!threeReady){
+    threeReady = (async () => {
+      const [core, orbit] = await withTimeout(Promise.all([
+        import('three'),
+        import('three/addons/controls/OrbitControls.js')
+      ]), 9000, 'three-timeout');
+      if(!core || !core.Vector3) throw new Error('three-broken');
+      THREE = core;
+      OrbitControls = orbit.OrbitControls;
+      if(!modelsBuilt && buildModels){ buildModels(); modelsBuilt = true; }
+      return true;
+    })().catch(e => {
+      threeReady = null;
+      SCENE_FALLBACK_REASON = (e && e.message) || 'three-failed';
+      return false;
+    });
+  }
+  return threeReady;
+}
+
+/* Базовый вид — глубокая сцена; плоский задник берётся из выбора игрока или
+   из отсутствия WebGL. Решение принимает один общий модуль view-mode.js. */
+USE_2D = window.ViewMode ? window.ViewMode.isFlat() : false;
+if(!USE_2D){
+  const okThree = await ensureThree();
+  if(!okThree){
     USE_2D = true;
-    SCENE_FALLBACK_REASON = (e && e.message) || 'three-failed';
+    if(window.ViewMode) window.ViewMode.set('flat', { temporary: true });
   }
 }
 
-/* В запасном режиме код 3D-сцены не выполняется, но модуль всё равно должен
-   вычислиться без ошибок — даём безобидную заглушку. */
-if(USE_2D){
+/* Пока настоящая библиотека не загружена, код объёмной сцены всё равно должен
+   вычислиться без ошибок: он существует в файле независимо от выбора вида.
+   Заглушка живёт только до первой удачной загрузки three.js и ничего не
+   рисует — все обращения к ней идут исключительно внутри функций, которые в
+   плоском режиме не вызываются. */
+if(!THREE){
   const stub = function(){ return {}; };
   THREE = new Proxy({}, {
     get(_, k){
@@ -1746,6 +1779,11 @@ function initModels(){
   buildTableShared = MODELS.buildTable;
 }
 
+/* Собираем мастерскую один раз и ровно тогда, когда three.js уже загружен:
+   библиотека приходит либо при старте, либо позже — по кнопке вида. */
+buildModels = initModels;
+if(THREE && THREE.Vector3 && !modelsBuilt){ initModels(); modelsBuilt = true; }
+
 /* =========================================================================
    SCENE · комната, стол, свет, места, карты, камера
    ========================================================================= */
@@ -1771,9 +1809,13 @@ const Scene3DGL = (() => {
   let revealCard = null;      // карта-«показ» перед камерой: всегда лицом к игроку
   const arrowsPool = [];
   let shakeUntil = 0;
-  const V = new THREE.Vector3();
+  /* Рабочий вектор для проекции. Создаём его в init, а не при разборе файла:
+     на этот момент библиотека может быть ещё не загружена, и вектор достался
+     бы от заглушки. */
+  let V = null;
 
   function init(container){
+    V = new THREE.Vector3();
     renderer = new THREE.WebGLRenderer({ antialias: !LOWQ, powerPreference:'high-performance' });
     pixelCap = LOWQ ? 1.5 : 2;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pixelCap));
@@ -2206,6 +2248,40 @@ const Scene3DGL = (() => {
     if(role) await flipCard(i, role);
   }
 
+  /* Мгновенные версии смерти и раскрытия карты. Нужны ровно для одного
+     случая: игрок сменил декорацию посреди партии, и новая сцена должна
+     догнать стол — без повторного грохота падения и без второго перелёта
+     карты, которые уже случились в прошлой декорации. */
+  function flipCardInstant(i, role){
+    const s = seats[i]; if(!s) return;
+    if(!s.faceTex) armCard(i, role);
+    s.flipped = true;
+    s.card.visible = true;
+    s.card.rotation.x = Math.PI;
+    s.card.position.y = s.cardHome.y;
+  }
+
+  function setDeadInstant(i, role){
+    const s = seats[i]; if(!s || s.dead) return;
+    s.dead = true; s.speaking = false;
+    const side = (i % 2) ? 1 : -1;
+    s.figure.rotation.z = side * 0.92;
+    s.figure.rotation.x = -0.16;
+    s.figure.position.y = -0.10;
+    const dim = new THREE.Color(0x2a2328);
+    s.figure.userData.materials.forEach(m => { if(m.color) m.color.lerp(dim, 0.6); });
+    if(s.plate.material.map) s.plate.material.map.dispose();
+    s.plate.material.map = texFromCanvas(nameCanvas(s.plateName, { you:s.isHuman, dead:true }));
+    s.plate.material.needsUpdate = true;
+    s.cross.material.opacity = 1;
+    s.cross.scale.setScalar(0.5);
+    if(role) flipCardInstant(i, role);
+  }
+
+  function setVisible(on){
+    if(renderer && renderer.domElement) renderer.domElement.style.display = on ? 'block' : 'none';
+  }
+
   async function flipCard(i, role){
     const s = seats[i]; if(!s || s.flipped) return;
     if(!s.faceTex) armCard(i, role);
@@ -2402,12 +2478,127 @@ const Scene3DGL = (() => {
 
   return { init, setup, resize, armCard, dealCards, toNight, toDay, mafiaGlow, markVictim,
            setSpeaking, killAnim, flipCard, showVoteArrow, clearArrows, finalOrbit, project, tick,
-           setBright, topView, isTopView };
+           setBright, topView, isTopView,
+           flipCardInstant, setDeadInstant, setVisible, mode:'deep' };
 })();
 
-/* Единая точка входа сцены: настоящая 3D или запасная 2D. API совпадает,
-   поэтому вся остальная игра ничего не замечает. */
-const Scene3D = USE_2D ? window.createScene2D() : Scene3DGL;
+/* =========================================================================
+   ПЕРЕКЛЮЧАТЕЛЬ ДЕКОРАЦИЙ.
+
+   Две сцены — выгородка в глубину и писаный задник — отвечают на один и тот
+   же набор команд, поэтому вся остальная игра о выборе вида не знает вовсе:
+   она по-прежнему говорит Scene3D.toNight() и ждёт обещания.
+
+   Хитрость одна. Партия ведётся шагами, а не состоянием: «раздай карты»,
+   «этот выбывает». Новая декорация этих шагов не видела, поэтому здесь
+   ведётся короткий журнал того, что уже случилось за столом, и при смене
+   вида он проигрывается заново — мгновенными версиями, без повторного
+   грохота падений.
+   ========================================================================= */
+const Scene3D = (() => {
+  let mode = USE_2D ? 'flat' : 'deep';
+  let live = null;
+  let host = null;
+  let busy = false;
+  const built = {};
+  const listeners = [];
+
+  /* Журнал стола: минимум, которого хватает, чтобы собрать картинку заново. */
+  const J = {
+    list: null, dealIdx: 0, dealt: false, night: false, glow: false,
+    bright: true, top: false, armed: {}, flipped: {}, dead: {}, speaking: {}
+  };
+
+  function make(m){ return m === 'flat' ? window.createScene2D() : Scene3DGL; }
+
+  function init(container){
+    host = container;
+    live = make(mode);
+    built[mode] = live;
+    live.init(container);
+  }
+
+  /* Проиграть журнал в только что поднятую декорацию. */
+  function replay(){
+    if(!J.list) return;
+    live.setup(J.list);
+    Object.keys(J.armed).forEach(i => live.armCard(+i, J.armed[i]));
+    if(J.dealt && live.dealCards) live.dealCards(J.dealIdx);
+    live.setBright(J.bright);
+    if(J.night) live.toNight(); else live.toDay();
+    live.mafiaGlow(J.glow);
+    Object.keys(J.dead).forEach(i => live.setDeadInstant(+i, J.flipped[i] || null));
+    Object.keys(J.flipped).forEach(i => { if(!J.dead[i]) live.flipCardInstant(+i, J.flipped[i]); });
+    Object.keys(J.speaking).forEach(i => live.setSpeaking(+i, true));
+    if(J.top) live.topView(true);
+    live.resize();
+  }
+
+  async function switchTo(next){
+    if(busy || next === mode || !host) return mode;
+    if(next === 'deep'){
+      const ready = await ensureThree();
+      if(!ready) return mode;
+    }
+    busy = true;
+    try {
+      if(live.setVisible) live.setVisible(false);
+      let target = built[next];
+      if(!target){
+        target = make(next);
+        built[next] = target;
+        target.init(host);
+      } else if(target.setVisible){
+        target.setVisible(true);
+      }
+      live = target;
+      mode = next;
+      replay();
+      listeners.forEach(fn => { try { fn(mode); } catch(e){} });
+    } finally { busy = false; }
+    return mode;
+  }
+
+  return {
+    init,
+    setup(list){
+      J.list = list; J.armed = {}; J.flipped = {}; J.dead = {}; J.speaking = {};
+      J.dealt = false; J.night = false; J.glow = false;
+      return live.setup(list);
+    },
+    armCard(i, role){ J.armed[i] = role; return live.armCard(i, role); },
+    dealCards(i){ J.dealt = true; J.dealIdx = i || 0; return live.dealCards(i); },
+    toNight(){ J.night = true; return live.toNight(); },
+    toDay(){ J.night = false; return live.toDay(); },
+    mafiaGlow(on){ J.glow = !!on; return live.mafiaGlow(on); },
+    markVictim(i){ return live.markVictim(i); },
+    setSpeaking(i, on){
+      if(on) J.speaking[i] = true; else delete J.speaking[i];
+      return live.setSpeaking(i, on);
+    },
+    killAnim(i, role){
+      J.dead[i] = true;
+      if(role) J.flipped[i] = role;
+      return live.killAnim(i, role);
+    },
+    flipCard(i, role){ J.flipped[i] = role; return live.flipCard(i, role); },
+    showVoteArrow(a, b){ return live.showVoteArrow(a, b); },
+    clearArrows(){ return live.clearArrows(); },
+    finalOrbit(roles){
+      (roles || []).forEach((r, i) => { if(r) J.flipped[i] = r; });
+      return live.finalOrbit(roles);
+    },
+    project(i, y){ return live.project(i, y); },
+    tick(t){ return live.tick(t); },
+    resize(){ return live.resize(); },
+    setBright(on){ const v = live.setBright(on); J.bright = v; return v; },
+    topView(on){ const v = live.topView(on); J.top = v; return v; },
+    isTopView(){ return live.isTopView(); },
+    get mode(){ return mode; },
+    switchTo,
+    onSwitch(fn){ listeners.push(fn); }
+  };
+})();
 
 
 /* =========================================================================
@@ -5306,7 +5497,57 @@ function startFromSettings(){
   });
 }
 
+/* Подкраска кнопок сцены живёт вне wireChrome: её зовут и при старте, и
+   каждый раз, когда игрок меняет декорацию. */
+function syncTopBtn(){
+  const on = Scene3D.isTopView();
+  const flat = window.ViewMode ? window.ViewMode.isFlat() : false;
+  el('btnTop').classList.toggle('on', on);
+  el('btnTop').setAttribute('aria-pressed', on ? 'true' : 'false');
+  /* Вид сверху на плоском заднике распрямляет овал, на глубокой сцене
+     поднимает камеру — подпись должна отличаться. */
+  el('btnTop').title = flat
+    ? (on ? 'Вернуть стол вполоборота' : 'Распрямить стол в план')
+    : (on ? 'Вернуться к столу' : 'Вид сверху — весь стол');
+  el('topExit').hidden = !on;
+}
+
+function paintViewBtn(){
+  const b = el('btnView');
+  if(!b || !window.ViewMode) return;
+  const flat = window.ViewMode.isFlat();
+  b.innerHTML = Icons.svg(window.ViewMode.icon(), { size: 18 });
+  b.title = window.ViewMode.title() + ' · ' + window.ViewMode.action();
+  b.setAttribute('aria-label', window.ViewMode.action());
+  b.setAttribute('aria-pressed', flat ? 'true' : 'false');
+  b.classList.toggle('on', flat);
+  b.disabled = window.ViewMode.locked();
+  syncTopBtn();
+}
+
 function wireChrome(){
+  /* Декорация. Переключение идёт посреди партии: журнал стола проигрывается
+     в новую сцену, и игрок ничего не теряет. */
+  el('btnView').addEventListener('click', async () => {
+    if(!window.ViewMode) return;
+    if(window.ViewMode.locked()){ UI.toast(window.ViewMode.action()); return; }
+    const want = window.ViewMode.next();
+    el('btnView').disabled = true;
+    const got = await Scene3D.switchTo(want === 'flat' ? 'flat' : 'deep');
+    el('btnView').disabled = false;
+    if(got !== (want === 'flat' ? 'flat' : 'deep')){
+      UI.toast('Глубокую сцену поднять не удалось — остаёмся на плоском заднике.');
+      window.ViewMode.set('flat', { temporary: true });
+    } else {
+      window.ViewMode.set(want);
+      UI.toast(want === 'flat'
+        ? 'Писаный задник: плоские фигуры на подставках.'
+        : 'Глубокая сцена: выгородка, свет и объёмные фигуры.');
+    }
+    paintViewBtn();
+    syncTopBtn();
+  });
+
   el('btnLight').addEventListener('click', () => {
     const on = Scene3D.setBright(!el('btnLight').classList.contains('on'));
     el('btnLight').classList.toggle('on', on);
@@ -5314,13 +5555,6 @@ function wireChrome(){
   });
 
   /* Вид сверху — переключатель с явными способами выйти */
-  const syncTopBtn = () => {
-    const on = Scene3D.isTopView();
-    el('btnTop').classList.toggle('on', on);
-    el('btnTop').setAttribute('aria-pressed', on ? 'true' : 'false');
-    el('btnTop').title = on ? 'Вернуться к столу' : 'Вид сверху — весь стол';
-    el('topExit').hidden = !on;
-  };
   el('btnTop').addEventListener('click', () => {
     const on = Scene3D.topView();
     syncTopBtn();
@@ -5440,6 +5674,7 @@ function wireChrome(){
   const menu = el('menuSheet');
   const syncMenu = () => {
     el('mSoundSt').textContent = el('btnMute').classList.contains('on') ? 'Включён' : 'Выключен';
+    el('mViewSt').textContent = window.ViewMode ? window.ViewMode.title() : 'Глубокая сцена';
     el('mLightSt').textContent = el('btnLight').classList.contains('on') ? 'Полный' : 'Приглушённый';
     el('mInstall').hidden = !!document.body.classList.contains('installed');
   };
@@ -5453,6 +5688,7 @@ function wireChrome(){
 
   el('mRole').addEventListener('click', () => { closeMenu(); Panels.set('left', true); });
   el('mLog').addEventListener('click', () => { closeMenu(); Panels.set('right', true); });
+  el('mView').addEventListener('click', () => { el('btnView').click(); });
   el('mTop').addEventListener('click', () => { closeMenu(); el('btnTop').click(); });
   el('mLight').addEventListener('click', () => { el('btnLight').click(); syncMenu(); });
   el('mSound').addEventListener('click', () => { el('btnMute').click(); syncMenu(); });
@@ -5656,15 +5892,16 @@ function boot(){
     UI.toast('Сбой хода: ' + msg + '. Партия попробует продолжить.');
     if(!G.over && G.players && G.players.length) UI.log('sys', 'Сбой хода: ' + msg + '.');
   });
-  document.body.dataset.sceneMode = USE_2D ? '2d' : '3d';
-  if(USE_2D) document.body.classList.add('scene-2d');
+  /* Разметку о режиме сцены ведёт общий модуль: он же переставит классы,
+     когда игрок сменит декорацию. */
+  if(window.ViewMode) window.ViewMode.onChange(() => { paintViewBtn(); syncTopBtn(); });
   /* Разрисовываем кнопки: знак берётся из общего набора, а не из шрифта
      системы, поэтому на любом телефоне он выглядит одинаково. */
   document.querySelectorAll('[data-ico]').forEach(b => {
     b.insertAdjacentHTML('afterbegin', Icons.svg(b.dataset.ico, { size: 18 }));
   });
-  /* Мастерскую моделей создаём только когда three.js действительно загрузился. */
-  if(!USE_2D) initModels();
+  /* Мастерскую моделей собирает ensureThree — ровно тогда, когда библиотека
+     действительно загрузилась, и ни секундой раньше. */
   Scene3D.init(el('scene-root'));
   loadSettings();
   syncNameFromAccount();   // имя из аккаунта сайта — второй раз не спрашиваем
@@ -5673,6 +5910,7 @@ function boot(){
   Pace.paint();
   wireStartScreen();
   wireChrome();
+  paintViewBtn();
   Install.init();
   UI.setFilter('all');
   UI.updateApi();
@@ -5680,6 +5918,14 @@ function boot(){
   el('startscreen').classList.add('on');
   requestAnimationFrame(frame);
   window.addEventListener('resize', () => { Scene3D.resize(); UI.positionBubbles(); }, { passive:true });
+  /* Боковые панели открываются и закрываются кнопками, меню и жестом. Вместо
+     того чтобы дописывать вызов в каждое из этих мест, следим за самими
+     панелями: изменился их класс — сцена пересчитала свободное место. */
+  const panelWatch = new MutationObserver(() => { Scene3D.resize(); UI.positionBubbles(); });
+  ['leftpanel', 'rightpanel'].forEach(id => {
+    const node = el(id);
+    if(node) panelWatch.observe(node, { attributes:true, attributeFilter:['class', 'style', 'hidden'] });
+  });
 }
 
 boot();

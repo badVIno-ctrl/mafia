@@ -208,6 +208,125 @@ async function homeScene(browser) {
   await page.close();
 }
 
+/* ------------------------------------------------------------------ */
+/* сцена: смена декораций посреди партии                               */
+/* ------------------------------------------------------------------ */
+/* Проверяем то, что нельзя увидеть обычным тестом: кнопка вида меняет
+   декорацию на ходу, партия при этом не рвётся, подписи мест остаются,
+   выбор запоминается и обратный путь тоже работает. */
+async function viewScene(browser) {
+  const stamp = Date.now().toString(36).slice(-4);
+  const errs = [];
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  watch(page, errs);
+
+  const user = (await api('/api/register', { body: { name: 'Вид' + stamp } })).json.user;
+  await page.goto(BASE + '/', { waitUntil: 'load' });
+  await page.evaluate(u => localStorage.setItem('mafia.online.user', JSON.stringify(u)), user);
+  await page.goto(BASE + '/online.html', { waitUntil: 'load' });
+  await sleep(1400);
+
+  ok(await page.isVisible('#btnView'), 'кнопка вида есть в сетевой партии');
+  ok(await page.evaluate(() => document.body.dataset.sceneView) === 'deep',
+    'базовая декорация — глубокая сцена');
+
+  await page.click('#btnCreate'); await sleep(1000);
+  await page.click('#btnBots'); await sleep(1400);
+  await page.click('#btnStart').catch(() => {});
+  await sleep(5000);
+
+  const before = await page.evaluate(() => ({
+    canvas: !!document.querySelector('#stage canvas'),
+    marks: document.querySelectorAll('#marks .mark').length
+  }));
+  ok(before.canvas && before.marks >= 6, 'глубокая сцена собрана: подписей ' + before.marks);
+
+  await page.click('#btnView'); await sleep(2400);
+  const flat = await page.evaluate(() => ({
+    mode: document.body.dataset.sceneView,
+    canvas: !!document.querySelector('#stage canvas.flat-table'),
+    marks: document.querySelectorAll('#marks .mark').length,
+    probe: window.__flatTableProbe ? window.__flatTableProbe() : null
+  }));
+  ok(flat.mode === 'flat' && flat.canvas, 'плоский задник встал по кнопке');
+  ok(flat.marks >= 6, 'подписи мест не потерялись при смене декораций (' + flat.marks + ')');
+  ok(flat.probe && flat.probe.seats >= 6, 'на плоской сцене есть все места (' + (flat.probe && flat.probe.seats) + ')');
+  await shot(page, 'view-flat');
+
+  for (const w of WIDTHS) {
+    await page.setViewportSize({ width: w, height: 880 });
+    await sleep(800);
+    const o = await overflow(page);
+    ok(o.scroll <= o.client + 1, 'плоский задник без горизонтальной прокрутки на ' + w + 'px');
+    await shot(page, 'view-flat-w' + w);
+  }
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.click('#btnView'); await sleep(2600);
+  const back = await page.evaluate(() => ({
+    mode: document.body.dataset.sceneView,
+    flat: !!document.querySelector('#stage canvas.flat-table'),
+    canvas: !!document.querySelector('#stage canvas')
+  }));
+  ok(back.mode === 'deep' && back.canvas && !back.flat, 'по второму нажатию вернулись в глубокую сцену');
+  ok(await page.evaluate(() => localStorage.getItem('mafia.scene.view')) === 'deep',
+    'выбор декорации запомнился');
+  ok(errs.length === 0, 'при смене декораций нет ошибок консоли' +
+    (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
+  await page.close();
+
+  /* Та же кнопка на странице с ботами: там сцена ведётся шагами, и новая
+     декорация должна догнать стол по журналу. */
+  const errs2 = [];
+  const p2 = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  watch(p2, errs2);
+  await p2.goto(BASE + '/bots.html', { waitUntil: 'load' });
+  await sleep(2000);
+  await p2.click('#paceRow .pc[data-v="0.7"]').catch(() => {});
+  await p2.click('#sizeRow .opt[data-v="8"]').catch(() => {});
+  await p2.click('#btnStart');
+  await sleep(1300);
+  await p2.click('#storyGo').catch(() => {});
+  await sleep(6500);
+  await p2.click('#btnView');
+  await sleep(2500);
+  const bFlat = await p2.evaluate(() => ({
+    mode: document.body.dataset.sceneView,
+    shown: [...document.querySelectorAll('#scene-root canvas')].map(c => getComputedStyle(c).display),
+    flat: !!document.querySelector('#scene-root canvas.flat-table')
+  }));
+  ok(bFlat.mode === 'flat' && bFlat.flat, 'на странице с ботами задник встал посреди партии');
+  ok(bFlat.shown.filter(d => d !== 'none').length === 1,
+    'видна ровно одна декорация: ' + JSON.stringify(bFlat.shown));
+  await shot(p2, 'view-bots-flat');
+
+  /* партия обязана продолжаться в новой декорации */
+  let moved = 0, prev = '';
+  for (let i = 0; i < 50; i++) {
+    for (const sel of ['#storyGo', '#nextBtn', '.tgt.skip', '#speechSkip', '.tgt']) {
+      const el = await p2.$(sel);
+      if (el && await el.isVisible().catch(() => false)) { await el.click({ timeout: 700 }).catch(() => {}); break; }
+    }
+    const st = await p2.evaluate(() => ({
+      phase: (document.getElementById('stPhase') || {}).textContent || '',
+      logN: document.querySelectorAll('#log .le').length
+    }));
+    const key = st.phase + '|' + st.logN;
+    if (key !== prev) { moved++; prev = key; }
+    if (/Голосование|Казнь|Финал/.test(st.phase)) break;
+    await sleep(360);
+  }
+  ok(moved > 4, 'партия с ботами продолжается на плоском заднике: ' + moved + ' изменений');
+
+  await p2.click('#btnView');
+  await sleep(3500);
+  ok(await p2.evaluate(() => document.body.dataset.sceneView) === 'deep',
+    'обратно к глубокой сцене: three.js догрузился по требованию');
+  ok(errs2.length === 0, 'на странице с ботами нет ошибок консоли при смене вида' +
+    (errs2.length ? ': ' + errs2.slice(0, 3).join(' | ') : ''));
+  await p2.close();
+}
+
 (async () => {
   console.log('\n=== СТЕНД: живой браузер, WebGL, снимки в tests/shots ===');
   const srv = spawn('node', [path.join(__dirname, '..', 'server.js')], {
@@ -226,6 +345,7 @@ async function homeScene(browser) {
     if (!only || only === 'home') await homeScene(browser);
     if (!only || only === 'bots') { await botsScene(browser, 8); }
     if (!only || only === 'online') await onlineScene(browser);
+    if (!only || only === 'view') await viewScene(browser);
   } catch (e) {
     fails++;
     console.log('  ИСКЛЮЧЕНИЕ: ' + e.stack);

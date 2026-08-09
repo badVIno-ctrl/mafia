@@ -140,6 +140,37 @@
     /* --------------------------------------------------------------------- */
     /* размеры и раскладка                                                    */
     /* --------------------------------------------------------------------- */
+    /* Сколько места по краям занимает интерфейс поверх сцены. На широком
+       экране страницы с ботами слева висит карта роли, справа — протокол, и
+       без этой поправки два места из восьми оказывались прямо под панелями.
+       Считаем по живой геометрии: панель закрыли — место вернулось. */
+    function avoidInsets() {
+      var res = { left: 0, right: 0 };
+      var list = opts.avoid || [];
+      if (!list.length) return res;
+      var box = container.getBoundingClientRect();
+      if (!box.width || !box.height) return res;
+      for (var i = 0; i < list.length; i++) {
+        var el = typeof list[i] === 'string' ? document.querySelector(list[i]) : list[i];
+        /* offsetParent у элементов с position:fixed всегда пуст, поэтому
+           видимость проверяем по вычисленному стилю и по размеру. */
+        if (!el || el.hidden) continue;
+        var cs = global.getComputedStyle ? global.getComputedStyle(el) : null;
+        if (cs && (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0)) continue;
+        var r = el.getBoundingClientRect();
+        if (r.width <= 1 || r.height <= 1) continue;
+        /* Панель мешает, только если заслоняет заметную часть высоты сцены. */
+        var vOverlap = Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top);
+        if (vOverlap < box.height * 0.22) continue;
+        var midX = box.left + box.width / 2;
+        if (r.right <= midX) res.left = Math.max(res.left, r.right - box.left);
+        else if (r.left >= midX) res.right = Math.max(res.right, box.right - r.left);
+      }
+      res.left = clamp(res.left, 0, box.width * 0.32);
+      res.right = clamp(res.right, 0, box.width * 0.32);
+      return res;
+    }
+
     function measure() {
       var cap = opts.pixelCap || 2;
       DPR = Math.min(global.devicePixelRatio || 1, cap);
@@ -159,23 +190,30 @@
          достаточно места на лампу, снизу нужно вдвое больше: там стоят самые
          крупные фигуры, и под каждой — её табличка. Симметричные поля
          обрезали ближний край стола ровно там, где сидит сам игрок. */
-      var padX = clamp(W * 0.10, 40, 132);
+      var padX = clamp(W * 0.11, 52, 132);
       var padTop = clamp(H * 0.15, 46, 130);
       var padBottom = clamp(H * 0.21, 78, 200);
+      var av = avoidInsets();
+      var padL = Math.max(padX, av.left + 14);
+      var padR = Math.max(padX, av.right + 14);
 
-      geo.cx = W / 2;
+      geo.cx = (padL + (W - padR)) / 2;
       geo.cy = padTop + (H - padTop - padBottom) / 2;
-      geo.rx = Math.max(52, W / 2 - padX);
+      geo.rx = Math.max(52, (W - padL - padR) / 2);
       geo.ry = Math.max(40, (H - padTop - padBottom) / 2);
-      /* Овал не растягиваем сильнее, чем 2.4:1 — дальше стол читается коридором. */
-      if (geo.rx > geo.ry * 2.4) geo.rx = geo.ry * 2.4;
+      /* Овал не растягиваем сильнее, чем 1.9:1 — дальше стол читается
+         коридором, а крайние места уезжают к самым краям кадра. */
+      if (geo.rx > geo.ry * 1.9) geo.rx = geo.ry * 1.9;
       geo.scale = clamp(Math.min(W, H) / 620, 0.6, 1.4);
       /* «План» распрямляет овал: сплюснутость и есть весь взгляд вполоборота. */
-      geo.squash = lerp(0.80, 0.99, st.plan);
       /* Стол заметно меньше круга мест: за столом должны читаться люди, а не
          зелёное поле. Раньше сукно занимало полкадра и съедало всю сцену. */
       geo.trx = geo.rx * 0.56;
       geo.try_ = geo.ry * lerp(0.50, 0.68, st.plan);
+      /* Стол не бывает глубже, чем шире: на узком экране высокого кадра
+         сукно превращалось в вертикальное озеро, чего в комнате не бывает. */
+      var maxDepth = geo.trx * lerp(0.78, 0.95, st.plan);
+      if (geo.try_ > maxDepth) geo.try_ = maxDepth;
 
       st.behind = [];
       st.front = [];
@@ -191,18 +229,25 @@
         /* Дальняя половина стола садится вплотную к сукну и заходит за его
            кромку: сначала рисуем этих, потом стол — и они выходят из-за
            стола, а не висят над ним. Ближняя половина сидит просторно,
-           перед столом, и перекрывает его сама. Один и тот же овал для обеих
-           половин давал картинку, где никто ни за чем не сидит. */
-        var vy = s.behind ? lerp(0.455, 0.58, st.plan) : lerp(0.90, 0.78, st.plan);
+           перед столом, и перекрывает его сама.
+
+           Посадку считаем от размеров стола, а не от высоты кадра: иначе на
+           узком экране дальний ряд отрывался от сукна и садился в воздух. */
+        var vr = s.behind
+          ? geo.try_ * lerp(0.90, 0.94, st.plan)
+          : Math.min(geo.ry, geo.try_ * lerp(3.0, 1.9, st.plan));
         var hx = s.behind ? 0.92 : 1;
         s.x = geo.cx + Math.cos(a) * geo.rx * hx;
-        s.y = geo.cy + Math.sin(a) * geo.ry * vy;
+        s.y = geo.cy + Math.sin(a) * vr;
 
         /* Дальние фигуры мельче ближних: одна честная подсказка глубины,
            большего плоскому заднику не нужно. */
         s.depth = (Math.sin(a) + 1) / 2;
         var room = Math.min(geo.rx * 1.05, geo.ry * 1.5);
-        s.r = clamp(room / (n * 0.44), 13, 38) *
+        /* На узком экране фигуры уменьшаем: иначе дальний ряд слипается в
+           одну кляксу — соседи стоят плотнее, чем ширина плеч. */
+        var narrow = clamp(W / 620, 0.7, 1);
+        s.r = clamp(room / (n * 0.44), 13, 38) * narrow *
           lerp(0.88, 1.08, s.depth) * lerp(1, 0.9, st.plan);
       }
       var sortY = function (p, q) { return p.y - q.y; };
@@ -903,7 +948,10 @@
       var pw = clamp(r * 5.0, 76, 168);
       var ph = clamp(r * 1.42, 21, 32);
       var px = clamp(s.x - pw / 2, 4, Math.max(4, W - pw - 4));
-      var py = clamp(s.y + r * 1.42, 4, Math.max(4, H - ph - 4));
+      /* Дальние места подписываем над головой: под ними лежит сукно, и
+         табличка уезжала прямо на стол. Ближние — под подставкой. */
+      var py = clamp(s.behind ? s.y - r * 2.5 - ph : s.y + r * 1.42,
+        4, Math.max(4, H - ph - 4));
 
       ctx.save();
       ctx.globalAlpha = dead ? 0.6 : fade;
@@ -953,7 +1001,7 @@
         var meta = ROLE_VIS[s.revealed];
         var cw = clamp(r * 4.4, 64, 148), chh = clamp(r * 1.2, 17, 26);
         var cx = clamp(s.x - cw / 2, 4, Math.max(4, W - cw - 4));
-        var cy = clamp(py + ph + 3, 4, Math.max(4, H - chh - 4));
+        var cy = clamp(s.behind ? py - chh - 3 : py + ph + 3, 4, Math.max(4, H - chh - 4));
         ctx.save();
         roundRect(cx, cy, cw, chh, 2);
         ctx.fillStyle = 'rgba(241,236,225,.93)';
@@ -1006,22 +1054,30 @@
       st.arrows.forEach(function (ar) {
         var a = seat(ar.from), b = seat(ar.to);
         if (!a || !b) return;
-        var x1 = a.x, y1 = a.y - a.r * 0.2, x2 = b.x, y2 = b.y - b.r * 0.2;
-        var mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.abs(x2 - x1) * 0.12;
+        /* Линия идёт от плеча к плечу и заметно выгибается вверх: прямая
+           через весь кадр читалась случайной царапиной по заднику. */
+        var x1 = a.x, y1 = a.y - a.r * 0.5, x2 = b.x, y2 = b.y - b.r * 0.9;
+        var span = Math.hypot(x2 - x1, y2 - y1);
+        var mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - span * 0.26;
         var t = clamp(ar.k, 0, 1);
-        ctx.strokeStyle = rgba(C.bone, 0.5 * t);
-        ctx.lineWidth = 1.8;
+        var ex = lerp(lerp(x1, mx, t), lerp(mx, x2, t), t);
+        var ey = lerp(lerp(y1, my, t), lerp(my, y2, t), t);
+        ctx.strokeStyle = rgba(C.bone, 0.42 + 0.2 * t);
+        ctx.lineWidth = 2.4;
+        ctx.setLineDash([9, 6]);
         ctx.beginPath();
         ctx.moveTo(x1, y1);
-        ctx.quadraticCurveTo(mx, my, lerp(x1, x2, t), lerp(y1, y2, t));
+        ctx.quadraticCurveTo(lerp(x1, mx, t), lerp(y1, my, t), ex, ey);
         ctx.stroke();
-        if (t > 0.9) {
+        ctx.setLineDash([]);
+        if (t > 0.85) {
           var ang = Math.atan2(y2 - my, x2 - mx);
+          ctx.lineWidth = 2.6;
           ctx.beginPath();
           ctx.moveTo(x2, y2);
-          ctx.lineTo(x2 - Math.cos(ang - 0.42) * 10, y2 - Math.sin(ang - 0.42) * 10);
+          ctx.lineTo(x2 - Math.cos(ang - 0.44) * 13, y2 - Math.sin(ang - 0.44) * 13);
           ctx.moveTo(x2, y2);
-          ctx.lineTo(x2 - Math.cos(ang + 0.42) * 10, y2 - Math.sin(ang + 0.42) * 10);
+          ctx.lineTo(x2 - Math.cos(ang + 0.44) * 13, y2 - Math.sin(ang + 0.44) * 13);
           ctx.stroke();
         }
       });
@@ -1049,8 +1105,8 @@
       var behind = st.behind || [], front = st.front || [];
       for (var i = 0; i < behind.length; i++) paintSeat(behind[i], now);
       paintTable(now);
-      for (var j = 0; j < front.length; j++) paintSeat(front[j], now);
       paintArrows();
+      for (var j = 0; j < front.length; j++) paintSeat(front[j], now);
       /* Таблички — последним слоем: имя дальнего места не должно уходить под
          стол только потому, что человек сидит с той стороны. */
       if (st.plates) {
