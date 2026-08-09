@@ -16,7 +16,8 @@ const suites = [
   ['Тест 10 · соседи-боты и вход по приглашению', 'test-bots.js'],
   ['Тест 11 · общий зал, быстрая игра и SEO', 'test-lobby.js'],
   ['Тест 12 · доступ к столу и возвращение в партию', 'test-access.js'],
-  ['Тест 13 · слово по кругу', 'test-speeches.js']
+  ['Тест 13 · слово по кругу', 'test-speeches.js'],
+  ['Тест 14 · семя партии и устойчивость ботов', 'test-seed.js']
 ];
 
 let bad = 0;
@@ -41,7 +42,8 @@ const must = [
   'public/vendor/three/three.module.js',
   'tests/test-speech.js', 'tests/test-chat.js', 'tests/test-offline.js',
   'tests/test-signal.js', 'tests/test-assets.js', 'tests/test-bots.js',
-  'tests/test-lobby.js', 'tests/test-access.js', 'tests/test-speeches.js', 'tests/shot.js'
+  'tests/test-lobby.js', 'tests/test-access.js', 'tests/test-speeches.js',
+  'tests/test-seed.js', 'tests/shot.js'
 ];
 let miss = 0;
 must.forEach(f => {

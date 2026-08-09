@@ -45,9 +45,13 @@ const TRAITS = [
   { id: 'lawyer', talk: 2, sharp: 0.35 }
 ];
 
-const rnd = (n) => Math.floor(Math.random() * n);
+/* Случайность ботов идёт от партии, если та её предоставила: тогда стол
+   повторяем при том же семени, и симулятор баланса даёт устойчивые числа.
+   Вне партии (создание бота, выбор имени) остаётся обычный Math.random. */
+let RNG = null;
+const rnd = (n) => Math.floor((RNG ? RNG.next() : Math.random()) * n);
 const pick = (a) => a[rnd(a.length)];
-const chance = (p) => Math.random() < p;
+const chance = (p) => (RNG ? RNG.next() : Math.random()) < p;
 
 function isBotId(id) { return typeof id === 'string' && id.slice(0, PREFIX.length) === PREFIX; }
 
@@ -127,6 +131,20 @@ function fill(tpl, vars) {
    Кого сегодня называли — тот и под подозрением. Считаем по общему чату:
    бот видит ровно то же, что видит человек.
    ========================================================================= */
+/* Заготовки не должны повторяться подряд у разных ботов: три соседа с одной и
+   той же фразой мгновенно выдают механику, и стол перестаёт читаться живым.
+   Партия помнит последние сказанные заготовки и выбирает из оставшихся. */
+function pickFresh(list, game) {
+  if (!list || !list.length) return undefined;
+  const used = game._botSaid = game._botSaid || [];
+  const free = list.filter(x => used.indexOf(x) < 0);
+  const chosen = pick(free.length ? free : list);
+  used.push(chosen);
+  const keep = Math.max(6, Math.min(28, list.length * 2));
+  while (used.length > keep) used.shift();
+  return chosen;
+}
+
 function suspicionMap(game) {
   const sus = {};
   game.players.forEach(p => { sus[p.id] = 0; });
@@ -153,18 +171,50 @@ function accusationsIn(game) {
   return out;
 }
 
-/** Все заявки «я шериф, такой-то чёрный» от живых игроков. */
+/* Заявки «я шериф, такой-то чёрный».
+
+   Раньше здесь стояло простое правило: сообщение со словом «шериф» плюс любое
+   упомянутое имя — заявка. Из этого получалась дыра, которой ломался весь
+   стол: мафия-человек писала «шериф проверил Веру, она чёрная» и одним
+   сообщением направляла всех ботов на Веру, а следующей ночью боты-мафия шли
+   за «объявившимся шерифом».
+
+   Теперь заявкой считается только та фраза, в которой автор называет шерифом
+   себя. Заявок от одного игрока учитывается ограниченное число, повторы про
+   одного и того же человека не складываются, а два игрока, объявившие себя
+   шерифом, ослабляют друг друга — ровно так же, как это работает за настоящим
+   столом. */
+const CLAIM_SELF = /(^|[\s,.;:!?—-])(я\s+шериф|шериф\s+(?:—|-|это)?\s*я|раскрываюсь[\s,:—-]*шериф|моя\s+карта\s*[—:-]?\s*шериф)/i;
+const CLAIMS_PER_PLAYER = 3;
+
 function sheriffClaims(game) {
   const out = [];
+  const perAuthor = {};
+  const seen = {};
   game.chat.forEach(m => {
-    if (m.channel !== 'town' || !/шериф/i.test(m.text)) return;
+    if (m.channel !== 'town') return;
+    if (!CLAIM_SELF.test(String(m.text || ''))) return;
     const who = game.p(m.from);
     if (!who || !who.alive) return;
     const named = (m.mentions || []).map(id => game.p(id)).filter(p => p && p.alive && p.id !== m.from);
     if (!named.length) return;
+    /* Больше трёх чёрных от одного шерифа за партию — уже не проверки, а
+       поток имён: дальше его слово ничего не добавляет. */
+    perAuthor[m.from] = (perAuthor[m.from] || 0) + 1;
+    if (perAuthor[m.from] > CLAIMS_PER_PLAYER) return;
+    const key = m.from + '→' + named[0].id;
+    if (seen[key]) return;                    // повтор той же заявки не усиливает её
+    seen[key] = true;
     out.push({ from: m.from, target: named[0].id });
   });
   return out;
+}
+
+/** Сколько человек объявили себя шерифом. Двое и больше — верить некому. */
+function claimants(game) {
+  const set = {};
+  sheriffClaims(game).forEach(c => { set[c.from] = true; });
+  return Object.keys(set);
 }
 function sheriffClaim(game) {
   const all = sheriffClaims(game);
@@ -183,13 +233,23 @@ function personalSus(game, me, sus) {
     const wasTown = !game.isMafia(dead.id);
     (acc[dead.id] || []).forEach(id => { out[id] = (out[id] || 0) + (wasTown ? 1.1 : -1.7); });
   });
-  /* Открытая проверка шерифа перевешивает любой шум за столом: город,
-     который не слушает шерифа, обречён — и в жизни, и здесь. */
-  sheriffClaims(game).forEach(c => {
-    if (c.from === me.id) return;
-    out[c.target] = (out[c.target] || 0) + 5;
-    /* Заявившему верим: сдавать его не с руки. */
-    out[c.from] = (out[c.from] || 0) - 2;
+  /* Открытая проверка шерифа весит больше любого шума за столом: город,
+     который не слушает шерифа, обречён. Но вес не безграничен, и когда
+     шерифом называют себя двое, обе заявки стоят вдвое меньше: одна из них
+     точно ложная, и бот это понимает так же, как понял бы человек. */
+  const who = claimants(game).filter(id => id !== me.id);
+  const trust = who.length <= 1 ? 1 : 1 / who.length;
+  const claims = sheriffClaims(game).filter(c => c.from !== me.id);
+  const added = {};
+  claims.forEach(c => {
+    /* Одному человеку от одного заявителя — один раз. Иначе повторами одна
+       фраза складывалась в непробиваемое подозрение. */
+    const key = c.from + '→' + c.target;
+    if (added[key]) return;
+    added[key] = true;
+    out[c.target] = (out[c.target] || 0) + 3.2 * trust;
+    /* Заявившему верим ровно настолько, насколько верим заявке. */
+    out[c.from] = (out[c.from] || 0) - 1.4 * trust;
   });
   out[me.id] = -99;
   return out;
@@ -240,13 +300,16 @@ function nightAction(game, me, sus) {
   return null;
 }
 
-/** Кто вслух назвал себя шерифом — по общему чату. */
+/* Кто вслух назвал шерифом себя — по общему чату, тем же строгим правилом,
+   что и заявки. Мафия идёт за таким человеком первой ночью после раскрытия:
+   так играют и живые. Важно, что раскрытием считается только «я шериф», а не
+   любое упоминание слова: иначе фразой «где наш шериф?» можно было заказать
+   любого, и один человек управлял всеми ботами-мафией. */
 function claimedSheriff(game, skip) {
   for (let i = game.chat.length - 1; i >= 0; i--) {
     const m = game.chat[i];
     if (m.channel !== 'town') continue;
-    if (!/шериф/i.test(m.text)) continue;
-    if (!/(^|\s)(я|это я)\s/i.test(' ' + m.text) && !/раскрыва/i.test(m.text)) continue;
+    if (!CLAIM_SELF.test(String(m.text || ''))) continue;
     if ((skip || []).indexOf(m.from) >= 0) continue;
     const p = game.p(m.from);
     if (p && p.alive) return p.id;
@@ -295,10 +358,10 @@ function dayLine(game, me, sus, said) {
   const sharp = me._trait ? me._trait.sharp : 0.5;
 
   if (!said && !game.chat.filter(m => m.channel === 'town' && m.day === game.day).length && chance(0.5)) {
-    return { text: pick(LINES.open) };
+    return { text: pickFresh(LINES.open, game) };
   }
-  if (game.day > 1 && !said && chance(0.25)) return { text: pick(LINES.mourn) };
-  if (heat >= 2 && chance(0.7)) return { text: pick(LINES.defendSelf) };
+  if (game.day > 1 && !said && chance(0.25)) return { text: pickFresh(LINES.mourn, game) };
+  if (heat >= 2 && chance(0.7)) return { text: pickFresh(LINES.defendSelf, game) };
 
   /* Шериф-бот раскрывается, когда нашёл чёрного и уже опасно молчать. */
   if (me.role === ROLE.SHERIFF) {
@@ -310,15 +373,15 @@ function dayLine(game, me, sus, said) {
       .filter(c => me._told.indexOf(c.targetId) < 0);
     if (black.length) {
       me._told.push(black[0].targetId);
-      return { text: fill(pick(LINES.claimSheriff), { T: game.nameOf(black[0].targetId) }) };
+      return { text: fill(pickFresh(LINES.claimSheriff, game), { T: game.nameOf(black[0].targetId) }) };
     }
   }
   const mine = personalSus(game, me, sus);
   const target = others.length ? mostSuspected(others.map(p => p.id), mine) : pick(alive).id;
   const name = game.nameOf(target);
-  if (chance(sharp)) return { text: fill(pick(LINES.accuse), { T: name }) };
-  if (chance(0.45)) return { text: fill(pick(LINES.question), { T: name }) };
-  return { text: fill(pick(LINES.defend), { T: name }) };
+  if (chance(sharp)) return { text: fill(pickFresh(LINES.accuse, game), { T: name }) };
+  if (chance(0.45)) return { text: fill(pickFresh(LINES.question, game), { T: name }) };
+  return { text: fill(pickFresh(LINES.defend, game), { T: name }) };
 }
 
 /* =========================================================================
@@ -393,6 +456,10 @@ function tick(room, now) {
     }
   });
 
+  /* Случайность берём у партии: при том же семени стол ведёт себя так же,
+     и симулятор баланса перестаёт шуметь от прогона к прогону. */
+  RNG = game.rng || null;
+
   const key = game.phase + ':' + game.day + ':' + (game.speaker || '');
   if (!room.botPlan || room.botPlan.key !== key) room.botPlan = planFor(room, game, now);
 
@@ -411,7 +478,7 @@ function tick(room, now) {
         const t = voteChoice(game, me, sus);
         if (t) {
           game.action(me.id, 'vote', t);
-          if (chance(0.25)) game.say(me.id, pick(LINES.vote), 'town');
+          if (chance(0.25)) game.say(me.id, pickFresh(LINES.vote, game), 'town');
           changed = true;
         }
       } else if (job.kind === 'say') {
@@ -422,7 +489,7 @@ function tick(room, now) {
           if (!r.error) changed = true;
         }
       } else if (job.kind === 'mourn') {
-        const r = game.say(me.id, pick(LINES.mourn), 'town');
+        const r = game.say(me.id, pickFresh(LINES.mourn, game), 'town');
         if (!r.error) changed = true;
       } else if (job.kind === 'speak') {
         /* Речь по кругу: та же реплика, что и в общем обсуждении, но она
@@ -453,4 +520,9 @@ function tick(room, now) {
   return changed;
 }
 
-module.exports = { isBotId, makeBot, tick, NAMES, PREFIX };
+/* Внутренности, открытые тестам. В игре они не нужны: наружу бот показывает
+   только ходы и реплики. Но проверить, что фразой «шериф проверил такого-то»
+   больше нельзя заказать человека, можно только заглянув в эти функции. */
+const __test = { sheriffClaims, claimants, personalSus, suspicionMap, dayLine, claimedSheriff, pickFresh };
+
+module.exports = { isBotId, makeBot, tick, NAMES, PREFIX, __test };

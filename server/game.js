@@ -5,8 +5,12 @@
    ========================================================================= */
 'use strict';
 const C = require('../shared/game-config.js');
+const Rng = require('../shared/rng.js');
 const ROLE = C.ROLE;
 
+/* Свободные функции оставлены для совместимости с тем, что их уже
+   импортирует, но сама партия ими не пользуется: все её случайные решения
+   идут через сеяный генератор, привязанный к партии (см. this.rng). */
 function shuffle(a) {
   const r = a.slice();
   for (let i = r.length - 1; i > 0; i--) {
@@ -31,11 +35,21 @@ class Game {
        а живым остаётся верить, что он промолчит. Хозяин может включить —
        осознанно, для своей компании. */
     this.deadSeeAll = !!opts.deadSeeAll;
+
+    /* Семя партии. Все случайные решения движка — раздача ролей, выбор сюжета,
+       разрешение ничьей в ночном выборе, удар вслепую — идут отсюда. Раньше
+       это был Math.random(), и партию нельзя было ни повторить, ни разобрать:
+       на жалобу «нам третий раз подряд выпала мафия на одних местах» ответить
+       было нечем. Семя видно игроку в конце партии, по нему стол собирается
+       заново до последней карты. */
+    this.seed = String(opts.seed || Rng.freshSeed());
+    this.rng = Rng.createRng(this.seed);
+
     this.timing = C.timing(n);
-    this.scenario = C.scenarioById(scenarioId) || pick(C.scenariosFor(n)) || C.SCENARIOS[0];
+    this.scenario = C.scenarioById(scenarioId) || this.rng.pick(C.scenariosFor(n)) || C.SCENARIOS[0];
     this.composition = C.composition(n);
 
-    const roles = shuffle(C.rolePool(n));
+    const roles = this.rng.shuffle(C.rolePool(n));
     this.players = members.map((m, i) => ({
       id: m.id,
       name: m.name,
@@ -112,7 +126,18 @@ class Game {
     for (const pl of this.players) {
       const nm = String(pl.name || '').toLowerCase().replace(/\u0451/g, '\u0435');
       if (!nm) continue;
-      const stem = nm.length > 4 ? nm.slice(0, nm.length - 1) : nm;
+      /* Имя надо узнать в любом падеже. В русском склоняется конец слова, и
+         правило простое: у имён на гласную последнюю букву отбрасываем
+         («Вера» → «вер», и тогда находятся «Веру», «Вере», «Верой»), у имён
+         на согласную оставляем как есть — падежные окончания к ним
+         дописываются («Борис» → «Бориса», и совпадение находится по началу).
+
+         Две границы. Короткие имена не режем: от «Ани» останется «ан», и
+         обращением станет любое «Антон». И не режем имена, кончающиеся
+         цифрой: «Игрок1» и «Игрок2» свелись бы к одному «игрок», после чего
+         каждая фраза считалась бы обращением ко всему столу сразу. */
+      const cutTail = nm.length >= 4 && !/\d$/.test(nm) && /[аяоеиыуюё]$/.test(nm);
+      const stem = cutTail ? nm.slice(0, nm.length - 1) : nm;
       const bySeat = new RegExp('(^|[\\s\\u2116#])' + pl.seat + '(-\u0439|-\u0433\u043e|[\\s,.!?:;]|$)').test(low);
       if (low.indexOf(' ' + stem) >= 0 || bySeat) out.push({ id: pl.id, seat: pl.seat, name: pl.name });
     }
@@ -333,11 +358,11 @@ class Game {
       else {
         const don = this.aliveMafia().find(p => p.role === ROLE.DON);
         const donPick = don ? this.nightActions.kill[don.id] : null;
-        victim = (donPick && top.indexOf(donPick) >= 0) ? donPick : pick(top);
+        victim = (donPick && top.indexOf(donPick) >= 0) ? donPick : this.rng.pick(top);
       }
     } else if (this.aliveMafia().length) {
       const targets = this.alive().filter(p => !this.isMafia(p.id));
-      if (targets.length) victim = pick(targets).id;   // мафия промолчала — удар вслепую
+      if (targets.length) victim = this.rng.pick(targets).id;   // мафия промолчала — удар вслепую
     }
 
     // 2. лечение
@@ -647,6 +672,9 @@ class Game {
       },
       composition: this.composition,
       compositionLabel: C.compositionLabel(this.players.length),
+      /* Семя отдаём только после занавеса: до него по нему можно было бы
+         пересчитать раздачу и узнать все роли. */
+      seed: revealAll ? this.seed : null,
       players,
       log: this.log.slice(-120),
       chat: chat.slice(-120),
