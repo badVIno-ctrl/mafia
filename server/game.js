@@ -6,6 +6,7 @@
 'use strict';
 const C = require('../shared/game-config.js');
 const Rng = require('../shared/rng.js');
+const Inquest = require('../shared/inquest.js');
 const ROLE = C.ROLE;
 
 /* Свободные функции оставлены для совместимости с тем, что их уже
@@ -70,6 +71,23 @@ class Game {
     this.spoke = {};                // кто уже высказался — стол это видит
     this.firstSpeakerSeat = 1;      // первое слово каждый день переходит дальше
 
+    /* Режим партии. 'classic' — обычная «Мафия»; 'inquest' — «Следствие»,
+       где у каждого есть приметы, ночь оставляет улики, а днём город может
+       проверить одного человека по одной примете. Правила режима живут в
+       shared/inquest.js, здесь — только их место в ходе партии. */
+    this.mode = opts.mode === 'inquest' ? 'inquest' : 'classic';
+    if (this.mode === 'inquest') {
+      this.traits = Inquest.dealTraits(this.rng, this.players);
+      this.clues = [];              // публичные улики: { day, traitId, text, shared }
+      this.usedClueTraits = [];     // какие приметы уже назывались
+      this.nightMethod = null;      // способ, выбранный мафией на эту ночь
+      this.killerId = null;         // кто держал нож этой ночью
+      this.expertVotes = {};        // voterId -> { targetId, traitId }
+      this.expertDone = {};         // day -> true: одна экспертиза в день
+      this.expertLog = [];          // { day, targetId, traitId, has }
+      this.publicTraits = {};       // приметы выбывших — общее достояние
+    }
+
     this.day = 0;
     this.phase = 'prologue';        // prologue | night | morning | speech | day | vote | runoff | over
     this.deadline = now() + 12000;
@@ -98,6 +116,12 @@ class Game {
 
     this.pushLog('story', this.scenario.prologue);
     this.pushLog('sys', 'Состав стола: ' + C.compositionLabel(n) + '.');
+    if (this.mode === 'inquest') {
+      this.pushLog('sys', 'Следствие. У каждого за столом три приметы — свои вы знаете, чужие нет. ' +
+        'Каждое утро город получает улики: улика всегда говорит правду о том, кто убивал. ' +
+        'Днём можно сложиться и проверить одного человека по одной примете. ' +
+        'Приметы выбывшего становятся известны всем.');
+    }
     if (this.speeches) {
       this.pushLog('sys', 'Слово идёт по кругу: у каждого ' + this.timing.speech +
         ' секунд, можно передать слово раньше.');
@@ -225,6 +249,31 @@ class Game {
       this.votes[userId] = targetId;
       return { ok: true };
     }
+    /* Способ убийства. Решение мафии, и оно не бесплатное: за две улики
+       городу мафия получает ночь, в которую врач не успевает. */
+    if (type === 'method') {
+      if (this.mode !== 'inquest') return { error: 'Не в этом режиме' };
+      if (this.phase !== 'night' || !this.isMafia(userId)) return { error: 'Не сейчас' };
+      if (!Inquest.METHOD_BY_ID[targetId]) return { error: 'Неизвестный способ' };
+      this.nightMethod = targetId;
+      return { ok: true };
+    }
+    /* Экспертиза: город складывается и проверяет одну примету одного
+       человека. Голос подаётся парой «кого» и «по какой примете». */
+    if (type === 'expert') {
+      if (this.mode !== 'inquest') return { error: 'Не в этом режиме' };
+      if (this.phase !== 'day') return { error: 'Экспертизу заказывают днём' };
+      if (this.expertDone[this.day]) return { error: 'Одна экспертиза в день — сегодняшняя уже сделана' };
+      const parts = String(targetId || '').split(':');
+      const who = this.p(parts[0]);
+      const traitId = parts[1];
+      if (!who || !who.alive) return { error: 'Неверная цель' };
+      if (!Inquest.TRAIT_BY_ID[traitId]) return { error: 'Такой приметы нет' };
+      if (!this.clues.some(c => c.traitId === traitId)) return { error: 'Эта примета не всплывала в уликах' };
+      this.expertVotes[userId] = { targetId: who.id, traitId };
+      this.resolveExpert();
+      return { ok: true };
+    }
     if (type === 'pass') {            // «я всё сказал» — передать слово по кругу
       if (this.phase !== 'speech') return { error: 'Слово сейчас не по кругу' };
       if (this.speaker !== userId) return { error: 'Слово не у вас' };
@@ -339,6 +388,7 @@ class Game {
     this.phase = 'night';
     this.nightActions = { kill: {}, heal: {}, check: {} };
     this.ready = {};
+    if (this.mode === 'inquest') { this.nightMethod = null; this.killerId = null; }
     this.deadline = now() + this.timing.night * 1000;
     this.pushLog('night', 'Ночь ' + this.day + '. ' + this.scenario.nightFlavor);
   }
@@ -365,8 +415,22 @@ class Game {
       if (targets.length) victim = this.rng.pick(targets).id;   // мафия промолчала — удар вслепую
     }
 
+    /* Кто держал нож. В «Следствии» это важно: улики говорят о его
+       приметах. Убийцей считаем того из мафии, чей голос совпал с итогом, —
+       иначе дона, иначе любого живого мафиози. */
+    if (this.mode === 'inquest' && victim) {
+      const voted = Object.entries(this.nightActions.kill).find(([, tid]) => tid === victim);
+      const don = this.aliveMafia().find(p => p.role === ROLE.DON);
+      this.killerId = (voted && voted[0]) || (don && don.id) ||
+        (this.aliveMafia()[0] && this.aliveMafia()[0].id) || null;
+    }
+
     // 2. лечение
-    const healed = new Set(Object.values(this.nightActions.heal));
+    const method = this.mode === 'inquest'
+      ? (Inquest.METHOD_BY_ID[this.nightMethod] || Inquest.METHOD_BY_ID[Inquest.DEFAULT_METHOD])
+      : null;
+    /* «Грубо и быстро»: врач не успевает. Это и есть плата за две улики. */
+    const healed = (method && method.noHeal) ? new Set() : new Set(Object.values(this.nightActions.heal));
     this.lastHealed = Object.assign({}, this.nightActions.heal);
 
     // 3. проверки шерифа
@@ -394,10 +458,50 @@ class Game {
       this.pushLog('morning', 'Утро ' + this.day + '. Ночь прошла тихо.');
     }
 
+    /* Улики оставляет само покушение, а не его исход: если врач успел, следы
+       у двери всё равно остались, и город получает их. Иначе спасённая ночь
+       была бы для следствия пустой — а это самая интересная ночь. */
+    if (this.mode === 'inquest' && victim && this.killerId) {
+      const fresh = Inquest.cluesFor(this.rng, this.killerId, this.traits,
+        method.id, this.alive(), this.usedClueTraits);
+      fresh.forEach(c => {
+        this.clues.push({ day: this.day, traitId: c.traitId, text: c.text, shared: c.shared });
+        this.usedClueTraits.push(c.traitId);
+        this.pushLog('clue', 'Улика: тот, кто это сделал, ' + c.text + '.');
+      });
+      if (!fresh.length) this.pushLog('clue', 'Следов не осталось: этой ночью работали чисто.');
+    }
+
     if (!this.checkWin()) {
       this.omenStep++;
       if (this.scenario.dayFlavor && this.omenStep % 2 === 0) this.pushLog('story', this.scenario.dayFlavor);
     }
+  }
+
+  /* ------------------------------ следствие ------------------------------ */
+  /** Заказана ли экспертиза большинством живых. Считаем по паре «кого и что». */
+  resolveExpert() {
+    if (this.mode !== 'inquest' || this.expertDone[this.day]) return false;
+    const aliveN = this.alive().length;
+    const need = Math.floor(aliveN / 2) + 1;
+    const tally = {};
+    Object.entries(this.expertVotes).forEach(([voter, v]) => {
+      const p = this.p(voter);
+      if (!p || !p.alive) return;
+      const key = v.targetId + ':' + v.traitId;
+      tally[key] = (tally[key] || 0) + 1;
+    });
+    const win = Object.entries(tally).find(([, n]) => n >= need);
+    if (!win) return false;
+
+    const [targetId, traitId] = win[0].split(':');
+    const has = (this.traits[targetId] || []).indexOf(traitId) >= 0;
+    this.expertDone[this.day] = true;
+    this.expertVotes = {};
+    this.expertLog.push({ day: this.day, targetId, traitId, has });
+    this.pushLog('expert', 'Экспертиза: у ' + this.nameOf(targetId) + ' приметы «' +
+      Inquest.traitShort(traitId) + '» ' + (has ? 'есть' : 'нет') + '.');
+    return true;
   }
 
   /* ------------------------------ круг речей ------------------------------ */
@@ -457,6 +561,7 @@ class Game {
     this.speaker = null;
     this.phase = 'day';
     this.ready = {};
+    if (this.mode === 'inquest') this.expertVotes = {};
     this.deadline = now() + this.timing.day * 1000;
     this.pushLog('sys', 'День ' + this.day + '. Обсуждение: ' + Math.round(this.timing.day / 60 * 10) / 10 + ' мин.');
   }
@@ -521,6 +626,13 @@ class Game {
     p.alive = false;
     p.deathDay = this.day;
     p.deathCause = cause;
+    /* В «Следствии» приметы выбывшего становятся общим достоянием: именно
+       так у стола к третьему дню собирается доска проверяемых фактов. */
+    if (this.mode === 'inquest') {
+      this.publicTraits[id] = (this.traits[id] || []).slice();
+      const list = this.publicTraits[id].map(t => Inquest.traitShort(t)).join(', ');
+      if (list) this.pushLog('clue', 'Приметы ' + p.name + ': ' + list + '.');
+    }
   }
 
   checkWin() {
@@ -706,6 +818,34 @@ class Game {
           .map(([mid, tid]) => ({ from: this.nameOf(mid), to: this.nameOf(tid) }));
       }
     }
+    /* Доска следствия. Публичного здесь только то, что публично: улики,
+       результаты экспертиз и приметы выбывших. Свои приметы человек видит
+       свои, чужие живые — никогда. */
+    if (this.mode === 'inquest') {
+      view.mode = 'inquest';
+      view.inquest = {
+        clues: this.clues.map(c => ({ day: c.day, traitId: c.traitId, text: c.text, shared: c.shared })),
+        expert: this.expertLog.slice(),
+        expertDone: !!this.expertDone[this.day],
+        expertNeed: Math.floor(this.alive().length / 2) + 1,
+        expertVotes: Object.keys(this.expertVotes).length,
+        publicTraits: this.publicTraits,
+        methods: Inquest.METHODS
+      };
+      if (me) {
+        view.inquest.myTraits = (revealAll || true) ? (this.traits[me.id] || []).slice() : [];
+        view.inquest.myTraitsRu = view.inquest.myTraits.map(t => Inquest.traitRu(t));
+        view.inquest.myExpert = this.expertVotes[me.id] || null;
+        if (iAmMafia && this.phase === 'night') view.inquest.method = this.nightMethod;
+      }
+      if (revealAll) {
+        view.inquest.allTraits = this.traits;
+        view.inquest.killerId = this.killerId;
+      }
+    } else {
+      view.mode = 'classic';
+    }
+
     if (this.runoffOf) view.runoffOf = this.runoffOf;
     if (this.phase === 'speech') {
       view.speakerId = this.speaker;

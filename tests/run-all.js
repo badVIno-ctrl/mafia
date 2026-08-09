@@ -17,7 +17,8 @@ const suites = [
   ['Тест 11 · общий зал, быстрая игра и SEO', 'test-lobby.js'],
   ['Тест 12 · доступ к столу и возвращение в партию', 'test-access.js'],
   ['Тест 13 · слово по кругу', 'test-speeches.js'],
-  ['Тест 14 · семя партии и устойчивость ботов', 'test-seed.js']
+  ['Тест 14 · семя партии и устойчивость ботов', 'test-seed.js'],
+  ['Тест 15 · режим «Следствие»', 'test-inquest.js']
 ];
 
 let bad = 0;
@@ -31,19 +32,19 @@ suites.forEach(([title, file]) => {
 console.log('\n─── Тест 6 · состав пакета ───');
 const must = [
   'server.js', 'package.json', 'README.md',
-  'shared/game-config.js', 'server/game.js', 'server/bots.js',
+  'shared/game-config.js', 'shared/inquest.js', 'server/game.js', 'server/bots.js',
   'public/index.html', 'public/online.html', 'public/bots.html',
   'public/rules.html', 'public/404.html', 'public/manifest.webmanifest',
   'public/img/og-image.png', 'public/img/icon-192.png', 'public/img/icon-512.png',
   'public/css/app.css', 'public/css/theatre.css', 'public/css/fonts.css',
   'public/js/api.js', 'public/js/hub.js', 'public/js/online.js', 'public/js/speech.js',
   'public/js/icons.js', 'public/js/voice.js', 'public/js/rtc.js', 'public/js/curtain.js',
-  'public/js/models3d.js', 'public/js/stage3d.js',
+  'public/js/models3d.js', 'public/js/stage3d.js', 'public/js/view-mode.js',
   'public/vendor/three/three.module.js',
   'tests/test-speech.js', 'tests/test-chat.js', 'tests/test-offline.js',
   'tests/test-signal.js', 'tests/test-assets.js', 'tests/test-bots.js',
   'tests/test-lobby.js', 'tests/test-access.js', 'tests/test-speeches.js',
-  'tests/test-seed.js', 'tests/shot.js'
+  'tests/test-seed.js', 'tests/test-inquest.js', 'tests/shot.js'
 ];
 let miss = 0;
 must.forEach(f => {

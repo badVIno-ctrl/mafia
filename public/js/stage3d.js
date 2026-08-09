@@ -51,10 +51,16 @@ export async function mountStage(container, opts) {
   /* рендерер, сцена, камера                                             */
   /* ------------------------------------------------------------------ */
   const renderer = new THREE.WebGLRenderer({ antialias: !M.LOWQ, powerPreference: 'high-performance' });
-  let pixelCap = M.LOWQ ? 1.5 : 2;
+  /* Плотность пикселей — самая дорогая настройка из всех. На телефоне с
+     тройным DPR честная отрисовка стоит девять раз больше пикселей, чем на
+     обычном экране, и разницы на пяти дюймах не видно. */
+  let pixelCap = M.LOWQ ? 1.4 : (M.TIER === 'mid' ? 1.8 : 2);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pixelCap));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = M.LOWQ ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+  /* Тени на слабом устройстве выключены с самого начала: одна карта теней
+     от лампы стоит дороже, чем все фигуры вместе. Сцена без них читается —
+     свет лампы и отсвет от сукна дают объём и без падающих теней. */
+  renderer.shadowMap.enabled = !M.LOWQ;
+  renderer.shadowMap.type = M.TIER === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.34;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -73,22 +79,31 @@ export async function mountStage(container, opts) {
   const lamp = M.buildLamp(root, { ceilY: 4.5, bulbY: 2.2 });
 
   /* Общий свет. Держим ссылки: по фазам он меняется целиком. */
-  const ambient = new THREE.AmbientLight(0x6a6070, 1.2);
-  const hemi = new THREE.HemisphereLight(0x8b9bb4, 0x3a2c26, 0.95);
+  /* Свет. Комната освещена одной лампой над столом, и это должно быть
+     видно: заполняющий свет здесь только чтобы тени не были чёрными
+     дырами. Раньше ambient 1.2 и три заполняющих по 14 заливали сцену так,
+     что тёмный костюм становился светлым, а кожа — фарфоровой. */
+  const ambient = new THREE.AmbientLight(0x6a6070, 0.42);
+  const hemi = new THREE.HemisphereLight(0x8b9bb4, 0x3a2c26, 0.34);
   const moon = new THREE.DirectionalLight(0x5878b8, 0);
   moon.position.set(-6, 7, -5);
   const emberGlow = new THREE.PointLight(0xc4563a, 0, 7, 2);
   emberGlow.position.set(0, 1.55, 0);
   const fills = [];
-  [[0, 2.6, 3.4, 0xffd7ad, 16], [-3.2, 2.4, -2.2, 0x9db4de, 10], [3.2, 2.4, -2.2, 0xdda98a, 10]].forEach(c => {
+  [[0, 2.6, 3.4, 0xffd7ad, 5], [-3.2, 2.4, -2.2, 0x9db4de, 3.4], [3.2, 2.4, -2.2, 0xdda98a, 3.4]].forEach(c => {
     const l = new THREE.PointLight(c[3], c[4], 12, 2);
     l.position.set(c[0], c[1], c[2]);
     fills.push(l); scene.add(l);
   });
-  const tableLight = new THREE.SpotLight(0xfff0d6, 22, 7, Math.PI / 2.8, 0.9, 1.2);
-  tableLight.position.set(0, 3.3, 0.5);
-  tableLight.target.position.set(0, 0.8, 0);
-  scene.add(ambient, hemi, moon, emberGlow, tableLight, tableLight.target);
+  /* Отсвет от сукна. Лампа висит над столом, поэтому сверху освещены
+     макушки, а лица оказываются в собственной тени — играть в такое нельзя,
+     лица и есть игра. В жизни лицо в этой ситуации освещает свет,
+     отражённый от стола, поэтому здесь стоит тёплая точка чуть выше сукна:
+     она подсвечивает лица и кисти снизу-спереди, как театральная рампа.
+     Раньше на этом месте стоял ещё один прожектор сверху. */
+  const tableLight = new THREE.PointLight(0xffe0b4, 3.4, 3.2, 2);
+  tableLight.position.set(0, 0.94, 0);
+  scene.add(ambient, hemi, moon, emberGlow, tableLight);
 
   /* ------------------------------------------------------------------ */
   /* камера: собственная орбита с инерцией                               */
@@ -230,9 +245,7 @@ export async function mountStage(container, opts) {
         id: p.id, seat: p.seat, name: p.name, you: !!p.you,
         group, figure, ring, cross,
         pos: new THREE.Vector3(sx, 0, sz),
-        angle: a, dead: false, speaking: false,
-        blinkAt: 900 + Math.random() * 4000, blinkFor: 0,
-        breath: Math.random() * Math.PI * 2
+        angle: a, dead: false, speaking: false
       };
       seats.push(s);
       seatsById.set(p.id, s);
@@ -284,11 +297,11 @@ export async function mountStage(container, opts) {
   /* Куда светим в каждой фазе. Ночь — почти без света, только лампа и луна;
      голосование — жёсткий верхний свет; смерть — короткая вспышка угля. */
   const LIGHT = {
-    day: { spot: 32, point: 5.6, amb: 1.2, hemi: 0.95, moon: 0, fog: 0.022, fill: 14, table: 22, glow: 1, ember: 0, ambColor: 0x6a6070, hemiColor: 0x8b9bb4 },
-    night: { spot: 4.6, point: 1.1, amb: 0.5, hemi: 0.5, moon: 1.5, fog: 0.046, fill: 2.6, table: 3.2, glow: 0.14, ember: 0, ambColor: 0x3a4a70, hemiColor: 0x56769f },
-    vote: { spot: 42, point: 7, amb: 0.9, hemi: 0.7, moon: 0, fog: 0.026, fill: 8, table: 30, glow: 1, ember: 0.6, ambColor: 0x6d5f5a, hemiColor: 0x8b8a86 },
-    morning: { spot: 25, point: 4.6, amb: 1.35, hemi: 1.2, moon: 0, fog: 0.018, fill: 17, table: 19, glow: 0.8, ember: 0, ambColor: 0x7a7268, hemiColor: 0xa8b0bb },
-    over: { spot: 17, point: 3.4, amb: 0.8, hemi: 0.6, moon: 0.4, fog: 0.03, fill: 6.5, table: 13, glow: 0.6, ember: 1.1, ambColor: 0x5c4c52, hemiColor: 0x6f6a72 }
+    day: { spot: 34, point: 5.6, amb: 0.42, hemi: 0.34, moon: 0, fog: 0.022, fill: 4.6, table: 3.4, glow: 1, ember: 0, ambColor: 0x6a6070, hemiColor: 0x8b9bb4 },
+    night: { spot: 5.2, point: 1.1, amb: 0.16, hemi: 0.16, moon: 1.1, fog: 0.046, fill: 0.9, table: 0.7, glow: 0.14, ember: 0, ambColor: 0x3a4a70, hemiColor: 0x56769f },
+    vote: { spot: 44, point: 7, amb: 0.34, hemi: 0.26, moon: 0, fog: 0.026, fill: 2.8, table: 4.4, glow: 1, ember: 0.6, ambColor: 0x6d5f5a, hemiColor: 0x8b8a86 },
+    morning: { spot: 27, point: 4.6, amb: 0.52, hemi: 0.44, moon: 0, fog: 0.018, fill: 6, table: 3.2, glow: 0.8, ember: 0, ambColor: 0x7a7268, hemiColor: 0xa8b0bb },
+    over: { spot: 18, point: 3.4, amb: 0.28, hemi: 0.22, moon: 0.4, fog: 0.03, fill: 2.2, table: 2.1, glow: 0.6, ember: 1.1, ambColor: 0x5c4c52, hemiColor: 0x6f6a72 }
   };
   function lightFor(p) {
     if (p === 'night') return LIGHT.night;
@@ -398,7 +411,13 @@ export async function mountStage(container, opts) {
     lamp.animate(now, dt);
     if (table) table.animate(now);
 
-    /* --- фигуры --- */
+    /* --- фигуры ---
+       Всю жизнь фигуры (дыхание, мигание, речь, качание волос, перенос
+       веса, мелкие движения кистей) считает сама мастерская: одна функция
+       animate в models3d.js. Сцена только сообщает, что происходит за
+       столом. Так живыми оказываются люди и в партии с ботами, и по сети —
+       раньше дыхание и мигание были написаны здесь и работали лишь в одном
+       из двух режимов. */
     for (const s of seats) {
       const u = s.figure.userData;
 
@@ -412,19 +431,11 @@ export async function mountStage(container, opts) {
         s.cross.material.opacity = Math.min(0.9, k);
         u.headPivot.rotation.set(0.4 * ease, 0, 0);
         s.ring.material.opacity = 0;
+        u.animate(now, dt, { dead: true });
         continue;
       }
 
-      /* Дыхание: грудь и плечи ходят на 1.5 %. Ночью — реже и глубже. */
-      s.breath += dt * (nightPose > 0.5 ? 0.0016 : 0.0024);
-      const br = Math.sin(s.breath);
-      u.breathe(br);
-      s.figure.position.y = br * 0.005;
-
-      /* Ночь: все склоняются к столу и опускают головы. */
-      s.figure.rotation.x = nightPose * 0.26;
-
-      /* Взгляд: голова доворачивается к говорящему. */
+      /* Взгляд: голова и глаза доворачиваются к говорящему. */
       let want = 0;
       if (speakerId && speakerId !== s.id) {
         const sp = seatsById.get(speakerId);
@@ -439,26 +450,11 @@ export async function mountStage(container, opts) {
           want = clamp(d, -1.0, 1.0);
         }
       }
-      u.headPivot.rotation.y += (want - u.headPivot.rotation.y) * Math.min(1, dt / 420);
+      u.lookAt(want, 0);
+      u.animate(now, dt, { speaking: s.speaking, night: nightPose > 0.5 });
 
-      /* Мигание: редкое, короткое, у каждого свой ритм. */
-      s.blinkAt -= dt;
-      if (s.blinkFor > 0) {
-        s.blinkFor -= dt;
-        u.lids.forEach(l => { l.visible = true; });
-        if (s.blinkFor <= 0) u.lids.forEach(l => { l.visible = false; });
-      } else if (s.blinkAt <= 0) {
-        s.blinkFor = 110;
-        s.blinkAt = 2200 + Math.random() * 5200;
-      }
-
-      /* Речь: челюсть двигается, фигура чуть подаётся вперёд. */
-      if (s.speaking) {
-        u.talk(0.30 + Math.abs(Math.sin(now * 0.016)) * 0.70);
-        u.headPivot.rotation.x = Math.sin(now * 0.004) * 0.04;
-      } else if (u.talkAmt() > 0.002) {
-        u.talk(lerp(u.talkAmt(), 0, 0.2));
-      }
+      /* Ночь: все склоняются к столу. Это движение всей фигуры, а не головы. */
+      s.figure.rotation.x = nightPose * 0.26;
 
       /* Обруч цели пульсирует — так видно, кого можно выбрать. */
       const wantRing = targets.has(s.id) ? 0.35 + Math.sin(now * 0.005) * 0.22 : 0;

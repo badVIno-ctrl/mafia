@@ -148,8 +148,10 @@
     if (!window.Icons) return;
     $('signBots').innerHTML = Icons.svg('cards', { size: 26 });
     $('signNet').innerHTML = Icons.svg('net', { size: 26 });
+    if ($('signInquest')) $('signInquest').innerHTML = Icons.svg('search', { size: 26 });
     $('goBots').innerHTML = Icons.svg('chevron', { size: 15 });
     $('goNet').innerHTML = Icons.svg('chevron', { size: 15 });
+    if ($('goInquest')) $('goInquest').innerHTML = Icons.svg('chevron', { size: 15 });
   }
 
   /* --- старт --- */

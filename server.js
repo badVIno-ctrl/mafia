@@ -155,6 +155,7 @@ function roomView(room, forUserId) {
     /* 'public' — стол объявлен в общем зале, сесть можно без ссылки.
        'invite' — прежнее поведение: одна ссылка, одна дверь. */
     visibility: room.visibility || 'invite',
+    mode: room.mode || 'classic',
     /* Видят ли выбывшие ночной шёпот мафии. По умолчанию нет. */
     deadSeeAll: !!room.deadSeeAll,
     members: room.members.map(id => {
@@ -363,8 +364,16 @@ function startGame(room) {
   if (members.length > C.MAX_PLAYERS) return { error: 'Максимум ' + C.MAX_PLAYERS + ' игроков' };
   const sc = C.scenarioById(room.scenarioId);
   const fits = sc && members.length >= sc.min && members.length <= sc.max;
-  room.game = new Game(members, fits ? room.scenarioId : null, { deadSeeAll: !!room.deadSeeAll });
-  room.chat.push({ system: true, text: 'Партия началась: «' + room.game.scenario.title + '».', ts: Date.now() });
+  room.game = new Game(members, fits ? room.scenarioId : null, {
+    deadSeeAll: !!room.deadSeeAll,
+    mode: room.mode
+  });
+  room.chat.push({
+    system: true,
+    text: 'Партия началась: «' + room.game.scenario.title + '»' +
+      (room.mode === 'inquest' ? ' · режим «Следствие»' : '') + '.',
+    ts: Date.now()
+  });
   pushAll(room);
   return { ok: true };
 }
@@ -628,6 +637,8 @@ const server = http.createServer(async (req, res) => {
         visibility: body.visibility === 'invite' ? 'invite' : 'public',
         /* Выбывшие читают шёпот мафии только если хозяин это разрешил. */
         deadSeeAll: body.deadSeeAll === true,
+        /* Режим стола: обычная «Мафия» или «Следствие» с приметами и уликами. */
+        mode: body.mode === 'inquest' ? 'inquest' : 'classic',
         autoStart: body.autoStart !== false,
         scenarioId: body.scenarioId || (C.scenariosFor(size)[0] || C.SCENARIOS[0]).id,
         chat: [],
@@ -795,6 +806,7 @@ const server = http.createServer(async (req, res) => {
       if (body.autoStart !== undefined) room.autoStart = !!body.autoStart;
       if (body.visibility !== undefined) room.visibility = body.visibility === 'invite' ? 'invite' : 'public';
       if (body.deadSeeAll !== undefined) room.deadSeeAll = !!body.deadSeeAll;
+      if (body.mode !== undefined) room.mode = body.mode === 'inquest' ? 'inquest' : 'classic';
       if (body.title !== undefined) room.title = String(body.title).slice(0, 40);
       pushAll(room);
       return send(res, 200, { room: roomView(room, me.id) });
