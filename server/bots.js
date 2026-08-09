@@ -350,8 +350,30 @@ function planFor(room, game, now) {
       if (chance(0.5)) jobs.push({ id: b.id, at: now + 1200 + Math.random() * 3000, kind: 'mourn' });
     }
   });
+  /* В круге речей говорящий меняется по нескольку раз за фазу, поэтому в
+     ключ плана входит и он: иначе бот, получивший слово, ждал бы следующей
+     фазы, чтобы что-нибудь сказать. */
+  if (game.phase === 'speech' && game.speaker && isBotId(game.speaker)) {
+    const me = game.p(game.speaker);
+    if (me && me.alive) {
+      const trait = me._trait || TRAITS[0];
+      /* Молчаливый бот высказывается коротко, говорливый — двумя фразами.
+         Слово он передаёт сам: стол не должен ждать сорок пять секунд, пока
+         сосед-бот додумает мысль. */
+      const lines = trait.talk === 2 ? 2 : 1;
+      for (let i = 0; i < lines; i++) {
+        jobs.push({ id: me.id, at: now + 1400 + Math.random() * 2200 + i * 2600, kind: 'speak' });
+      }
+      jobs.push({
+        id: me.id,
+        at: now + 1400 + lines * 2600 + Math.random() * 2000,
+        kind: 'pass'
+      });
+    }
+  }
+
   jobs.sort((a, b) => a.at - b.at);
-  return { key: game.phase + ':' + game.day, jobs: jobs };
+  return { key: game.phase + ':' + game.day + ':' + (game.speaker || ''), jobs: jobs };
 }
 
 /**
@@ -371,7 +393,7 @@ function tick(room, now) {
     }
   });
 
-  const key = game.phase + ':' + game.day;
+  const key = game.phase + ':' + game.day + ':' + (game.speaker || '');
   if (!room.botPlan || room.botPlan.key !== key) room.botPlan = planFor(room, game, now);
 
   let changed = false;
@@ -402,6 +424,22 @@ function tick(room, now) {
       } else if (job.kind === 'mourn') {
         const r = game.say(me.id, pick(LINES.mourn), 'town');
         if (!r.error) changed = true;
+      } else if (job.kind === 'speak') {
+        /* Речь по кругу: та же реплика, что и в общем обсуждении, но она
+           точно прозвучит — слово принадлежит боту, и его никто не перебьёт. */
+        if (game.phase === 'speech' && game.speaker === me.id) {
+          const line = dayLine(game, me, sus, me._spokeAt === game.day + ':' + me.id);
+          if (line) {
+            me._spokeAt = game.day + ':' + me.id;
+            const r = game.say(me.id, line.text, 'town');
+            if (!r.error) changed = true;
+          }
+        }
+      } else if (job.kind === 'pass') {
+        if (game.phase === 'speech' && game.speaker === me.id) {
+          game.action(me.id, 'pass', null);
+          changed = true;
+        }
       } else if (job.kind === 'ready') {
         game.action(me.id, 'ready', null);
         changed = true;

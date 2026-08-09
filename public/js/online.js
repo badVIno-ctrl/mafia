@@ -25,17 +25,20 @@
      слова, образ — потом. Игрок не должен расшифровывать «занавес». */
   var PHASE_RU = {
     prologue: 'Знакомство', night: 'Ночь', morning: 'Утро',
+    speech: 'День — слово по кругу',
     day: 'День — обсуждение', vote: 'Голосование', runoff: 'Повторное голосование', over: 'Игра окончена'
   };
   var CH_RU = { town: 'Общий чат', mafia: 'Чат мафии', ghost: 'Выбывшие' };
   var ACT_RU = {
     kill: 'Выберите жертву', heal: 'Кого спасаете этой ночью',
-    check: 'Кого проверяете', vote: 'За кого голосуете'
+    check: 'Кого проверяете', vote: 'За кого голосуете',
+    speak: 'Слово у вас', listen: 'Слушайте'
   };
   /* Что ведущий говорит вслух при смене фазы. */
   var NARRATE = {
     night: 'Город засыпает.',
     morning: 'Город просыпается.',
+    speech: 'Слово идёт по кругу.',
     day: 'День. Обсуждайте, кто вам кажется подозрительным.',
     vote: 'Голосуем.',
     runoff: 'Повторное голосование.',
@@ -326,6 +329,21 @@
     }
     state.lastPhase = g.phase;
 
+    /* Своя очередь в круге речей. Молча передать слово тому, кто отвернулся от
+       экрана, — верный способ потерять его речь: слово надо объявить. */
+    if (g.phase === 'speech' && g.speakerId !== state.lastSpeaker) {
+      state.lastSpeaker = g.speakerId;
+      if (g.speakerId && you.id === g.speakerId) {
+        API.toast('Слово у вас — говорите', 'good');
+        Voice.say('Ваше слово.', { narrator: true, urgent: true });
+        var box = $('gMsg');
+        if (box && !box.disabled) box.focus();
+      } else if (g.speakerName) {
+        Voice.say('Слово: ' + g.speakerName + '.', { narrator: true });
+      }
+    }
+    if (g.phase !== 'speech') state.lastSpeaker = null;
+
     setHTML($('phaseIcon'), ico(Icons.phase(g.phase), 22));
     setText($('gPhase'), PHASE_RU[g.phase] + (g.day ? ' · день ' + g.day : ''));
     setText($('gScenario'), g.scenario.title + ' · ' + g.scenario.place);
@@ -355,6 +373,9 @@
         phase: g.phase,
         players: g.players,
         targets: g.players.filter(function (p) { return canTarget(g, you, p); }).map(function (p) { return p.id; }),
+        /* В круге речей говорящего называет сервер, а не уровень микрофона:
+           так фигура поворачивается к нему даже у тех, кто играет без звука. */
+        speakerId: g.phase === 'speech' ? (g.speakerId || null) : (state.speaker || null),
         /* Ночью мафия видит комнату в кирпичном отсвете — своим об этом
            говорить не надо, а мирный этого отсвета не увидит никогда. */
         mafiaGlow: g.phase === 'night' && !!you && you.alive && (you.role === 'mafia' || you.role === 'don')
@@ -569,7 +590,7 @@
   /* ---------------------------- кнопки действий ---------------------------- */
   function renderActions(g, you, room) {
     var act = you.canAct;
-    var key = [g.finished, act, you.ready, you.myVote, you.healBlocked, you.alive].join('|');
+    var key = [g.finished, act, you.ready, you.myVote, you.healBlocked, you.alive, g.speakerId].join('|');
     if (state.actionsKey === key) return;
     state.actionsKey = key;
 
@@ -579,6 +600,10 @@
       a += '<a class="btn ghost sm" href="/">На главную</a>';
     } else if (act === 'vote') {
       a = '<button class="btn sm" data-target="skip">Воздержаться</button>';
+    } else if (act === 'speak') {
+      a = '<button class="btn primary sm" id="btnPass">Передать слово</button>';
+    } else if (act === 'listen') {
+      a = '<span class="pill">Слово у ' + API.esc(g.speakerName || '—') + '</span>';
     } else if (act === 'talk') {
       a = '<button class="btn sm ' + (you.ready ? 'on' : '') + '" id="btnReady">' +
         (you.ready ? 'Готов' : 'Я высказался') + '</button>';
@@ -648,7 +673,11 @@
       }
     });
 
-    var canSay = (state.tab === 'town' && you.alive && ['prologue', 'day', 'vote', 'runoff', 'morning', 'over'].indexOf(g.phase) >= 0) ||
+    /* В круге речей общий чат открыт только тому, у кого слово: иначе круг
+       ничем не отличается от общего крика, ради отмены которого он и нужен. */
+    var mySpeech = g.phase === 'speech' && g.speakerId === you.id;
+    var canSay = (state.tab === 'town' && you.alive &&
+        (['prologue', 'day', 'vote', 'runoff', 'morning', 'over'].indexOf(g.phase) >= 0 || mySpeech)) ||
       (state.tab === 'mafia' && g.phase === 'night' && you.alive) ||
       (state.tab === 'ghost' && you.alive === false);
     $('gMsg').disabled = !canSay;
@@ -656,7 +685,9 @@
     $('gMsg').placeholder = canSay
       ? 'Назовите имя — человек увидит, что вы к нему'
       : (state.tab === 'town'
-        ? (g.phase === 'night' ? 'Город спит — слово вернётся утром' : 'Сейчас говорить нельзя')
+        ? (g.phase === 'night' ? 'Город спит — слово вернётся утром'
+          : g.phase === 'speech' ? 'Слово у ' + (g.speakerName || '—') + ' — дождитесь очереди'
+            : 'Сейчас говорить нельзя')
         : (state.tab === 'mafia' ? 'Мафия шепчется только ночью' : 'Этот канал для выбывших'));
   }
 
@@ -749,6 +780,13 @@
     if (g.phase === 'prologue') return g.scenario.prologue;
     if (g.phase === 'night') return 'Город засыпает. ' + (you.canAct ? ACT_RU[you.canAct] + '.' : 'Ждите утра.');
     if (g.phase === 'morning') return 'Утро. Город считает потери.';
+    if (g.phase === 'speech') {
+      var left = g.speechLeft ? ', после вас ещё ' + g.speechLeft : '';
+      return you.canAct === 'speak'
+        ? 'Слово у вас: скажите, что думаете' + left + '. Закончили — передайте слово.'
+        : 'Слово у ' + (g.speakerName || '—') + '. Остальные слушают' +
+          (g.speechLeft ? ' — в очереди ещё ' + g.speechLeft : '') + '.';
+    }
     if (g.phase === 'day') return 'День: спорьте, оправдывайтесь, сопоставляйте. ' + g.scenario.rule;
     if (g.phase === 'vote') return 'Голосование: выберите того, кого город выводит.';
     if (g.phase === 'runoff') return 'Переголосовка между лидерами — при новой ничьей не выйдет никто.';
@@ -817,6 +855,7 @@
       if (el.dataset.target) return el.dataset.target === 'skip' ? act('vote', 'skip') : pickTarget(el.dataset.target);
     }
     if (e.target.closest('#btnReady')) return act('ready', null);
+    if (e.target.closest('#btnPass')) return act('pass', null);
     if (e.target.closest('#btnRestart')) return call('/api/rooms/restart');
   });
 
@@ -948,25 +987,35 @@
   function paintMic() {
     var v = voiceState();
     var open = !!v.channel;
-    var on = state.micOn && open;
+    /* Канал может быть открыт, а микрофон закрыт: так устроен круг речей —
+       слушать можно всем, говорить только тому, у кого слово. */
+    var canTalk = open && !v.mute;
+    var on = state.micOn && canTalk;
     setHTML($('btnMic'), ico(on ? 'mic' : 'micoff', 20));
     $('btnMic').style.color = on
       ? (v.channel === 'mafia' ? 'var(--ember)' : v.channel === 'ghost' ? 'var(--bruise)' : 'var(--verdigris)')
       : '';
-    $('btnMic').title = !open
-      ? (v.why || 'Сейчас говорить нельзя')
-      : (state.micOn ? 'Микрофон включён · ' + (VOICE_RU[v.channel] || '') : 'Включить микрофон');
+    $('btnMic').title = !open ? (v.why || 'Сейчас говорить нельзя')
+      : v.mute ? (state.micOn
+        ? 'Микрофон включён и ждёт вашей очереди · ' + (v.why || '')
+        : (v.why || 'Слово сейчас не у вас'))
+        : (state.micOn ? 'Микрофон включён · ' + (VOICE_RU[v.channel] || '') : 'Включить микрофон');
     $('btnMic').setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
   /* Привести голосовые соединения к тому кругу, который разрешил сервер.
      Вызывается на каждом обновлении партии: смена фазы рвёт лишние линии. */
   function syncVoice() {
-    if (!state.rtc) return;
     var v = voiceState();
-    state.rtc.setMuted(!v.channel);
-    state.rtc.reconcile(v.peers || []);
+    /* Кнопку красим всегда, даже если микрофоном ещё не пользовались: игрок
+       должен видеть, слышат ли его, до того как включит звук. */
     paintMic();
+    if (!state.rtc) return;
+    /* Глушим и когда канала нет вовсе, и когда слово у другого: иначе игрок,
+       включивший микрофон в общем обсуждении, продолжал бы говорить в круге
+       поверх того, чья сейчас очередь. */
+    state.rtc.setMuted(!v.channel || !!v.mute);
+    state.rtc.reconcile(v.peers || []);
   }
   function paintTts() {
     setHTML($('btnTts'), ico(Voice.enabled ? 'sound' : 'mute', 20));

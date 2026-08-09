@@ -93,6 +93,11 @@ async function humanMove(user, view) {
     await api('/api/rooms/action', { token: user.token, body: { type: 'vote', target: 'skip' } });
   } else if (you.canAct === 'talk' && !you.ready) {
     await api('/api/rooms/action', { token: user.token, body: { type: 'ready', target: null } });
+  } else if (you.canAct === 'speak') {
+    /* Слово по кругу: живой игрок говорит и передаёт слово дальше. Без этого
+       круг держался бы на таймауте по сорок пять секунд за каждого человека. */
+    await api('/api/rooms/chat', { token: user.token, body: { text: 'коротко: пока никого не подозреваю', channel: 'town' } });
+    await api('/api/rooms/action', { token: user.token, body: { type: 'pass', target: null } });
   }
 }
 
@@ -191,7 +196,8 @@ async function humanMove(user, view) {
        боты — со своими задержками. */
     const humans = [host, friend];
     let view = started.json.room.game;
-    let seenVote = false, botLines = 0, botReady = 0, deadline = Date.now() + 100000;
+    let seenVote = false, botLines = 0, botReady = 0, botSpoke = 0;
+    let deadline = Date.now() + 150000;
     while (Date.now() < deadline) {
       await sleep(1200);
       const st = await api('/api/rooms/state', { token: host.token });
@@ -202,12 +208,14 @@ async function humanMove(user, view) {
       }
       botLines = view.chat.filter(m => m.channel === 'town' && String(m.from).indexOf(Bots.PREFIX) === 0).length;
       botReady = view.players.filter(p => p.ready && String(p.id).indexOf(Bots.PREFIX) === 0).length;
+      if (view.phase === 'speech' && String(view.speakerId || '').indexOf(Bots.PREFIX) === 0) botSpoke++;
       if (view.phase === 'vote' || view.phase === 'runoff') seenVote = true;
       if (view.finished || (seenVote && view.day >= 1 && view.log.some(l => l.kind === 'execution' || /никого не выбрал|Снова ничья/.test(l.text)))) break;
     }
     ok(view.day >= 1 && view.log.some(l => l.kind === 'morning'), 'ночь с ботами разрешилась, утро наступило');
     ok(botLines > 0, 'соседи-боты говорили в общем чате (' + botLines + ' реплик)');
     ok(botReady > 0 || view.phase !== 'day', 'соседи-боты нажимают «я высказался», и день не висит');
+    ok(botSpoke > 0, 'соседи-боты берут слово в свою очередь и передают его дальше (' + botSpoke + ')');
     ok(seenVote, 'дошло до голосования');
     ok(view.players.filter(p => p.offline).every(p => String(p.id).indexOf(Bots.PREFIX) !== 0),
       'бота никогда не считают потерявшим связь');

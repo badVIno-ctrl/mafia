@@ -46,8 +46,18 @@ class Game {
       deathCause: null
     }));
 
+    /* Речи по кругу. В конфигурации на них была отведена своя длительность
+       (timing.speech), но фазы для них в движке не существовало вовсе: день был
+       общим криком, где на столе из двадцати человек успевали высказаться
+       трое. Круг даёт слово каждому по очереди — это и есть мафия. */
+    this.speeches = opts.speeches !== false;
+    this.speaker = null;            // кому слово прямо сейчас
+    this.speechQueue = [];          // кто ещё не говорил в этом круге
+    this.spoke = {};                // кто уже высказался — стол это видит
+    this.firstSpeakerSeat = 1;      // первое слово каждый день переходит дальше
+
     this.day = 0;
-    this.phase = 'prologue';        // prologue | night | morning | day | vote | runoff | over
+    this.phase = 'prologue';        // prologue | night | morning | speech | day | vote | runoff | over
     this.deadline = now() + 12000;
     this.finished = false;
     this.winner = null;
@@ -68,8 +78,16 @@ class Game {
        ходов от него никто не ждёт, а вернуться он может в любой момент. */
     this.left = new Set();
 
+    /* Когда слово идёт по кругу, общее обсуждение после него короче: иначе
+       день на двадцать человек растягивается на двадцать пять минут. */
+    if (this.speeches) this.timing.day = Math.min(120, 30 + n * 3);
+
     this.pushLog('story', this.scenario.prologue);
     this.pushLog('sys', 'Состав стола: ' + C.compositionLabel(n) + '.');
+    if (this.speeches) {
+      this.pushLog('sys', 'Слово идёт по кругу: у каждого ' + this.timing.speech +
+        ' секунд, можно передать слово раньше.');
+    }
   }
 
   /* ------------------------------ утилиты ------------------------------ */
@@ -112,12 +130,20 @@ class Game {
     let ch = channel || 'town';
     if (!p.alive) ch = 'ghost';
     else if (ch === 'mafia' && !(this.isMafia(userId) && this.phase === 'night')) return { error: 'Ночной чат сейчас недоступен' };
+    else if (ch === 'town' && this.phase === 'speech') {
+      /* В этом и весь смысл круга: пока говорит один, остальные слушают.
+         Раньше «речь по кругу» была невозможна в принципе — стол писал в
+         общий чат всегда, и на двадцати человеках высказывались трое. */
+      if (this.speaker !== userId) {
+        return { error: 'Слово у ' + this.nameOf(this.speaker) + ' — дождитесь своей очереди' };
+      }
+    }
     else if (ch === 'town' && !(this.phase === 'prologue' || this.phase === 'day' || this.phase === 'vote' || this.phase === 'runoff' || this.phase === 'morning' || this.phase === 'over')) {
       return { error: 'Город спит — говорить нельзя' };
     }
 
     /* антифлуд общего стола: шёпот мафии и голоса за чертой не ограничены */
-    if (ch === 'town') {
+    if (ch === 'town' && this.phase !== 'speech') {
       if (p.lastSayAt && t - p.lastSayAt < 900) return { error: 'Не так быстро — дайте столу вставить слово' };
       if (p.lastSayText === text && t - (p.lastSayTextAt || 0) < 15000) return { error: 'Вы уже это сказали' };
       p.lastSayAt = t;
@@ -174,7 +200,16 @@ class Game {
       this.votes[userId] = targetId;
       return { ok: true };
     }
+    if (type === 'pass') {            // «я всё сказал» — передать слово по кругу
+      if (this.phase !== 'speech') return { error: 'Слово сейчас не по кругу' };
+      if (this.speaker !== userId) return { error: 'Слово не у вас' };
+      this.nextSpeaker();
+      return { ok: true };
+    }
     if (type === 'ready') {           // «я готов дальше» в дневной фазе
+      /* В круге речей та же кнопка означает «передаю слово»: игроку не надо
+         помнить, что она называется по-разному в двух фазах. */
+      if (this.phase === 'speech') return this.action(userId, 'pass', null);
       if (this.phase !== 'day') return { error: 'Не сейчас' };
       this.ready = this.ready || {};
       this.ready[userId] = true;
@@ -195,7 +230,14 @@ class Game {
     } else if (this.phase === 'night') {
       if (expired || this.allNightActionsIn()) { this.resolveNight(); changed = true; }
     } else if (this.phase === 'morning') {
-      if (expired) { this.startDay(); changed = true; }
+      if (expired) { this.startSpeech(); changed = true; }
+    } else if (this.phase === 'speech') {
+      /* Слово кончилось само или говорящий выбыл из партии по ходу дела. */
+      const sp = this.speaker ? this.p(this.speaker) : null;
+      if (expired || !sp || !sp.alive || this.offline.has(this.speaker) || this.left.has(this.speaker)) {
+        this.nextSpeaker();
+        changed = true;
+      }
     } else if (this.phase === 'day') {
       const waiting = this.waiting();
       const ready = this.ready || {};
@@ -333,8 +375,61 @@ class Game {
     }
   }
 
+  /* ------------------------------ круг речей ------------------------------ */
+  /* Порядок мест, начиная с того, чьё слово первое сегодня. Первое слово
+     каждый день переходит к следующему месту: иначе один и тот же человек
+     всегда говорит в пустоту, а последний всегда решает исход дня. */
+  startSpeech() {
+    if (this.finished) return;
+    if (!this.speeches || this.alive().length < 3) return this.startDay();
+
+    const order = this.alive().slice().sort((a, b) => a.seat - b.seat);
+    const from = order.findIndex(p => p.seat >= this.firstSpeakerSeat);
+    const start = from < 0 ? 0 : from;
+    this.speechQueue = order.slice(start).concat(order.slice(0, start)).map(p => p.id);
+    this.spoke = {};
+    this.speaker = null;
+    /* С какого места круг начался на самом деле. Считать «следующее место»
+       от намеченного нельзя: намеченный мог не дожить до утра, и тогда два дня
+       подряд первым говорил один и тот же человек. */
+    this.circleFirstSeat = null;
+    this.phase = 'speech';
+    this.pushLog('sys', 'День ' + this.day + '. Слово по кругу.');
+    this.nextSpeaker();
+  }
+
+  /** Передать слово следующему. Пустая очередь — переходим к общему обсуждению. */
+  nextSpeaker() {
+    if (this.speaker) this.spoke[this.speaker] = true;
+    /* Мёртвых, ушедших и потерявших связь пропускаем: ждать их слова нечего,
+       а стол не должен сидеть в тишине по сорок пять секунд за каждого. */
+    let next = null;
+    while (this.speechQueue.length) {
+      const id = this.speechQueue.shift();
+      const p = this.p(id);
+      if (p && p.alive && !this.offline.has(id) && !this.left.has(id)) { next = id; break; }
+      if (p) this.spoke[id] = true;
+    }
+    if (!next) {
+      this.speaker = null;
+      /* Следующий день начинает место за тем, кто говорил первым сегодня. */
+      const order = this.players.slice().sort((a, b) => a.seat - b.seat);
+      const base = this.circleFirstSeat || this.firstSpeakerSeat;
+      const cur = order.findIndex(p => p.seat === base);
+      const nextFirst = order[((cur < 0 ? 0 : cur) + 1) % order.length];
+      this.firstSpeakerSeat = nextFirst ? nextFirst.seat : 1;
+      return this.startDay();
+    }
+    this.speaker = next;
+    if (this.circleFirstSeat === null) this.circleFirstSeat = this.p(next).seat;
+    this.deadline = now() + this.timing.speech * 1000;
+    this.pushLog('talk', 'Слово: ' + this.nameOf(next) + ' (место ' + this.p(next).seat + ').');
+    return true;
+  }
+
   startDay() {
     if (this.finished) return;
+    this.speaker = null;
     this.phase = 'day';
     this.ready = {};
     this.deadline = now() + this.timing.day * 1000;
@@ -472,6 +567,17 @@ class Game {
         why: 'Вас слышат только свои'
       };
     }
+    if (this.phase === 'speech') {
+      /* Слушают все живые — линии не рвём, иначе стол терял бы связь на каждой
+         передаче слова. Закрыт только микрофон: говорит тот, чья очередь. */
+      const mine = this.speaker === userId;
+      return {
+        channel: 'town',
+        peers: ids(this.alive()),
+        mute: !mine,
+        why: mine ? 'Слово у вас' : 'Слово у ' + this.nameOf(this.speaker)
+      };
+    }
     return { channel: 'town', peers: ids(this.alive()), why: '' };
   }
 
@@ -498,6 +604,7 @@ class Game {
         roleGlyph: showRole ? C.ROLE_INFO[p.role].glyph : null,
         voted: (this.phase === 'vote' || this.phase === 'runoff') && this.votes[p.id] !== undefined,
         ready: this.phase === 'day' && !!(this.ready && this.ready[p.id]),
+        spoke: this.phase === 'speech' && !!this.spoke[p.id],
         offline: this.offline.has(p.id),
         left: this.left.has(p.id)
       };
@@ -572,10 +679,16 @@ class Game {
       }
     }
     if (this.runoffOf) view.runoffOf = this.runoffOf;
+    if (this.phase === 'speech') {
+      view.speakerId = this.speaker;
+      view.speakerName = this.nameOf(this.speaker);
+      view.speechLeft = this.speechQueue.length;
+    }
     return view;
   }
 
   phaseSeconds() {
+    if (this.phase === 'speech') return this.timing.speech;
     if (this.phase === 'night') return this.timing.night;
     if (this.phase === 'day') return this.timing.day;
     if (this.phase === 'vote' || this.phase === 'runoff') return this.timing.vote;
@@ -592,6 +705,7 @@ class Game {
       return null;
     }
     if (this.phase === 'vote' || this.phase === 'runoff') return 'vote';
+    if (this.phase === 'speech') return this.speaker === me.id ? 'speak' : 'listen';
     if (this.phase === 'day') return 'talk';
     return null;
   }
