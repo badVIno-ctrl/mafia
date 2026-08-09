@@ -19,19 +19,56 @@ const PUBLIC = path.join(ROOT, 'public');
 const DATA_FILE = path.join(ROOT, 'data', 'users.json');
 
 const ONLINE_MS = 45000;          // считаем человека онлайн, если был активен в это окно
+const EMPTY_ROOM_MS = 15 * 60000; // сколько комната ждёт возвращения последнего игрока
+/* Сколько имён можно завести с одного адреса за час. Считаем на компанию за
+   одним роутером: двадцать человек с телефонов приходят с одного адреса, и
+   упереться в предел они не должны. Скрипт, занимающий имена пачками, — упрётся. */
+const REG_PER_HOUR = 60;
+const MAX_ACCOUNTS = 20000;       // предел на весь сервер: память не бесконечна
+const ACCOUNT_TTL_MS = 90 * 24 * 3600000;  // аккаунт без входа столько живёт и удаляется
 
 /* ============================= хранилище ============================= */
 const users = new Map();    // id -> { id, name, token, createdAt, lastSeen, roomId }
+/* Обратный указатель токен → игрок. Раньше каждый запрос перебирал всех
+   пользователей: на тысяче аккаунтов это тысяча сравнений строк на каждое
+   нажатие кнопки у каждого игрока. */
+const byToken = new Map();
 const rooms = new Map();    // id -> room
 const clients = new Set();  // { userId, res }
 
 function uid(p) { return p + '_' + crypto.randomBytes(6).toString('hex'); }
 
+function remember(u) {
+  users.set(u.id, u);
+  if (u.token) byToken.set(u.token, u);
+  return u;
+}
+function forget(id) {
+  const u = users.get(id);
+  if (u && u.token) byToken.delete(u.token);
+  users.delete(id);
+}
+
+function humanCount() {
+  let n = 0;
+  users.forEach(u => { if (!u.bot) n++; });
+  return n;
+}
+
 function loadUsers() {
   try {
     const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    raw.forEach(u => users.set(u.id, Object.assign({ lastSeen: 0, roomId: null }, u)));
-    console.log('Загружено аккаунтов: ' + users.size);
+    const now = Date.now();
+    let dropped = 0;
+    raw.forEach(u => {
+      /* Аккаунт, которым не заходили три месяца, удерживает только имя. Имя в
+         этой игре — весь вход, и держать его вечно за тем, кто не вернулся,
+         значит не отдать его тому, кто пришёл. */
+      const seen = u.lastSeen || u.createdAt || 0;
+      if (seen && now - seen > ACCOUNT_TTL_MS) { dropped++; return; }
+      remember(Object.assign({ roomId: null }, u, { lastSeen: seen }));
+    });
+    console.log('Загружено аккаунтов: ' + users.size + (dropped ? ', забыто по давности: ' + dropped : ''));
   } catch (e) { /* первый запуск */ }
 }
 let saveTimer = null;
@@ -40,8 +77,8 @@ function saveUsers() {
   saveTimer = setTimeout(() => {
     try {
       fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-      fs.writeFileSync(DATA_FILE, JSON.stringify([...users.values()].map(u => ({
-        id: u.id, name: u.name, token: u.token, createdAt: u.createdAt
+      fs.writeFileSync(DATA_FILE, JSON.stringify([...users.values()].filter(u => !u.bot).map(u => ({
+        id: u.id, name: u.name, token: u.token, createdAt: u.createdAt, lastSeen: u.lastSeen || 0
       })), null, 1));
     } catch (e) { console.warn('Не удалось сохранить аккаунты:', e.message); }
   }, 400);
@@ -59,13 +96,22 @@ function publicUser(u) {
 /* Сколько живых людей в комнате: по этому числу решаем, жива ли она. */
 function humansIn(room) { return room.members.filter(id => !Bots.isBotId(id)); }
 
+/* Свой ли человек за этим столом: сидит в комнате, позван хозяином или уже
+   получил роль в идущей партии (вышел и может вернуться). */
+function belongs(room, userId) {
+  if (!room || !userId) return false;
+  if (room.members.indexOf(userId) >= 0) return true;
+  if (room.invites.indexOf(userId) >= 0) return true;
+  return !!(room.game && room.game.p(userId));
+}
+
 function addBots(room, upTo) {
   const want = Math.max(0, Math.min(C.MAX_PLAYERS, upTo) - room.members.length);
   const taken = room.members.map(id => (users.get(id) || {}).name).filter(Boolean);
   for (let i = 0; i < want; i++) {
     const b = Bots.makeBot(taken);
     taken.push(b.name);
-    users.set(b.id, { id: b.id, name: b.name, bot: true, trait: b.trait, createdAt: Date.now(), lastSeen: Date.now(), roomId: room.id });
+    remember({ id: b.id, name: b.name, bot: true, trait: b.trait, createdAt: Date.now(), lastSeen: Date.now(), roomId: room.id });
     room.members.push(b.id);
     room.bots.push(b);
   }
@@ -78,7 +124,7 @@ function dropBots(room, count) {
   kill.forEach(id => {
     room.members = room.members.filter(x => x !== id);
     room.bots = room.bots.filter(b => b.id !== id);
-    users.delete(id);
+    forget(id);
   });
   return kill.length;
 }
@@ -102,6 +148,8 @@ function roomView(room, forUserId) {
     /* 'public' — стол объявлен в общем зале, сесть можно без ссылки.
        'invite' — прежнее поведение: одна ссылка, одна дверь. */
     visibility: room.visibility || 'invite',
+    /* Видят ли выбывшие ночной шёпот мафии. По умолчанию нет. */
+    deadSeeAll: !!room.deadSeeAll,
     members: room.members.map(id => {
       const u = users.get(id);
       return {
@@ -142,8 +190,12 @@ function lobbyView(userId) {
         (r.members.length < Math.min(C.MAX_PLAYERS, r.size) || r.members.some(Bots.isBotId)))
       .sort((a, b) => (b.members.length - a.members.length) || (a.createdAt - b.createdAt))
       .slice(0, 40)
+      /* Токен-приглашение в общий список не попадает: за открытый стол
+         садятся по roomId, а закрытый по этому списку и не найти. Раньше
+         токен любой комнаты был виден каждому, кто запросил лобби, — и по
+         нему можно было заглянуть в чужую партию. */
       .map(r => ({
-        roomId: r.id, invite: r.invite, title: r.title,
+        roomId: r.id, title: r.title,
         host: (users.get(r.hostId) || {}).name || '—',
         players: r.members.length,
         humans: humansIn(r).length,
@@ -184,18 +236,40 @@ function pushAll(room) { pushRoom(room); pushLobby(); }
 /* ============================= такт игр ============================= */
 setInterval(() => {
   rooms.forEach(room => {
+    /* Уборка. Комната с идущей партией переживает уход последнего человека —
+       чтобы он мог вернуться, — но не навсегда: иначе стол с одними ботами
+       и пустыми местами будет тикать до перезапуска сервера. */
+    if (!humansIn(room).length) {
+      room.emptySince = room.emptySince || Date.now();
+      const stale = Date.now() - room.emptySince > EMPTY_ROOM_MS;
+      if (stale || !room.game || room.game.finished) {
+        dropBots(room);
+        rooms.delete(room.id);
+        pushLobby();
+        return;
+      }
+    } else if (room.emptySince) {
+      room.emptySince = 0;
+    }
+
     if (!room.game) {
       // автостарт, когда набралось нужное число игроков
       if (room.autoStart && room.members.length >= room.size) startGame(room);
       return;
     }
     /* Сначала сообщаем движку, кто пропал со связи: иначе фаза висит до
-       полного таймаута из-за одного закрытого ноутбука. */
-    const gone = room.members.filter(id => {
-      if (Bots.isBotId(id)) return false;
-      const u = users.get(id);
-      return !u || !isOnline(u);
-    });
+       полного таймаута из-за одного закрытого ноутбука.
+
+       Список строим по составу партии, а не по составу комнаты. Разница
+       принципиальная: человек, вышедший посреди партии, из комнаты исчезал —
+       и потому никогда не попадал в этот список. Движок продолжал ждать его
+       хода каждую ночь и каждое голосование, до полного таймаута. */
+    const gone = room.game.players.filter(p => {
+      if (Bots.isBotId(p.id)) return false;
+      const u = users.get(p.id);
+      if (!u || !isOnline(u)) return true;
+      return room.members.indexOf(p.id) < 0;
+    }).map(p => p.id);
     const presenceChanged = room.game.setOffline(gone);
     const before = room.game.phase + '|' + room.game.log.length + '|' + room.game.chat.length;
     /* Боты ходят до движка: иначе их ход опаздывал бы на целый такт. */
@@ -218,7 +292,7 @@ function startGame(room) {
   if (members.length > C.MAX_PLAYERS) return { error: 'Максимум ' + C.MAX_PLAYERS + ' игроков' };
   const sc = C.scenarioById(room.scenarioId);
   const fits = sc && members.length >= sc.min && members.length <= sc.max;
-  room.game = new Game(members, fits ? room.scenarioId : null);
+  room.game = new Game(members, fits ? room.scenarioId : null, { deadSeeAll: !!room.deadSeeAll });
   room.chat.push({ system: true, text: 'Партия началась: «' + room.game.scenario.title + '».', ts: Date.now() });
   pushAll(room);
   return { ok: true };
@@ -256,7 +330,7 @@ function readBody(req) {
 function auth(req, url) {
   const token = req.headers['x-token'] || url.searchParams.get('token');
   if (!token) return null;
-  const u = [...users.values()].find(x => x.token === token);
+  const u = byToken.get(String(token));
   if (u) u.lastSeen = Date.now();
   return u || null;
 }
@@ -385,12 +459,20 @@ const server = http.createServer(async (req, res) => {
   try {
     /* ---------- аккаунты ---------- */
     if (p === '/api/register' && req.method === 'POST') {
+      /* Ограничение на адрес. Без него один скрипт за минуту занимает все
+         сколько-нибудь удобные имена и раздувает файл аккаунтов до предела —
+         а пароля в игре нет, значит имя это и есть весь вход. */
+      if (!regAllow(clientIp(req))) {
+        return send(res, 429, { error: 'Слишком много новых имён с этого адреса. Попробуйте позже.' });
+      }
+      if (humanCount() >= MAX_ACCOUNTS) {
+        return send(res, 507, { error: 'Сервер переполнен именами. Напишите хозяину площадки.' });
+      }
       const name = String(body.name || '').trim().slice(0, 16);
       if (name.length < 2) return send(res, 400, { error: 'Имя от 2 до 16 символов' });
       const taken = [...users.values()].some(u => u.name.toLowerCase() === name.toLowerCase());
       if (taken) return send(res, 409, { error: 'Такое имя уже занято — возьмите другое' });
-      const u = { id: uid('u'), name, token: crypto.randomBytes(16).toString('hex'), createdAt: Date.now(), lastSeen: Date.now(), roomId: null };
-      users.set(u.id, u);
+      const u = remember({ id: uid('u'), name, token: crypto.randomBytes(16).toString('hex'), createdAt: Date.now(), lastSeen: Date.now(), roomId: null });
       saveUsers(); pushLobby();
       return send(res, 200, { user: { id: u.id, name: u.name, token: u.token } });
     }
@@ -412,18 +494,26 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true, user: { id: me.id, name: me.name, token: me.token } });
     }
 
-    /* ---------- языковой помощник (прокси) ----------
-       Ключ живёт только здесь, в переменной окружения MISTRAL_API_KEY.
-       Раньше он лежал открытым текстом в public/bots.html и уезжал в
-       браузер каждому, кто открыл страницу. Если ключа нет, отвечаем
-       503, и клиент тихо играет на своих заготовках — партия не страдает. */
+    /* ---------- лобби ---------- */
+    const me = auth(req, url);
+    if (!me) return send(res, 401, { error: 'Нет авторизации' });
+
+    if (p === '/api/lobby') return send(res, 200, lobbyView(me.id));
+
     if (p === '/api/helper' && req.method === 'POST') {
+      /* Ключ живёт только здесь, в переменной окружения MISTRAL_API_KEY.
+         Раньше он лежал открытым текстом в public/bots.html и уезжал в
+         браузер каждому, кто открыл страницу.
+
+         Важнее другое: этот обработчик стоял выше проверки авторизации, и
+         чужой ключ был бесплатным API для всего интернета — хватало шести
+         десятков запросов в минуту с адреса. Теперь помощник только для тех,
+         кто за столом, и счёт идёт по аккаунту. */
       const key = process.env.MISTRAL_API_KEY || '';
       if (!key) return send(res, 503, { error: 'helper-off' });
-
-      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?';
-      if (!helperAllow(String(ip).split(',')[0].trim()))
+      if (!helperAllow('u:' + me.id) || !helperAllow('ip:' + clientIp(req))) {
         return send(res, 429, { error: 'Слишком много запросов' });
+      }
 
       const msgs = Array.isArray(body.messages) ? body.messages.slice(0, 8) : null;
       if (!msgs) return send(res, 400, { error: 'Нет сообщений' });
@@ -446,11 +536,6 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    /* ---------- лобби ---------- */
-    const me = auth(req, url);
-    if (!me) return send(res, 401, { error: 'Нет авторизации' });
-
-    if (p === '/api/lobby') return send(res, 200, lobbyView(me.id));
 
     if (p === '/api/rooms/create' && req.method === 'POST') {
       // один человек — одна комната
@@ -470,6 +555,8 @@ const server = http.createServer(async (req, res) => {
         /* По умолчанию стол открыт: иначе новый игрок сидит один и ждёт,
            пока ему кто-нибудь пришлёт ссылку. Закрыть — одним переключателем. */
         visibility: body.visibility === 'invite' ? 'invite' : 'public',
+        /* Выбывшие читают шёпот мафии только если хозяин это разрешил. */
+        deadSeeAll: body.deadSeeAll === true,
         autoStart: body.autoStart !== false,
         scenarioId: body.scenarioId || (C.scenariosFor(size)[0] || C.SCENARIOS[0]).id,
         chat: [],
@@ -521,6 +608,7 @@ const server = http.createServer(async (req, res) => {
         bots: [],
         size,
         visibility: 'public',
+        deadSeeAll: false,
         autoStart: true,
         scenarioId: (C.scenariosFor(size)[0] || C.SCENARIOS[0]).id,
         chat: [],
@@ -535,6 +623,10 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/api/rooms/state') {
       if (!room) return send(res, 404, { error: 'Комната не найдена' });
+      /* Проверка своих. Без неё достаточно было знать roomId — а он лежал в
+         общем списке открытых столов, — чтобы читать чужую партию: раскрытые
+         роли выбывших и их переписку. */
+      if (!belongs(room, me.id)) return send(res, 403, { error: 'Это чужой стол' });
       return send(res, 200, { room: roomView(room, me.id) });
     }
 
@@ -547,6 +639,23 @@ const server = http.createServer(async (req, res) => {
       const allowed = !!inviteToken || target.visibility === 'public' ||
         target.members.indexOf(me.id) >= 0 || target.invites.indexOf(me.id) >= 0;
       if (!allowed) return send(res, 403, { error: 'Этот стол закрыт — попросите у хозяина ссылку-приглашение' });
+
+      /* Возврат на своё место. Проверка идущей партии стояла выше проверки
+         состава, и потому даже свой игрок, перезагрузивший страницу, получал
+         «Партия уже идёт» и терял партию навсегда. Роль за ним закреплена —
+         значит место его, и вернуться он вправе. */
+      const seat = target.game ? target.game.p(me.id) : null;
+      if (seat) {
+        if (target.members.indexOf(me.id) < 0) target.members.push(me.id);
+        target.invites = target.invites.filter(i => i !== me.id);
+        me.roomId = target.id;
+        if (target.game.markBack(me.id)) {
+          target.chat.push({ system: true, text: me.name + ' вернулся за стол.', ts: Date.now() });
+        }
+        pushAll(target);
+        return send(res, 200, { room: roomView(target, me.id), returned: true });
+      }
+
       if (target.game) return send(res, 409, { error: 'Партия уже идёт' });
       if (target.members.indexOf(me.id) < 0) {
         /* Место, занятое ботом, освобождается для человека: за этим и нужна
@@ -601,7 +710,7 @@ const server = http.createServer(async (req, res) => {
       room.members = room.members.filter(i => i !== body.userId);
       room.invites = room.invites.filter(i => i !== body.userId);
       room.bots = room.bots.filter(b => b.id !== body.userId);
-      if (Bots.isBotId(body.userId)) users.delete(body.userId);
+      if (Bots.isBotId(body.userId)) forget(body.userId);
       else if (target) target.roomId = null;
       pushAll(room);
       return send(res, 200, { ok: true });
@@ -614,6 +723,7 @@ const server = http.createServer(async (req, res) => {
       if (body.size !== undefined) room.size = Math.max(C.MIN_PLAYERS, Math.min(C.MAX_PLAYERS, Number(body.size) || 8));
       if (body.autoStart !== undefined) room.autoStart = !!body.autoStart;
       if (body.visibility !== undefined) room.visibility = body.visibility === 'invite' ? 'invite' : 'public';
+      if (body.deadSeeAll !== undefined) room.deadSeeAll = !!body.deadSeeAll;
       if (body.title !== undefined) room.title = String(body.title).slice(0, 40);
       pushAll(room);
       return send(res, 200, { room: roomView(room, me.id) });
@@ -695,6 +805,24 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+/* Адрес обращающегося: за прокси настоящий адрес приходит заголовком. */
+function clientIp(req) {
+  const raw = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?';
+  return String(raw).split(',')[0].trim();
+}
+
+/* Сколько имён завели с одного адреса за последний час. */
+const regHits = new Map();
+function regAllow(ip) {
+  const now = Date.now();
+  const rec = regHits.get(ip) || { n: 0, until: now + 3600000 };
+  if (now > rec.until) { rec.n = 0; rec.until = now + 3600000; }
+  rec.n++;
+  regHits.set(ip, rec);
+  if (regHits.size > 20000) regHits.clear();
+  return rec.n <= REG_PER_HOUR;
+}
+
 /* Простой ограничитель: чужой ключ не должен стать бесплатным API для всего
    интернета — больше шестидесяти обращений в минуту с одного адреса не пройдёт. */
 const helperHits = new Map();
@@ -739,14 +867,34 @@ function leaveRoom(user) {
   user.roomId = null;
   if (!room) return;
   room.members = room.members.filter(i => i !== user.id);
-  room.chat.push({ system: true, text: user.name + ' вышел из комнаты.', ts: Date.now() });
-  /* Комната без людей закрывается вместе с ботами: сами они играть не будут. */
-  if (!humansIn(room).length) {
+
+  /* Если партия идёт, место за столом остаётся: роли уже роздан�ы, и вынуть
+     игрока из состава нельзя. Но ждать его ходов больше не нужно — движок
+     узнаёт об этом сразу, а не через полный таймаут каждой фазы. */
+  const seated = room.game && !room.game.finished && room.game.p(user.id);
+  if (seated) {
+    room.game.markLeft(user.id);
+    room.game.setOffline(room.game.players
+      .filter(p => !Bots.isBotId(p.id) && (room.members.indexOf(p.id) < 0 || !isOnline(users.get(p.id) || {})))
+      .map(p => p.id));
+    room.chat.push({
+      system: true,
+      text: user.name + ' вышел из-за стола. Место остаётся за ним — можно вернуться по той же ссылке.',
+      ts: Date.now()
+    });
+  } else {
+    room.chat.push({ system: true, text: user.name + ' вышел из комнаты.', ts: Date.now() });
+  }
+
+  /* Комната без людей закрывается вместе с ботами: сами они играть не будут.
+     Идущая партия — исключение: пока за столом есть чьё-то место, комната
+     живёт, иначе вернуться будет уже некуда. */
+  if (!humansIn(room).length && !seated) {
     dropBots(room);
     rooms.delete(room.id);
     return;
   }
-  if (room.hostId === user.id) room.hostId = humansIn(room)[0];
+  if (room.hostId === user.id && humansIn(room).length) room.hostId = humansIn(room)[0];
 }
 
 loadUsers();

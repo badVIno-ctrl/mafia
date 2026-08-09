@@ -500,6 +500,9 @@
 
   function subFor(g, p) {
     if (!p.alive) return (p.roleRu || '—') + ' · ' + (p.deathCause === 'vote' ? 'город вывел' : 'ночь забрала');
+    /* Вышедший из-за стола и потерявший связь — разные вещи: первый ушёл сам,
+       и стол вправе знать, что ждать его хода бессмысленно. */
+    if (p.left) return 'вышел из-за стола';
     if (p.offline) return 'нет связи';
     if (p.role) return p.roleRu;
     if ((g.phase === 'vote' || g.phase === 'runoff') && p.voted) return 'голос подан';

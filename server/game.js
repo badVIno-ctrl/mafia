@@ -23,8 +23,14 @@ class Game {
    * @param {Array<{id:string,name:string}>} members
    * @param {string} scenarioId
    */
-  constructor(members, scenarioId) {
+  constructor(members, scenarioId, opts) {
+    opts = opts || {};
     const n = members.length;
+    /* Видят ли выбывшие ночной шёпот мафии. По умолчанию нет: за одним столом
+       в одной комнате выбывший, читающий переписку мафии, знает весь расклад,
+       а живым остаётся верить, что он промолчит. Хозяин может включить —
+       осознанно, для своей компании. */
+    this.deadSeeAll = !!opts.deadSeeAll;
     this.timing = C.timing(n);
     this.scenario = C.scenarioById(scenarioId) || pick(C.scenariosFor(n)) || C.SCENARIOS[0];
     this.composition = C.composition(n);
@@ -57,6 +63,10 @@ class Game {
        один закрытый ноутбук растягивал ночь на полный таймаут, и это
        читалось как «лаги». */
     this.offline = new Set();
+    /* Кто встал и ушёл. Место за столом остаётся (движок не умеет убирать
+       игрока посреди партии, и это правильно: состав ролей уже роздан), но
+       ходов от него никто не ждёт, а вернуться он может в любой момент. */
+    this.left = new Set();
 
     this.pushLog('story', this.scenario.prologue);
     this.pushLog('sys', 'Состав стола: ' + C.compositionLabel(n) + '.');
@@ -224,6 +234,24 @@ class Game {
 
   /** Живые, от которых имеет смысл ждать хода. */
   waiting() { return this.alive().filter(p => !this.offline.has(p.id)); }
+
+  /** Игрок встал из-за стола. Возвращает true, если состав ожидающих изменился. */
+  markLeft(id) {
+    const p = this.p(id);
+    if (!p || this.left.has(id)) return false;
+    this.left.add(id);
+    if (p.alive && !this.finished) this.pushLog('sys', p.name + ' вышел из-за стола. Место остаётся за ним.');
+    return true;
+  }
+
+  /** Игрок вернулся на своё место. */
+  markBack(id) {
+    if (!this.left.has(id)) return false;
+    this.left.delete(id);
+    const p = this.p(id);
+    if (p && p.alive && !this.finished) this.pushLog('sys', p.name + ' вернулся за стол.');
+    return true;
+  }
 
   allNightActionsIn() {
     const on = p => !this.offline.has(p.id);
@@ -418,19 +446,28 @@ class Game {
         roleGlyph: showRole ? C.ROLE_INFO[p.role].glyph : null,
         voted: (this.phase === 'vote' || this.phase === 'runoff') && this.votes[p.id] !== undefined,
         ready: this.phase === 'day' && !!(this.ready && this.ready[p.id]),
-        offline: this.offline.has(p.id)
+        offline: this.offline.has(p.id),
+        left: this.left.has(p.id)
       };
     });
 
     const channels = ['town'];
     if (me && !me.alive) channels.push('ghost');
     if (me && me.alive && iAmMafia) channels.push('mafia');
-    if (isSpectator) channels.push('ghost');
+    if (me && !me.alive && this.deadSeeAll) channels.push('mafia');
 
+    /* Кто что читает. Три правила, и каждое из них — про то, чтобы знание не
+       утекало из партии:
+         общий чат  — всем, включая наблюдателя;
+         шёпот мафии — живой мафии, а выбывшим только если хозяин разрешил;
+         чат выбывших — самим выбывшим. Наблюдателю он не положен: там роли
+           уже раскрыты, и один зритель за спиной ломает партию целиком. */
     const chat = this.chat.filter(m => {
       if (m.channel === 'town') return true;
-      if (m.channel === 'mafia') return revealAll || (me && iAmMafia && me.alive) || (me && !me.alive);
-      if (m.channel === 'ghost') return revealAll || (me && !me.alive) || isSpectator;
+      if (m.channel === 'mafia') {
+        return revealAll || (me && iAmMafia && me.alive) || (me && !me.alive && this.deadSeeAll);
+      }
+      if (m.channel === 'ghost') return revealAll || (me && !me.alive);
       return false;
     });
 

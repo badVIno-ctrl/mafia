@@ -11,8 +11,8 @@
    2. Открытый стол виден в общем зале со всем, что нужно для решения:
       кто хозяин, сколько людей, сколько мест и давно ли ждут.
    3. Сесть за открытый стол можно прямо из списка, без ссылки.
-   4. Ключ внешнего помощника живёт только на сервере, и без ключа игра
-      честно говорит 503, а не ломается.
+   4. Ключ внешнего помощника живёт только на сервере, доступен лишь тем, кто
+      за столом, а без ключа игра честно говорит 503, а не ломается.
    5. Страницы готовы к индексации: robots, sitemap, canonical, OG-картинка,
       манифест, человеческая 404 и адреса без .html.
    ========================================================================= */
@@ -112,11 +112,19 @@ function req(pathname, opts) {
     const row2 = (zal2.json.rooms || []).find(r => r.roomId === table.id);
     ok(!!row2 && row2.humans === 3, 'строка в зале обновилась сама');
 
-    /* ---- 4. помощник без ключа не ломает игру ---- */
-    const helper = await req('/api/helper', { body: { messages: [{ role: 'user', content: 'привет' }] } });
+    /* ---- 4. помощник: чужой ключ не бесплатное API для интернета ---- */
+    /* Обработчик стоял выше проверки авторизации, и ключом хозяина площадки
+       мог пользоваться любой, кто знал адрес. Проверяем оба конца: без имени
+       не пускают вовсе, с именем и без ключа отвечают честным 503. */
+    const helperAnon = await req('/api/helper', { body: { messages: [{ role: 'user', content: 'привет' }] } });
+    ok(helperAnon.status === 401, 'без авторизации помощник не отвечает (' + helperAnon.status + ')');
+
+    const helper = await req('/api/helper', {
+      token: looker.token, body: { messages: [{ role: 'user', content: 'привет' }] }
+    });
     ok(helper.status === 503 && helper.json && helper.json.error === 'helper-off',
       'без ключа помощник честно отвечает 503 (' + helper.status + ')');
-    const helperBad = await req('/api/helper', { body: {} });
+    const helperBad = await req('/api/helper', { token: looker.token, body: {} });
     ok(helperBad.status === 503 || helperBad.status === 400, 'пустой запрос к помощнику не роняет сервер');
 
     const botsHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'bots.html'), 'utf8');
