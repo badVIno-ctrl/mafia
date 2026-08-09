@@ -2,22 +2,36 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>Стенд фигур</title>
-<style>
-  html,body{margin:0;background:#0a0809;overflow:hidden}
-  canvas{display:block}
-</style>
+<meta name="robots" content="noindex, nofollow">
+<title>Стенд фигур — Мафия</title>
+<style>html,body{margin:0;background:#0a0809;overflow:hidden}canvas{display:block}</style>
 </head>
 <body>
+<!--
+  Стенд фигур. Служебная страница для работы над людьми за столом: она
+  собирает ту же сцену, что и партия (комната, лампа, стол, тот же свет), и
+  даёт посмотреть на фигуры с любой стороны и в упор.
+
+  Зачем отдельная страница. Всё, на что жалуется игрок — «руки висят»,
+  «волосы как колбаска», «страшные лица» — видно только глазами. Через
+  партию до крупного плана лица не добраться: камера не подпускает ближе
+  полутора метров, и на каждую правку уходила бы минута ожидания.
+
+      node tests/lab-shots.js after            — снять все виды
+      node tests/lab-shots.js after head,table — только нужные
+
+  Виды: table, front, three, side, back, top, head, hands, solo.
+  Параметры: ?seed=2&sex=f&hat=hair|cap|fedora&n=6&paint=1
+  paint=1 красит материалы по номеру — так видно, какая деталь где.
+-->
 <script type="module">
 import * as THREE from '/vendor/three/three.module.js';
 import { createModels } from '/js/models3d.js';
 
 const q = new URLSearchParams(location.search);
 const W = +(q.get('w') || 1400), H = +(q.get('h') || 900);
-const VIEW = q.get('view') || 'front';   /* front | three | side | back | top | head | hands | table */
+const VIEW = q.get('view') || 'front';
 let N = +(q.get('n') || 6);
-/* Крупный план — одна фигура и ровно в начале координат. */
 if (VIEW === 'head' || VIEW === 'hands' || VIEW === 'solo') N = 1;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -31,21 +45,15 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x14100f);
-
+scene.background = new THREE.Color(0x0a0809);
 const M = createModels(THREE, {});
 const camera = new THREE.PerspectiveCamera(45, W / H, 0.05, 100);
 
-/* Свет как на сцене: лампа сверху, мягкий заполняющий, полусфера. */
-scene.add(new THREE.AmbientLight(0x6a6070, 0.42));
-scene.add(new THREE.HemisphereLight(0x8b9bb4, 0x3a2c26, 0.34));
 /* Свет — копия рига сцены партии (stage3d.js, LIGHT.day). Стенд обязан
    светить ровно так же, иначе по его снимкам нельзя выбирать ни палитру
    кожи, ни цвет волос: при вдвое ярком свете каштановые волосы выглядят
    соломой, а лицо фарфором. */
-const LIT = {
-  amb: 0.42, hemi: 0.34, fill: 4.6, table: 3.4, spot: 34, point: 5.6
-};
+const LIT = { amb: 0.42, hemi: 0.34, fill: 4.6, table: 3.4, spot: 34, point: 5.6 };
 scene.add(new THREE.AmbientLight(0x6a6070, LIT.amb));
 scene.add(new THREE.HemisphereLight(0x8b9bb4, 0x3a2c26, LIT.hemi));
 [[0, 2.6, 3.4, 0xffd7ad], [-3.2, 2.4, -2.2, 0x9db4de], [3.2, 2.4, -2.2, 0xdda98a]].forEach(c => {
@@ -53,23 +61,19 @@ scene.add(new THREE.HemisphereLight(0x8b9bb4, 0x3a2c26, LIT.hemi));
   l.position.set(c[0], c[1], c[2]);
   scene.add(l);
 });
-/* Отсвет от сукна: подсвечивает лица и кисти снизу-спереди. */
 const bounce = new THREE.PointLight(0xffe0b4, LIT.table, 3.2, 2);
 bounce.position.set(0, 0.94, 0);
 scene.add(bounce);
 
-const COATS = [0x6a4b52, 0x4c5a63, 0x6b5f45, 0x543f4d, 0x455448, 0x74544a];
-
-/* Комната и лампа — те же, что в партии: свет лампы и есть главный свет. */
 const room = M.buildRoom(scene);
 const lamp = M.buildLamp(scene, { ceilY: 4.5, bulbY: 2.2 });
 lamp.baseSpot = LIT.spot; lamp.basePoint = LIT.point;
 scene.fog = new THREE.FogExp2(0x0a0809, 0.022);
 
+const COATS = [0x6a4b52, 0x4c5a63, 0x6b5f45, 0x543f4d, 0x455448, 0x74544a];
 const figures = [];
 
 if (VIEW === 'table') {
-  /* Полный стол: так видно посадку, руки на сукне и то, как фигуры читаются вместе. */
   const table = M.buildTable(scene, N);
   const R = table.seatRadius;
   for (let i = 0; i < N; i++) {
@@ -81,18 +85,14 @@ if (VIEW === 'table') {
     const chair = M.buildChair();
     chair.position.z = -0.30;
     g.add(chair);
-    /* Стенд умеет показать одну конкретную фигуру: ?solo=2&hat=hair&sex=f */
-    const idx = N === 1 ? (+(q.get('seed') || 1)) : i + 1;
-    const hat = N === 1 ? (q.get('hat') || 'hair') : (i % 5 === 0 ? 'cap' : 'hair');
-    const sex = N === 1 ? (q.get('sex') || 'm') : (i % 3 === 1 ? 'f' : 'm');
-    const f = M.buildFigure(COATS[i % COATS.length], hat, idx, { sex, pose: i % 4 });
+    const f = M.buildFigure(COATS[i % COATS.length], i % 5 === 0 ? 'cap' : 'hair', i + 1,
+      { sex: i % 3 === 1 ? 'f' : 'm', pose: i % 4 });
     g.add(f);
     figures.push(f);
   }
   camera.position.set(0, 2.6, R + 2.9);
   camera.lookAt(0, 0.85, 0);
 } else {
-  /* Ряд фигур на стульях: удобно смотреть анатомию с любой стороны. */
   const gap = 0.86;
   for (let i = 0; i < N; i++) {
     const g = new THREE.Group();
@@ -101,7 +101,6 @@ if (VIEW === 'table') {
     const chair = M.buildChair();
     chair.position.z = -0.30;
     g.add(chair);
-    /* Стенд умеет показать одну конкретную фигуру: ?solo=2&hat=hair&sex=f */
     const idx = N === 1 ? (+(q.get('seed') || 1)) : i + 1;
     const hat = N === 1 ? (q.get('hat') || 'hair') : (i % 5 === 0 ? 'cap' : 'hair');
     const sex = N === 1 ? (q.get('sex') || 'm') : (i % 3 === 1 ? 'f' : 'm');
@@ -109,8 +108,7 @@ if (VIEW === 'table') {
     g.add(f);
     figures.push(f);
   }
-  const span = N;
-  const dist = span * gap * 0.9 + 1.5;
+  const dist = N * gap * 0.9 + 1.5;
   if (VIEW === 'front') { camera.position.set(0, 1.25, dist); camera.lookAt(0, 0.9, 0); }
   else if (VIEW === 'three') { camera.position.set(dist * 0.62, 1.7, dist * 0.78); camera.lookAt(0, 0.9, 0); }
   else if (VIEW === 'side') { camera.position.set(dist, 1.15, 0.1); camera.lookAt(0, 0.9, 0); }
@@ -121,36 +119,32 @@ if (VIEW === 'table') {
   else if (VIEW === 'solo') { camera.position.set(0.9, 1.35, 1.5); camera.lookAt(0, 0.85, 0); camera.fov = 40; camera.updateProjectionMatrix(); }
 }
 
-/* Отладка: красим материалы по номеру, чтобы понять, какая деталь где.
-   Порядок в userData.materials: cloth, dark, skin, shirt, tie, trous, shoe,
-   face, lid, felt, hair, hairGloss. */
+/* Отладка: красим материалы по номеру. Порядок в userData.materials:
+   cloth, dark, skin, shirt, tie, trous, shoe, face, lid, lips, seam, felt,
+   hair, hairGloss. */
 if (q.get('paint')) {
   const C = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff,
-             0xff8800, 0x8800ff, 0x00ff88, 0x888888, 0xffffff, 0x004488];
+             0xff8800, 0x8800ff, 0x00ff88, 0x884400, 0xffffff, 0x004488];
   figures.forEach(f => (f.userData.materials || []).forEach((m, i) => {
     if (m.color) m.color.setHex(C[i % C.length]);
     if (m.map) { m.map = null; m.needsUpdate = true; }
   }));
 }
 
-/* Немного времени на анимацию: если у фигуры есть tick, дадим ей пожить. */
-let t0 = performance.now();
+const t0 = performance.now();
 function frame(now) {
   const t = now - t0;
   lamp.animate(now, 16);
   figures.forEach((f, i) => {
     const u = f.userData;
     if (u.animate) u.animate(t + i * 900, 16, { speaking: i === 0 && (t % 4000) < 2000 });
-    else if (u.breathe) u.breathe(Math.sin(t * 0.0022 + i));
   });
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-/* Стенд говорит наружу, что он готов: снимок делается только после этого. */
 window.__figs = figures;
-window.__M = M;
 setTimeout(() => { window.__labReady = true; }, 500);
 </script>
 </body>

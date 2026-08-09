@@ -44,7 +44,8 @@ const must = [
   'tests/test-speech.js', 'tests/test-chat.js', 'tests/test-offline.js',
   'tests/test-signal.js', 'tests/test-assets.js', 'tests/test-bots.js',
   'tests/test-lobby.js', 'tests/test-access.js', 'tests/test-speeches.js',
-  'tests/test-seed.js', 'tests/test-inquest.js', 'tests/shot.js'
+  'tests/test-seed.js', 'tests/test-inquest.js', 'tests/shot.js', 'tests/lab-shots.js',
+  'public/figure-lab.html'
 ];
 let miss = 0;
 must.forEach(f => {

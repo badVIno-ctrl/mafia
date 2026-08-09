@@ -53,7 +53,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       const errs = [];
       page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
       page.on('pageerror', e => errs.push(String(e.message)));
-      await page.goto(BASE + '/__lab.html?view=' + view +
+      await page.goto(BASE + '/figure-lab.html?view=' + view +
         '&w=' + size.width + '&h=' + size.height +
         (process.env.LAB_PAINT ? '&paint=1' : '') +
         (process.env.LAB_ARGS ? '&' + process.env.LAB_ARGS : ''), { waitUntil: 'load' });

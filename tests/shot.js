@@ -165,7 +165,7 @@ async function onlineScene(browser) {
   const seats = await page.evaluate(() => document.querySelectorAll('#marks .mark').length);
   ok(seats >= 6, 'на сетевой сцене есть подписи всех мест (' + seats + ')');
   const hasCanvas = await page.evaluate(() => !!document.querySelector('#stage canvas'));
-  ok(hasCanvas, 'сетевая партия идёт на 3D-сцене, а не на плоской сетке');
+  ok(hasCanvas, 'сетевая партия идёт на настоящей сцене, а не на таблице карточек');
   await shot(page, 'online-game');
 
   /* час за столом в ускоренном виде: ждём, что фаза меняется сама */
@@ -211,9 +211,9 @@ async function homeScene(browser) {
 /* ------------------------------------------------------------------ */
 /* сцена: смена декораций посреди партии                               */
 /* ------------------------------------------------------------------ */
-/* Проверяем то, что нельзя увидеть обычным тестом: кнопка вида меняет
-   декорацию на ходу, партия при этом не рвётся, подписи мест остаются,
-   выбор запоминается и обратный путь тоже работает. */
+/* Проверяем то, что нельзя увидеть обычным тестом: партия начинается в 2D,
+   кнопка честно обещает «Переключить на 3D-вид», объём встаёт на ходу, партия
+   при этом не рвётся, подписи мест остаются и обратный путь тоже работает. */
 async function viewScene(browser) {
   const stamp = Date.now().toString(36).slice(-4);
   const errs = [];
@@ -227,29 +227,26 @@ async function viewScene(browser) {
   await sleep(1400);
 
   ok(await page.isVisible('#btnView'), 'кнопка вида есть в сетевой партии');
-  ok(await page.evaluate(() => document.body.dataset.sceneView) === 'deep',
-    'базовая декорация — глубокая сцена');
+  ok(await page.evaluate(() => document.body.dataset.sceneMode) === '2d',
+    'партия начинается в 2D-виде');
+  ok(await page.getAttribute('#btnView', 'title') === 'Переключить на 3D-вид',
+    'подсказка кнопки обещает ровно то, что произойдёт');
+  ok((await page.textContent('#btnView')).trim() === '3D',
+    'на кнопке написан тот вид, который она включит');
 
   await page.click('#btnCreate'); await sleep(1000);
   await page.click('#btnBots'); await sleep(1400);
   await page.click('#btnStart').catch(() => {});
   await sleep(5000);
 
-  const before = await page.evaluate(() => ({
-    canvas: !!document.querySelector('#stage canvas'),
-    marks: document.querySelectorAll('#marks .mark').length
-  }));
-  ok(before.canvas && before.marks >= 6, 'глубокая сцена собрана: подписей ' + before.marks);
-
-  await page.click('#btnView'); await sleep(2400);
   const flat = await page.evaluate(() => ({
     mode: document.body.dataset.sceneView,
     canvas: !!document.querySelector('#stage canvas.flat-table'),
     marks: document.querySelectorAll('#marks .mark').length,
     probe: window.__flatTableProbe ? window.__flatTableProbe() : null
   }));
-  ok(flat.mode === 'flat' && flat.canvas, 'плоский задник встал по кнопке');
-  ok(flat.marks >= 6, 'подписи мест не потерялись при смене декораций (' + flat.marks + ')');
+  ok(flat.mode === 'flat' && flat.canvas, 'первый кадр партии — плоский стол');
+  ok(flat.marks >= 6, 'подписи мест на месте (' + flat.marks + ')');
   ok(flat.probe && flat.probe.seats >= 6, 'на плоской сцене есть все места (' + (flat.probe && flat.probe.seats) + ')');
   await shot(page, 'view-flat');
 
@@ -262,16 +259,25 @@ async function viewScene(browser) {
   }
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.click('#btnView'); await sleep(2600);
-  const back = await page.evaluate(() => ({
+  await page.click('#btnView'); await sleep(3000);
+  const deep = await page.evaluate(() => ({
     mode: document.body.dataset.sceneView,
     flat: !!document.querySelector('#stage canvas.flat-table'),
-    canvas: !!document.querySelector('#stage canvas')
+    canvas: !!document.querySelector('#stage canvas'),
+    marks: document.querySelectorAll('#marks .mark').length,
+    label: (document.getElementById('btnView') || {}).textContent || '',
+    title: (document.getElementById('btnView') || {}).title || ''
   }));
-  ok(back.mode === 'deep' && back.canvas && !back.flat, 'по второму нажатию вернулись в глубокую сцену');
-  ok(await page.evaluate(() => localStorage.getItem('mafia.scene.view')) === 'deep',
-    'выбор декорации запомнился');
-  ok(errs.length === 0, 'при смене декораций нет ошибок консоли' +
+  ok(deep.mode === 'deep' && deep.canvas && !deep.flat, '3D-вид встал по кнопке');
+  ok(deep.marks >= 6, 'подписи мест не потерялись при переключении (' + deep.marks + ')');
+  ok(deep.label.trim() === '2D' && deep.title === 'Переключить на 2D-вид',
+    'кнопка теперь обещает обратный путь');
+  await shot(page, 'view-deep');
+
+  await page.click('#btnView'); await sleep(2200);
+  ok(await page.evaluate(() => document.body.dataset.sceneView) === 'flat',
+    'обратно в 2D тем же нажатием');
+  ok(errs.length === 0, 'при смене вида нет ошибок консоли' +
     (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await page.close();
 
@@ -288,20 +294,17 @@ async function viewScene(browser) {
   await sleep(1300);
   await p2.click('#storyGo').catch(() => {});
   await sleep(6500);
-  await p2.click('#btnView');
-  await sleep(2500);
-  const bFlat = await p2.evaluate(() => ({
+  const bStart = await p2.evaluate(() => ({
     mode: document.body.dataset.sceneView,
-    shown: [...document.querySelectorAll('#scene-root canvas')].map(c => getComputedStyle(c).display),
     flat: !!document.querySelector('#scene-root canvas.flat-table')
   }));
-  ok(bFlat.mode === 'flat' && bFlat.flat, 'на странице с ботами задник встал посреди партии');
-  ok(bFlat.shown.filter(d => d !== 'none').length === 1,
-    'видна ровно одна декорация: ' + JSON.stringify(bFlat.shown));
+  ok(bStart.mode === 'flat' && bStart.flat, 'партия с ботами тоже начинается в 2D');
   await shot(p2, 'view-bots-flat');
 
-  /* партия обязана продолжаться в новой декорации */
-  let moved = 0, prev = '';
+  /* Партия обязана идти сама — проверяем это на плоском столе. Объёмную
+     сцену в headless рисует программный WebGL со скоростью двух-четырёх
+     кадров в секунду, и её медленность читалась бы как «игра встала». */
+  let moved2d = 0, prev2d = '';
   for (let i = 0; i < 50; i++) {
     for (const sel of ['#storyGo', '#nextBtn', '.tgt.skip', '#speechSkip', '.tgt']) {
       const el = await p2.$(sel);
@@ -312,16 +315,39 @@ async function viewScene(browser) {
       logN: document.querySelectorAll('#log .le').length
     }));
     const key = st.phase + '|' + st.logN;
-    if (key !== prev) { moved++; prev = key; }
+    if (key !== prev2d) { moved2d++; prev2d = key; }
     if (/Голосование|Казнь|Финал/.test(st.phase)) break;
     await sleep(360);
   }
-  ok(moved > 4, 'партия с ботами продолжается на плоском заднике: ' + moved + ' изменений');
+  ok(moved2d > 4, 'партия с ботами идёт сама в 2D: ' + moved2d + ' изменений');
+
+  /* Объём встаёт посреди партии: three.js подгружается по требованию, а
+     новая сцена догоняет стол по журналу. */
+  await p2.click('#btnView');
+  await sleep(4000);
+  const bDeep = await p2.evaluate(() => ({
+    mode: document.body.dataset.sceneView,
+    shown: [...document.querySelectorAll('#scene-root canvas')].map(c => getComputedStyle(c).display),
+    flat: !!document.querySelector('#scene-root canvas.flat-table')
+  }));
+  ok(bDeep.mode === 'deep', 'на странице с ботами 3D встало посреди партии');
+  ok(bDeep.shown.filter(d => d !== 'none').length === 1,
+    'видна ровно одна декорация: ' + JSON.stringify(bDeep.shown));
+  await shot(p2, 'view-bots-deep');
+
+  /* Партия не рвётся при смене вида: стол, фигуры и журнал на месте, а
+     сама игра продолжает идти — хотя бы на один шаг за отведённое время. */
+  const after = await p2.evaluate(() => ({
+    seats: document.querySelectorAll('#scene-root canvas').length,
+    logN: document.querySelectorAll('#log .le').length,
+    phase: (document.getElementById('stPhase') || {}).textContent || ''
+  }));
+  ok(after.logN > 0 && !!after.phase, 'после переключения партия на месте: фаза «' + after.phase + '»');
 
   await p2.click('#btnView');
-  await sleep(3500);
-  ok(await p2.evaluate(() => document.body.dataset.sceneView) === 'deep',
-    'обратно к глубокой сцене: three.js догрузился по требованию');
+  await sleep(2600);
+  ok(await p2.evaluate(() => document.body.dataset.sceneView) === 'flat',
+    'обратно в 2D той же кнопкой');
   ok(errs2.length === 0, 'на странице с ботами нет ошибок консоли при смене вида' +
     (errs2.length ? ': ' + errs2.slice(0, 3).join(' | ') : ''));
   await p2.close();

@@ -482,6 +482,8 @@ const server = http.createServer(async (req, res) => {
       'Allow: /\n' +
       'Disallow: /api/\n' +
       'Disallow: /online.html?join=\n' +
+      /* Служебный стенд фигур: страница для работы над моделями, не для игры. */
+      'Disallow: /figure-lab.html\n' +
       '\nSitemap: ' + o + '/sitemap.xml\n';
     res.writeHead(200, { 'Content-Type': MIME['.txt'], 'Cache-Control': 'public, max-age=3600' });
     return res.end(txt);

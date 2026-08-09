@@ -890,12 +890,43 @@ export function createModels(THREE, cfg) {
         idx.push(a, a + S, b, b, a + S, b + S);
       }
     }
-    /* заглушки на концах, чтобы в сустав не было видно «трубу» */
+    /* Заглушки на концах, чтобы в сустав не было видно «трубу».
+
+       Направление обхода считаем, а не угадываем. Рамка Френе на кривой
+       может оказаться повёрнутой как угодно, и заглушка, написанная одним
+       порядком вершин, на половине конечностей смотрела внутрь: её
+       отбрасывало отсечение задних граней, и вместо кисти в рукаве
+       чернела дыра. Проверяем знаком: нормаль треугольника должна смотреть
+       наружу, то есть против касательной на начале и по ней на конце. */
     const p0 = curve.getPoint(0), p1 = curve.getPoint(1);
+    const t0 = curve.getTangent(0), t1 = curve.getTangent(1);
+
+    function capFacesOut(center, ringStart, outward) {
+      const ax = pos[(ringStart) * 3] - center.x;
+      const ay = pos[(ringStart) * 3 + 1] - center.y;
+      const az = pos[(ringStart) * 3 + 2] - center.z;
+      const bx = pos[(ringStart + 1) * 3] - center.x;
+      const by = pos[(ringStart + 1) * 3 + 1] - center.y;
+      const bz = pos[(ringStart + 1) * 3 + 2] - center.z;
+      /* нормаль треугольника (центр, ring[0], ring[1]) */
+      const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+      return nx * outward.x + ny * outward.y + nz * outward.z > 0;
+    }
+
     const c0 = pos.length / 3; pos.push(p0.x, p0.y, p0.z);
-    for (let k = 0; k < S; k++) idx.push(c0, (k + 1) % S, k);
+    const out0 = { x: -t0.x, y: -t0.y, z: -t0.z };
+    const flip0 = !capFacesOut(p0, 0, out0);
+    for (let k = 0; k < S; k++) {
+      const a = k, b = (k + 1) % S;
+      if (flip0) idx.push(c0, b, a); else idx.push(c0, a, b);
+    }
+    const base = T * S;
     const c1 = pos.length / 3; pos.push(p1.x, p1.y, p1.z);
-    for (let k = 0; k < S; k++) idx.push(c1, T * S + k, T * S + (k + 1) % S);
+    const flip1 = !capFacesOut(p1, base, t1);
+    for (let k = 0; k < S; k++) {
+      const a = base + k, b = base + (k + 1) % S;
+      if (flip1) idx.push(c1, b, a); else idx.push(c1, a, b);
+    }
 
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -1574,8 +1605,14 @@ export function createModels(THREE, cfg) {
         [x * 1.05, y0 + y1 * 0.4, 0.086 * K + len * 0.40],
         [x * 1.09, y1, 0.086 * K + len * 0.72],
         [x * 1.11, y2, 0.086 * K + len]
-      ], [r, r * 0.94, r * 0.84, r * 0.66], skinMat, sg(8, 5), sg(10, 5));
+      ], [r, r * 0.94, r * 0.82, r * 0.44], skinMat, sg(8, 5), sg(10, 5));
       g.add(f);
+      /* Подушечка пальца: без неё труба кончается плоским тёмным срезом, и
+         в упор кисть выглядит связкой макарон. */
+      const tip = new THREE.Mesh(new THREE.SphereGeometry(r * 0.52, sg(10, 5), sg(8, 4)), skinMat);
+      tip.position.set(x * 1.11, y2, 0.086 * K + len - r * 0.16);
+      tip.scale.set(1, 0.86, 1.06);
+      g.add(tip);
       /* костяшка: маленький бугорок в основании пальца */
       const kn = new THREE.Mesh(new THREE.SphereGeometry(r * 1.06, sg(10, 5), sg(8, 4)), skinMat);
       kn.position.set(x, y0 + 0.0016 * K, 0.082 * K);
@@ -1837,14 +1874,25 @@ export function createModels(THREE, cfg) {
         eb,
         [(eb[0] + wr[0]) / 2, (eb[1] + wr[1]) / 2 + 0.010, (eb[2] + wr[2]) / 2],
         wr
-      ], [0.070, 0.062, 0.053, 0.046, 0.041, 0.034], cloth, sg(14, 8), sg(24, 13)));
+      ], [0.070, 0.062, 0.053, 0.046, 0.040, 0.030], cloth, sg(14, 8), sg(24, 13)));
 
-      /* Манжета у самой кисти: показывает, где кончается рукав. */
+      /* Манжета у самой кисти: показывает, где кончается рукав. Именно
+         кольцо, а не труба: труба чуть шире руки, и в упор было видно её
+         тёмную изнанку — рукав казался обрубленным. */
       const dir = new THREE.Vector3(wr[0] - eb[0], wr[1] - eb[1], wr[2] - eb[2]);
-      const cuffFrom = new THREE.Vector3(wr[0], wr[1], wr[2]).addScaledVector(dir, -0.19);
-      grp.add(limb([
-        [cuffFrom.x, cuffFrom.y, cuffFrom.z], [wr[0], wr[1], wr[2]]
-      ], [0.040, 0.036], shirt, sg(12, 7), sg(4, 3)));
+      const cuffAt = new THREE.Vector3(wr[0], wr[1], wr[2]).addScaledVector(dir, -0.13);
+      const cuff = new THREE.Mesh(
+        new THREE.TorusGeometry(0.032, 0.0072, sg(8, 5), sg(16, 9)), shirt);
+      cuff.position.copy(cuffAt);
+      cuff.lookAt(new THREE.Vector3(wr[0], wr[1], wr[2]));
+      grp.add(cuff);
+      /* Само запястье: без него между рукавом и пястью остаётся кольцо, в
+         которое видно тёмную изнанку рукава — в упор это читалось как дыра
+         на месте кисти. */
+      const wrist = new THREE.Mesh(new THREE.SphereGeometry(0.030, sg(14, 8), sg(10, 6)), skin);
+      wrist.position.set(wr[0], wr[1], wr[2]);
+      wrist.scale.set(1, 0.86, 1);
+      grp.add(wrist);
 
       const hand = buildHand(skin, s, { flat: A2.flat });
       hand.position.set(wr[0], wr[1], wr[2]);
