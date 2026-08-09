@@ -209,6 +209,13 @@ h1 em,h2 em{
 }
 .iconbtn:hover{color:var(--bone);border-color:var(--hair);background:rgba(241,236,225,.05)}
 
+/* Кнопка вида: знак плюс надпись того вида, который она включит. Надпись
+   здесь важнее знака — «3D» читается мгновенно и не требует догадок. */
+.viewbtn{display:inline-flex;align-items:center;gap:5px;width:auto;padding:0 10px;
+  border-color:var(--hair);color:var(--bone)}
+.viewbtn .vlabel{font:600 12px/1 var(--sans);letter-spacing:.08em}
+.viewbtn[aria-pressed=true]{color:var(--tallow);border-color:var(--line-warm)}
+
 /* =========================================================================
    Поверхности
    ========================================================================= */

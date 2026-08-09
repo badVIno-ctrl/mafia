@@ -140,6 +140,10 @@ body.night #vignette{opacity:1;background:radial-gradient(ellipse at 50% 46%,rgb
 @media (prefers-reduced-motion:reduce){ .tbtn{transition:color .16s var(--ease)} .tbtn:hover{transform:none} }
 .tbtn.on{color:var(--gold);border-color:var(--gold)}
 .tbtn.wide{width:auto;padding:0 13px;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
+/* Кнопка вида: знак плюс надпись того вида, который она включит. Надпись
+   читается мгновенно — «3D» не нужно расшифровывать. */
+.tbtn.viewbtn{width:auto;padding:0 9px;gap:5px;display:inline-flex;align-items:center;justify-content:center}
+.tbtn.viewbtn .vlabel{font-family:var(--sans,inherit);font-size:12px;font-weight:600;letter-spacing:.08em}
 
 /* явный выход из вида сверху — чтобы нельзя было застрять в режиме */
 #topExit{position:fixed;z-index:9;left:50%;transform:translateX(-50%);
@@ -748,7 +752,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
   <div id="topspace"></div>
   <button class="tbtn deskOnly" id="btnMute" title="Звук" aria-label="Звук" data-ico="sound"></button>
   <button class="tbtn deskOnly" id="btnVoice" title="Читать реплики вслух" aria-label="Читать реплики вслух" data-ico="mask"></button>
-  <button class="tbtn deskOnly" id="btnView" title="Вид сцены" aria-label="Вид сцены" aria-pressed="false"></button>
+  <button class="tbtn deskOnly" id="btnView" title="Переключить на 3D-вид" aria-label="Переключить на 3D-вид" aria-pressed="false"></button>
   <button class="tbtn on deskOnly" id="btnLight" title="Яркость сцены" aria-label="Свет" data-ico="candle"></button>
   <button class="tbtn deskOnly" id="btnTop" title="Вид сверху — весь стол" aria-label="Вид сверху — весь стол" aria-pressed="false">⍟</button>
   <button class="tbtn deskOnly" id="btnInstall" title="Установить игру на устройство" aria-label="Установить игру на устройство" hidden>⤓</button>
@@ -848,7 +852,7 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
     <div class="sheetGrid">
       <button class="mItem" id="mRole"><b>Моя роль</b><small>Карта и тайные записи</small></button>
       <button class="mItem" id="mLog"><b>Протокол</b><small>Всё, что сказано за столом</small></button>
-      <button class="mItem" id="mView"><b>Декорация</b><small id="mViewSt">Глубокая сцена</small></button>
+      <button class="mItem" id="mView"><b>Вид сцены</b><small id="mViewSt">2D-вид</small></button>
       <button class="mItem" id="mTop"><b>Вид сверху</b><small>Весь стол целиком</small></button>
       <button class="mItem" id="mLight"><b>Свет</b><small id="mLightSt">Полный</small></button>
       <button class="mItem" id="mSound"><b>Звук</b><small id="mSoundSt">Включён</small></button>
@@ -1118,8 +1122,8 @@ async function ensureThree(){
   return threeReady;
 }
 
-/* Базовый вид — глубокая сцена; плоский задник берётся из выбора игрока или
-   из отсутствия WebGL. Решение принимает один общий модуль view-mode.js. */
+/* Партия начинается в 2D: плоский стол встаёт мгновенно и работает везде.
+   3D игрок включает сам кнопкой. Решение принимает общий модуль view-mode.js. */
 USE_2D = window.ViewMode ? window.ViewMode.isFlat() : false;
 if(!USE_2D){
   const okThree = await ensureThree();
@@ -4810,6 +4814,13 @@ function resumeGame(){
 
 async function startGame(opts){
   const token = ++gameToken;
+  /* Новая партия всегда начинается в 2D. Если прошлую играли в 3D, вид
+     возвращается к плоскому столу до раздачи, а не посреди пролога. */
+  if(window.ViewMode && !window.ViewMode.isFlat()){
+    window.ViewMode.resetForNewGame();
+    await Scene3D.switchTo('flat');
+    paintViewBtn();
+  }
   UI.hideEnd();
   UI.hideStory();
   UI.clearLog();
@@ -5545,8 +5556,8 @@ function syncTopBtn(){
   const flat = window.ViewMode ? window.ViewMode.isFlat() : false;
   el('btnTop').classList.toggle('on', on);
   el('btnTop').setAttribute('aria-pressed', on ? 'true' : 'false');
-  /* Вид сверху на плоском заднике распрямляет овал, на глубокой сцене
-     поднимает камеру — подпись должна отличаться. */
+  /* Вид сверху в 2D распрямляет овал, в 3D поднимает камеру — подпись
+     должна отличаться. */
   el('btnTop').title = flat
     ? (on ? 'Вернуть стол вполоборота' : 'Распрямить стол в план')
     : (on ? 'Вернуться к столу' : 'Вид сверху — весь стол');
@@ -5556,12 +5567,15 @@ function syncTopBtn(){
 function paintViewBtn(){
   const b = el('btnView');
   if(!b || !window.ViewMode) return;
-  const flat = window.ViewMode.isFlat();
-  b.innerHTML = Icons.svg(window.ViewMode.icon(), { size: 18 });
-  b.title = window.ViewMode.title() + ' · ' + window.ViewMode.action();
+  /* На кнопке написан тот вид, который она включит: стоишь в 2D — читаешь
+     «3D», и подсказка говорит «Переключить на 3D-вид». */
+  b.innerHTML = Icons.svg(window.ViewMode.icon(window.ViewMode.next()), { size: 17 }) +
+    '<b class="vlabel">' + window.ViewMode.short() + '</b>';
+  b.classList.add('viewbtn');
+  b.title = window.ViewMode.action();
   b.setAttribute('aria-label', window.ViewMode.action());
-  b.setAttribute('aria-pressed', flat ? 'true' : 'false');
-  b.classList.toggle('on', flat);
+  b.setAttribute('aria-pressed', window.ViewMode.isDeep() ? 'true' : 'false');
+  b.classList.toggle('on', window.ViewMode.isDeep());
   b.disabled = window.ViewMode.locked();
   syncTopBtn();
 }
@@ -5577,13 +5591,11 @@ function wireChrome(){
     const got = await Scene3D.switchTo(want === 'flat' ? 'flat' : 'deep');
     el('btnView').disabled = false;
     if(got !== (want === 'flat' ? 'flat' : 'deep')){
-      UI.toast('Глубокую сцену поднять не удалось — остаёмся на плоском заднике.');
-      window.ViewMode.set('flat', { temporary: true });
+      UI.toast('3D-вид поднять не удалось — остаёмся в 2D.');
+      window.ViewMode.set('flat');
     } else {
       window.ViewMode.set(want);
-      UI.toast(want === 'flat'
-        ? 'Писаный задник: плоские фигуры на подставках.'
-        : 'Глубокая сцена: выгородка, свет и объёмные фигуры.');
+      UI.toast(want === 'flat' ? '2D-вид: плоский стол.' : '3D-вид: объёмная сцена.');
     }
     paintViewBtn();
     syncTopBtn();
@@ -5715,7 +5727,7 @@ function wireChrome(){
   const menu = el('menuSheet');
   const syncMenu = () => {
     el('mSoundSt').textContent = el('btnMute').classList.contains('on') ? 'Включён' : 'Выключен';
-    el('mViewSt').textContent = window.ViewMode ? window.ViewMode.title() : 'Глубокая сцена';
+    el('mViewSt').textContent = window.ViewMode ? window.ViewMode.title() : '2D-вид';
     el('mLightSt').textContent = el('btnLight').classList.contains('on') ? 'Полный' : 'Приглушённый';
     el('mInstall').hidden = !!document.body.classList.contains('installed');
   };

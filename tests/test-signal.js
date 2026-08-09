@@ -65,7 +65,7 @@ function listen(token) {
 (async () => {
   console.log('\n=== ТЕСТ 8: сигналинг голосового чата ===');
   const srv = spawn('node', [path.join(__dirname, '..', 'server.js')], {
-    env: Object.assign({}, process.env, { PORT: String(PORT) }),
+    env: Object.assign({}, process.env, { PORT: String(PORT), MAFIA_DATA: require('os').tmpdir() + '/mafia-test-users-signal.json' }),
     stdio: ['ignore', 'pipe', 'pipe']
   });
   srv.stderr.on('data', d => console.log('  [server stderr] ' + d));

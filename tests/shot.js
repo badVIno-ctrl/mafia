@@ -330,7 +330,7 @@ async function viewScene(browser) {
 (async () => {
   console.log('\n=== СТЕНД: живой браузер, WebGL, снимки в tests/shots ===');
   const srv = spawn('node', [path.join(__dirname, '..', 'server.js')], {
-    env: Object.assign({}, process.env, { PORT: String(PORT) }),
+    env: Object.assign({}, process.env, { PORT: String(PORT), MAFIA_DATA: require('os').tmpdir() + '/mafia-test-users-shot.json' }),
     stdio: ['ignore', 'pipe', 'pipe']
   });
   srv.stderr.on('data', d => console.log('  [server stderr] ' + d));

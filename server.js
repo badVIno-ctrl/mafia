@@ -16,7 +16,14 @@ const Bots = require('./server/bots.js');
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const ROOT = __dirname;
 const PUBLIC = path.join(ROOT, 'public');
-const DATA_FILE = path.join(ROOT, 'data', 'users.json');
+/* Где лежат аккаунты. Путь выведен в переменную окружения по одной причине:
+   тесты поднимают настоящий сервер и заводят настоящие имена. Пока файл был
+   один, каждый прогон дописывал в него сотни «Гость7» и «Голосci90A», они
+   попадали в репозиторий и потом честно показывались живому игроку в списке
+   «Кто есть на сайте». Тест теперь пишет в свой файл в /tmp. */
+const DATA_FILE = process.env.MAFIA_DATA
+  ? path.resolve(process.env.MAFIA_DATA)
+  : path.join(ROOT, 'data', 'users.json');
 
 const ONLINE_MS = 45000;          // считаем человека онлайн, если был активен в это окно
 const EMPTY_ROOM_MS = 15 * 60000; // сколько комната ждёт возвращения последнего игрока
@@ -177,9 +184,14 @@ function lobbyView(userId) {
   const me = users.get(userId);
   return {
     me: me ? publicUser(me) : null,
+    /* «Кто есть на сайте» — это ровно те, кто сейчас на сайте: живой человек,
+       чья вкладка отвечала последние сорок пять секунд. Ботов здесь нет
+       никогда: бот живёт внутри комнаты и позвать его нельзя. Раньше сюда
+       попадал каждый, кто когда-либо назвался, — и хозяин комнаты видел
+       список из сотен мёртвых имён, из которых никто не придёт. */
     users: [...users.values()]
-      .filter(u => u.id !== userId && !u.bot)
-      .sort((a, b) => (isOnline(b) - isOnline(a)) || a.name.localeCompare(b.name, 'ru'))
+      .filter(u => u.id !== userId && !u.bot && isOnline(u))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
       .slice(0, 200)
       .map(publicUser),
     /* Общий зал: открытые столы, за которые можно сесть без ссылки. Так

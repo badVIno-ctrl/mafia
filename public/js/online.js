@@ -212,7 +212,13 @@
     }).slice(0, 60);
 
     if (!list.length) {
-      setHTML(box, '<div class="empty">Никого не нашлось. Пришлите друзьям ссылку — они назовутся и появятся здесь.</div>');
+      /* Список показывает только тех, кто сейчас на сайте, поэтому пустота
+         здесь — обычное дело, и объяснить её надо по-разному: «никого нет»
+         и «по вашему запросу никого нет» — это две разные новости. */
+      setHTML(box, '<div class="empty">' + (q
+        ? 'По запросу «' + API.esc(q) + '» на сайте никого нет.'
+        : 'Кроме вас на сайте сейчас никого. Пришлите друзьям ссылку на стол — ' +
+          'они откроют её, назовутся и сразу появятся здесь.') + '</div>');
       return;
     }
     box._html = null;
@@ -230,8 +236,14 @@
   }
 
   function renderRoom(room) {
+    var wasStarted = state.room && state.room.started;
     state.room = room;
-    if (room && room.started) { show('game'); renderGame(room.game); return; }
+    if (room && room.started) {
+      /* Новая партия начинается в 2D: плоский стол встаёт сразу и одинаково
+         у всех. Кто хочет объём — нажмёт кнопку «3D». */
+      if (!wasStarted) ViewMode.resetForNewGame();
+      show('game'); renderGame(room.game); return;
+    }
     var st = stg();
     if (st) { st.dispose(); state.marks.clear(); }
     if (st || !state.stage) { state.stage = null; state.seatsKey = ''; }
@@ -950,13 +962,15 @@
     var btn = $('btnView');
     if (!btn) return;
     var flat = ViewMode.isFlat();
-    /* Знак показывает то, что стоит на сцене сейчас, а подпись обещает то,
-       что произойдёт по нажатию: так кнопка не врёт ни в одном состоянии. */
-    setHTML(btn, ico(ViewMode.icon(), 20));
-    btn.title = ViewMode.title() + ' · ' + ViewMode.action();
+    /* На кнопке написан тот вид, который она включит: стоишь в 2D — читаешь
+       «3D». Подсказка говорит то же словами. Никаких театральных названий:
+       «2D» и «3D» понимает любой игрок без объяснений. */
+    setHTML(btn, ico(ViewMode.icon(ViewMode.next()), 18) +
+      '<b class="vlabel">' + ViewMode.short() + '</b>');
+    btn.className = 'iconbtn viewbtn';
+    btn.title = ViewMode.action();
     btn.setAttribute('aria-label', ViewMode.action());
-    btn.setAttribute('aria-pressed', flat ? 'true' : 'false');
-    btn.style.color = flat ? 'var(--tallow)' : '';
+    btn.setAttribute('aria-pressed', ViewMode.isDeep() ? 'true' : 'false');
     btn.disabled = ViewMode.locked();
     btn.hidden = false;
   }
@@ -965,9 +979,7 @@
     $('btnView').addEventListener('click', function () {
       if (ViewMode.locked()) return API.toast(ViewMode.action(), 'bad');
       var mode = ViewMode.toggle();
-      API.toast(mode === ViewMode.FLAT
-        ? 'Писаный задник: плоские фигуры на подставках'
-        : 'Глубокая сцена: выгородка, свет и объёмные фигуры');
+      API.toast(mode === ViewMode.FLAT ? '2D-вид: плоский стол' : '3D-вид: объёмная сцена');
     });
   }
   ViewMode.onChange(function () {

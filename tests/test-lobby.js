@@ -58,7 +58,7 @@ function req(pathname, opts) {
 
 (async () => {
   /* Ключ специально не передаём: проверяем именно поведение без ключа. */
-  const env = Object.assign({}, process.env, { PORT: String(PORT) });
+  const env = Object.assign({}, process.env, { PORT: String(PORT), MAFIA_DATA: require('os').tmpdir() + '/mafia-test-users-lobby.json' });
   delete env.MISTRAL_API_KEY;
 
   const srv = spawn('node', [path.join(__dirname, '..', 'server.js')], {
@@ -102,6 +102,15 @@ function req(pathname, opts) {
     ok(!!row && typeof row.waitingSec === 'number' && row.waitingSec >= 0, 'видно, сколько стол ждёт');
     ok(!(zal.json.users || []).some(u => u.id === looker.id), 'себя самого в списке игроков нет');
 
+    /* ---- 2а. «Кто есть на сайте» — только живые люди, которые сейчас здесь ----
+       Раньше сюда попадал каждый, кто когда-либо назвался: хозяин комнаты
+       открывал список и видел сотни имён из прошлых прогонов, из которых не
+       придёт никто. Позвать за стол можно только того, кто сейчас на сайте. */
+    ok((zal.json.users || []).every(u => u.online === true),
+      'в списке людей нет ни одного, кого сейчас нет на сайте');
+    ok(!(zal.json.users || []).some(u => u.bot), 'ботов в списке людей нет');
+    ok((zal.json.users || []).some(u => u.id === first.id), 'живого человека в списке видно');
+
     /* ---- 3. сесть из списка — без ссылки и без приглашения ---- */
     const sit = await req('/api/rooms/join', { token: third.token, body: { roomId: table.id } });
     ok(sit.status === 200, 'за открытый стол садятся прямо из списка (' + sit.status + ')');
@@ -111,6 +120,12 @@ function req(pathname, opts) {
     const zal2 = await req('/api/lobby', { token: looker.token });
     const row2 = (zal2.json.rooms || []).find(r => r.roomId === table.id);
     ok(!!row2 && row2.humans === 3, 'строка в зале обновилась сама');
+
+    /* Стол добирает ботов — и они не должны просочиться в список приглашаемых. */
+    await req('/api/rooms/bots', { token: first.token, body: { roomId: table.id, upTo: 6 } });
+    const zalBots = await req('/api/lobby', { token: looker.token });
+    ok(!(zalBots.json.users || []).some(u => u.bot || /^b_/.test(u.id)),
+      'добранные боты в списке людей не появились');
 
     /* ---- 4. помощник: чужой ключ не бесплатное API для интернета ---- */
     /* Обработчик стоял выше проверки авторизации, и ключом хозяина площадки

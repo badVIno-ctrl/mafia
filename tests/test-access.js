@@ -51,7 +51,7 @@ async function mk(name) {
 (async () => {
   console.log('\n=== ТЕСТ 12: доступ к столу и возвращение в партию ===');
   const srv = spawn('node', [path.join(__dirname, '..', 'server.js')], {
-    env: Object.assign({}, process.env, { PORT: String(PORT) }),
+    env: Object.assign({}, process.env, { PORT: String(PORT), MAFIA_DATA: require('os').tmpdir() + '/mafia-test-users-access.json' }),
     stdio: ['ignore', 'ignore', 'pipe']
   });
   srv.stderr.on('data', d => console.log('  [сервер] ' + d));
