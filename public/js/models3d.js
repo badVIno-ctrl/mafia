@@ -564,7 +564,10 @@ export function createModels(THREE, cfg) {
        появится, и сцена останется на точечных источниках. */
     let area = null;
     if (THREE.RectAreaLight) {
-      area = new THREE.RectAreaLight(0xffd6a4, 2.1, 0.46, 0.46);
+      /* Больше и тусклее — мягче. Светящийся круг абажура в жизни около
+         сорока сантиметров; чем он крупнее относительно лица, тем шире и
+         спокойнее блик, который он оставляет. */
+      area = new THREE.RectAreaLight(0xffd6a4, 1.45, 0.58, 0.58);
       area.position.set(0, -drop - 0.03, 0);
       area.rotation.x = -Math.PI / 2;      // светит вниз, на стол
       pivot.add(area);
@@ -598,7 +601,7 @@ export function createModels(THREE, cfg) {
 
     const lamp = {
       pivot, shade, inner, glow, disc, spot, point, dust, area,
-      baseSpot: 34, basePoint: 6, baseArea: 2.1, glowLevel: 1,
+      baseSpot: 34, basePoint: 6, baseArea: 1.45, glowLevel: 1,
       /* Маятник: две несинхронные синусоиды, поэтому качание не выглядит
          механическим. amp растёт после удара по столу. */
       swing: 0,
@@ -2196,16 +2199,20 @@ export function createModels(THREE, cfg) {
       metalness: 0.0,
       normalMap: normal,
       normalScale: new THREE.Vector2(0.10, 0.10),
-      clearcoat: 0.04,
-      clearcoatRoughness: 0.88,
+      /* Ни шея, ни кисти не блестят: кожное сало собирается на лице, а не на
+         предплечье. Оставленный здесь clearcoat давал на каждой мелкой
+         выпуклости — костяшке, запястье, уголке губ — точечный зеркальный
+         блик размером в пиксель. На тёмной сцене он читался как блёстки. */
+      clearcoat: 0.0,
+      clearcoatRoughness: 0.9,
       envMapIntensity: 0.7
     }), { wrap: 0.30, strength: 0.18 });
 
     /* Веко всегда в тени надбровной дуги и просвечивает сильнее всего. */
     const lid = applySkinSSS(new THREE.MeshPhysicalMaterial({
       color: skinC.clone().multiplyScalar(0.82),
-      roughness: 0.62, metalness: 0.0,
-      clearcoat: 0.07, clearcoatRoughness: 0.8,
+      roughness: 0.64, metalness: 0.0,
+      clearcoat: 0.03, clearcoatRoughness: 0.85,
       envMapIntensity: 0.7
     }), { wrap: 0.34, strength: 0.40 });
 
@@ -2287,14 +2294,17 @@ export function createModels(THREE, cfg) {
     /* Сорочка не белая: на сцене со свечой чистый белый становится самым
        ярким пятном кадра и перетягивает взгляд с лица. Полотно глаже сукна
        и почти не ворсится. */
-    const shirt = clothMaterial(new THREE.Color(0x9c9482), { roughness: 0.66, sheen: 0.07, weave: 0.5 });
+        /* Полотно сорочки: рельеф переплетения приглушён. При сильном рельефе
+       площадной свет лампы рассыпается по манжете белыми искрами — в упор
+       это читается как блёстки, а не как ткань. */
+    const shirt = clothMaterial(new THREE.Color(0x9c9482), { roughness: 0.72, sheen: 0.06, weave: 0.22 });
     const tieM = clothMaterial(base.clone().multiplyScalar(0.38), { roughness: 0.52, sheen: 0.20, weave: 0.6 });
     const trous = clothMaterial(base.clone().multiplyScalar(0.46), { roughness: 0.88, sheen: 0.12 });
     /* Обувь — единственная лакированная поверхность на фигуре, и она обязана
        ловить лампу: без этого блика низ кадра мёртвый. */
     const shoeM = new THREE.MeshPhysicalMaterial({
-      color: 0x1a1416, roughness: 0.46, metalness: 0.0,
-      clearcoat: 0.42, clearcoatRoughness: 0.34, envMapIntensity: 0.8
+      color: 0x1a1416, roughness: 0.52, metalness: 0.0,
+      clearcoat: 0.30, clearcoatRoughness: 0.40, envMapIntensity: 0.8
     });
     const faceM = SK.face;
 

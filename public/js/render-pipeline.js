@@ -133,7 +133,7 @@ export function buildEnvironment(THREE, renderer, opts) {
    ------------------------------------------------------------------------- */
 export const GuardShader = {
   name: 'VertepGuard',
-  uniforms: { tDiffuse: { value: null }, uCeil: { value: 8.0 } },
+  uniforms: { tDiffuse: { value: null }, uCeil: { value: 4.0 } },
   vertexShader: /* glsl */`
     varying vec2 vUv;
     void main() {
@@ -248,9 +248,14 @@ export const GradeShader = {
       float v = 1.0 - uVignette * pow( clamp( dot( d, d ) * 2.05, 0.0, 1.0 ), 1.35 );
       c *= v;
 
-      /* Зерно: в тени видно, в свету почти нет. */
+      /* Зерно: в тени видно, в свету почти нет.
+
+         Усиление в тенях было 1,25 против 0,40 в свету — втрое. На тёмной
+         ночной сцене, где тени занимают девять десятых кадра, это давало
+         густую сыпь по всем стенам: зерно перестало быть фактурой и стало
+         шумом. Настоящая плёнка ведёт себя мягче. */
       float n = hash( vUv * uResolution + fract( uTime ) * 371.0 ) - 0.5;
-      c += n * uGrain * ( 1.25 - 0.85 * smoothstep( 0.0, 0.85, l ) );
+      c += n * uGrain * ( 1.05 - 0.55 * smoothstep( 0.0, 0.85, l ) );
 
       gl_FragColor = vec4( max( c, 0.0 ), 1.0 );
     }
@@ -262,7 +267,13 @@ export const GradeShader = {
    сценой с приглушённой лампой. */
 export const GRADES = {
   day:     { sat: 1.02, temp: 0.10, contrast: 1.06, vignette: 0.40, grain: 0.030, halation: 0.10, lift: [0.012, 0.010, 0.014], gain: [1.01, 1.00, 0.98], bloom: 0.34, dof: 0.6 },
-  night:   { sat: 0.74, temp: -0.28, contrast: 1.20, vignette: 0.62, grain: 0.052, halation: 0.16, lift: [0.004, 0.008, 0.020], gain: [0.94, 0.97, 1.06], bloom: 0.60, dof: 1.0 },
+  /* Ночь. Первая версия ставила здесь контраст 1,20 и виньетку 0,62 — и
+     получалась честная, красивая, совершенно неиграбельная ночь: лиц не
+     видно, а лица и есть игра. Кино решает это не яркостью, а подъёмом
+     теней: чёрное остаётся холодным и подсвеченным, но не проваливается.
+     Поэтому здесь низкий контраст, поднятый и посиненный lift, умеренная
+     виньетка — темно на вид, читаемо по сути. */
+  night:   { sat: 0.78, temp: -0.24, contrast: 1.10, vignette: 0.52, grain: 0.022, halation: 0.16, lift: [0.009, 0.012, 0.022], gain: [0.97, 1.00, 1.07], bloom: 0.55, dof: 1.0 },
   morning: { sat: 1.06, temp: 0.16, contrast: 0.98, vignette: 0.32, grain: 0.026, halation: 0.12, lift: [0.026, 0.024, 0.022], gain: [1.04, 1.02, 0.98], bloom: 0.30, dof: 0.4 },
   vote:    { sat: 0.90, temp: 0.02, contrast: 1.22, vignette: 0.50, grain: 0.036, halation: 0.08, lift: [0.006, 0.006, 0.008], gain: [1.04, 1.01, 0.97], bloom: 0.28, dof: 0.7 },
   over:    { sat: 0.80, temp: 0.20, contrast: 1.10, vignette: 0.66, grain: 0.044, halation: 0.18, lift: [0.020, 0.014, 0.010], gain: [1.02, 0.96, 0.88], bloom: 0.44, dof: 0.9 }

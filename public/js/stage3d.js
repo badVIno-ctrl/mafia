@@ -203,32 +203,53 @@ export async function mountStage(container, opts) {
   /* ------------------------------------------------------------------ */
   /* кадр: окружение, затенение, свечение, грейд                          */
   /* ------------------------------------------------------------------ */
+  /* Пайплайн собирается не «до сцены», а «рядом со сценой».
+
+     Компиляция шейдеров GTAO, bloom и SMAA занимает от десятых долей секунды
+     до нескольких секунд — на слабом железе и на программном WebGL ближе к
+     секундам. Если ждать её перед тем, как отдать сцену наружу, игрок
+     столько же смотрит в пустой прямоугольник, а страница не может ни
+     расставить подписи мест, ни принять нажатие: ручки сцены ещё не
+     существует.
+
+     Поэтому сцена отдаётся сразу и первые кадры рисуются напрямую, а кадровый
+     пайплайн подменяет отрисовку, когда будет готов. Переход виден как
+     однократное изменение освещения — и это честнее, чем секунда пустоты. */
   let pipe = null;
-  try {
-    pipe = await createPipeline(THREE, renderer, scene, camera, {
-      tier: tierName,
-      width: container.clientWidth || 640,
-      height: container.clientHeight || 360,
-      /* Экспозиция ниже прежних 1,34: раньше ею компенсировали отсутствие
-         окружения, теперь свет приходит и от комнаты. */
-      exposure: 1.18
-    });
-  } catch (e) {
-    /* Нет расширений, нет памяти, старый драйвер — рисуем как раньше.
-       Партия важнее картинки. */
-    pipe = null;
-  }
-  if (pipe && pipe.environment) {
-    FILL_K.amb = 0.14; FILL_K.hemi = 0.10; FILL_K.fill = 0.55; FILL_K.table = 0.55;
-    ambient.intensity *= FILL_K.amb;
-    hemi.intensity *= FILL_K.hemi;
-    fills.forEach(l => { l.intensity *= FILL_K.fill; });
-    tableLight.intensity *= FILL_K.table;
-    lamp.baseArea = 2.1;
-  } else if (lamp.area) {
-    lamp.area.intensity = 0;
-    lamp.baseArea = 0;
-  }
+  (async () => {
+    try {
+      const p = await createPipeline(THREE, renderer, scene, camera, {
+        tier: tierName,
+        width: container.clientWidth || 640,
+        height: container.clientHeight || 360,
+        /* Экспозиция ниже прежних 1,34: раньше ею компенсировали отсутствие
+           окружения, теперь свет приходит и от комнаты. */
+        exposure: 1.18
+      });
+      if (!alive) { p.dispose(); return; }
+      pipe = p;
+      if (p.environment) {
+        FILL_K.amb = 0.14; FILL_K.hemi = 0.10; FILL_K.fill = 0.55; FILL_K.table = 0.55;
+        ambient.intensity *= FILL_K.amb;
+        hemi.intensity *= FILL_K.hemi;
+        fills.forEach(l => { l.intensity *= FILL_K.fill; });
+        tableLight.intensity *= FILL_K.table;
+        lamp.baseArea = 1.45;
+      } else if (lamp.area) {
+        lamp.area.intensity = 0;
+        lamp.baseArea = 0;
+      }
+      p.setGrade(phase, 0);
+      const sp = speakerId ? seatsById.get(speakerId) : null;
+      p.focusOn(sp ? sp.figure : null);
+      p.resize(container.clientWidth || 640, container.clientHeight || 360);
+    } catch (e) {
+      /* Нет расширений, нет памяти, старый драйвер — рисуем как раньше.
+         Партия важнее картинки. */
+      pipe = null;
+      if (lamp.area) { lamp.area.intensity = 0; lamp.baseArea = 0; }
+    }
+  })();
 
   /* ------------------------------------------------------------------ */
   /* места за столом                                                     */
@@ -361,7 +382,12 @@ export async function mountStage(container, opts) {
      голосование — жёсткий верхний свет; смерть — короткая вспышка угля. */
   const LIGHT = {
     day: { spot: 34, point: 5.6, amb: 0.42, hemi: 0.34, moon: 0, fog: 0.022, fill: 4.6, table: 3.4, glow: 1, ember: 0, ambColor: 0x6a6070, hemiColor: 0x8b9bb4 },
-    night: { spot: 5.2, point: 1.1, amb: 0.16, hemi: 0.16, moon: 1.1, fog: 0.046, fill: 0.9, table: 0.7, glow: 0.14, ember: 0, ambColor: 0x3a4a70, hemiColor: 0x56769f },
+    /* Ночь. Лампа приглушена, но не погашена: ночью за столом всё равно
+       кто-то должен быть виден, иначе игрок не понимает, на кого смотреть.
+       Прежние 5,2 у прожектора работали, пока сцену дополнительно заливали
+       три заполняющих источника; после перехода на окружение их вклад срезан,
+       и ночь провалилась в чёрное. */
+    night: { spot: 9.5, point: 2.0, amb: 0.16, hemi: 0.16, moon: 1.1, fog: 0.042, fill: 0.9, table: 1.2, glow: 0.20, ember: 0, ambColor: 0x3a4a70, hemiColor: 0x56769f },
     vote: { spot: 44, point: 7, amb: 0.34, hemi: 0.26, moon: 0, fog: 0.026, fill: 2.8, table: 4.4, glow: 1, ember: 0.6, ambColor: 0x6d5f5a, hemiColor: 0x8b8a86 },
     morning: { spot: 27, point: 4.6, amb: 0.52, hemi: 0.44, moon: 0, fog: 0.018, fill: 6, table: 3.2, glow: 0.8, ember: 0, ambColor: 0x7a7268, hemiColor: 0xa8b0bb },
     over: { spot: 18, point: 3.4, amb: 0.28, hemi: 0.22, moon: 0.4, fog: 0.03, fill: 2.2, table: 2.1, glow: 0.6, ember: 1.1, ambColor: 0x5c4c52, hemiColor: 0x6f6a72 }
@@ -486,7 +512,7 @@ export async function mountStage(container, opts) {
       const e = t * t * (3 - 2 * t);
       lamp.baseSpot = lerp(f.spot, to.spot, e);
       lamp.basePoint = lerp(f.point, to.point, e);
-      lamp.baseArea = lerp(f.spot, to.spot, e) * 0.062;
+      lamp.baseArea = lerp(f.spot, to.spot, e) * 0.043;
       lamp.glowLevel = lerp(f.glow, to.glow, e);
       ambient.intensity = lerp(f.amb, to.amb, e) * FILL_K.amb;
       hemi.intensity = lerp(f.hemi, to.hemi, e) * FILL_K.hemi;
