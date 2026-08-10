@@ -130,6 +130,44 @@
   }
 
   /* =======================================================================
+     ВХОД НА МЕСТЕ
+
+     Самый дорогой отказ на сайте выглядел так: друг присылает ссылку
+     ?join=…, у пришедшего имени ещё нет, и вместо стола он получает экран
+     «вернитесь на главную и назовитесь». Возвращается, называется — а
+     приглашения уже нет: адрес потерян вместе со страницей.
+
+     Назваться можно здесь же. Приглашение при этом не трогаем: оно лежит в
+     адресной строке, и после имени страница просто перезагружается тем же
+     адресом — со всеми ?join=, ?solo=, ?quick=.
+     ======================================================================= */
+  function showAuthGate() {
+    show('auth');
+    var q = new URLSearchParams(location.search);
+    var lede = $('authLede');
+    if (lede && (q.get('join') || q.get('room'))) {
+      setText(lede, 'Вас позвали за стол. Назовитесь — и вы сразу окажетесь в комнате: ' +
+        'приглашение никуда не денется, почта и пароль не нужны.');
+    }
+    setTimeout(function () { if ($('authName')) $('authName').focus(); }, 60);
+  }
+
+  /** Завести имя и вернуться на этот же адрес — вместе с приглашением. */
+  function claimName(name, btn) {
+    name = String(name || '').trim();
+    if (name.length < 2) { API.toast('Имя от 2 до 16 символов', 'bad'); return; }
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    API.call('/api/register', { name: name })
+      .then(function (r) { API.save(r.user); location.reload(); })
+      .catch(function (e) {
+        API.fail(e);
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+      });
+  }
+
+  /* =======================================================================
      ЛОББИ
      ======================================================================= */
   /* Раньше здесь были только адресные приглашения: человек, пришедший на сайт
@@ -917,8 +955,8 @@
           el.className = 'msg ' + m.channel + (toMe ? ' toyou' : '') + (m.from === you.id ? ' mine' : '');
           setHTML(el, (toMe ? '<span class="flag">вам</span>' : '') +
             '<span class="no">№' + m.seat + '</span><span class="who">' + API.esc(m.name) + ':</span> ' + body +
-            '<button class="iconbtn say" data-say="' + m.ts + ':' + m.from + '" aria-label="Прочитать вслух" ' +
-            'style="width:24px;height:24px">' + ico('sound', 14) + '</button>');
+            '<button class="iconbtn say" data-say="' + m.ts + ':' + m.from + '" ' +
+            'aria-label="Прочитать вслух" title="Прочитать вслух">' + ico('sound', 14) + '</button>');
           el._msg = m;
         });
     }
@@ -1080,6 +1118,17 @@
   function hintFor(g, you) {
     if (g.finished) return 'Партия окончена — роли раскрыты.';
     if (g.phase === 'prologue') return g.scenario.prologue;
+    /* Выбывший читал те же подсказки, что и живые: «Голосование: выберите
+       того, кого город выводит» — при том что выбрать он ничего не может, и
+       ни одной кнопки на экране у него нет. Человек в этот момент решает,
+       что игра сломалась. Своя строка для выбывшего: сказано, что он вне
+       игры, и сказано, где ему теперь можно говорить.
+
+       Последнее слово — исключение: там выбывший как раз и говорит. */
+    if (you.alive === false && g.phase !== 'lastword') {
+      return 'Вы вне игры и уже всё знаете. Стол вас не слышит — говорить можно ' +
+        'в канале выбывших. Смотрите, чем кончится.';
+    }
     if (g.phase === 'night') {
       var extra = '';
       if (you.canAct === 'block' && you.blockBlocked) extra = ' Того же, что прошлой ночью, выбрать нельзя.';
@@ -1103,8 +1152,18 @@
         : 'Слово у ' + (g.speakerName || '—') + '. Остальные слушают' +
           (g.speechLeft ? ' — в очереди ещё ' + g.speechLeft : '') + '.';
     }
-    if (g.phase === 'day') return 'День: спорьте, оправдывайтесь, сопоставляйте. ' + g.scenario.rule;
+    if (g.phase === 'day') {
+      return (you.ready
+        ? 'Вы высказались — ждём остальных. Передумали? Скажите ещё раз в чате. '
+        : 'День: спорьте, оправдывайтесь, сопоставляйте. ') + g.scenario.rule;
+    }
     if (g.phase === 'vote') {
+      /* Поданный голос надо подтвердить словами. Иначе экран после нажатия
+         выглядит точно так же, как до него, и игрок жмёт второй раз. */
+      if (you.myVote) {
+        return (you.myVote === 'skip' ? 'Вы воздержались.' : 'Ваш голос подан.') +
+          ' Передумать можно до конца отсчёта — выберите другого.';
+      }
       return 'Голосование: выберите того, кого город выводит.' +
         (g.voteOpen === false ? ' Голосование закрытое: расклад не откроется.' : '');
     }
@@ -1702,7 +1761,22 @@
     if (which === 'chat') { state.unread = 0; $('gFeed').scrollTop = $('gFeed').scrollHeight; }
     paintTabs();
   }
+  /* Кнопка чата в шапке. Знак ей никто не рисовал: в разметке лежит только
+     подпись «Чат», а на телефоне подписи у кнопок-знаков спрятаны — и всю
+     партию в шапке висел пустой квадрат 44×44, в который никто не жал.
+     Заодно кнопка показывает состояние: открыта шторка чата или нет —
+     непрочитанные считает панель вкладок, дублировать счётчик незачем. */
+  function paintChatBtn() {
+    var b = $('btnChat');
+    if (!b) return;
+    var open = state.panel === 'chat';
+    setHTML(b, ico('chat', 20) + '<span class="lbl">Чат</span>');
+    b.setAttribute('aria-pressed', open ? 'true' : 'false');
+    b.title = open ? 'Закрыть чат стола' : 'Открыть чат стола';
+  }
+
   function paintTabs() {
+    paintChatBtn();
     [['tabStage', 'mask', 'Сцена', 'stage'], ['tabTable', 'people', 'Стол', 'table'],
      ['tabRole', 'scroll', 'Роль', 'role'],
      ['tabChat', 'chat', 'Чат', 'chat'], ['tabLog', 'hourglass', 'Протокол', 'log']]
@@ -1715,6 +1789,23 @@
       });
   }
   $('btnChat').addEventListener('click', function () { openPanel(state.panel === 'chat' ? 'stage' : 'chat'); });
+
+  /* Вход на месте: имя, гость и Enter в поле. */
+  if ($('authGo')) {
+    $('authGo').addEventListener('click', function () { claimName($('authName').value, this); });
+  }
+  if ($('authName')) {
+    $('authName').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') claimName(this.value, $('authGo'));
+    });
+  }
+  if ($('authGuest')) {
+    $('authGuest').addEventListener('click', function () {
+      /* Терять из-за одного поля того, кто пришёл по ссылке, нельзя: имя
+         придумываем сами, переименоваться он сможет с главной. */
+      claimName('Гость ' + (10 + Math.floor(Math.random() * 89)), this);
+    });
+  }
   $('btnChatClose').addEventListener('click', function () { openPanel('stage'); });
   $('logGrip').addEventListener('click', function () { $('logSheet').classList.toggle('open'); });
   setHTML($('btnChatClose'), ico('close', 18));
@@ -1752,11 +1843,24 @@
   curtain.progress(0.2);
 
   paintMic(); paintTts(); paintTabs(); paintViewBtn();
-  document.documentElement.style.setProperty('--barH', ($('topbar').offsetHeight || 58) + 'px');
+
+  /* Высота шапки едет в CSS: экран партии стоит фиксированно и начинается
+     ровно под ней. Мерилось это один раз при загрузке — и стоило повернуть
+     телефон, как шапка из двух строк становилась одной, а между ней и сценой
+     оставалась мёртвая чёрная полоса на пятьдесят пикселей. Меряем на каждое
+     изменение размеров самой шапки. */
+  function syncBarH() {
+    document.documentElement.style.setProperty('--barH', ($('topbar').offsetHeight || 58) + 'px');
+  }
+  syncBarH();
+  if (window.ResizeObserver) new ResizeObserver(syncBarH).observe($('topbar'));
+  else window.addEventListener('resize', syncBarH);
+  /* Шрифты приезжают после первого кадра и меняют высоту строки. */
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncBarH);
 
   API.load();
   if (!API.user) {
-    show('auth');
+    showAuthGate();
     curtain.close();
     return;
   }
@@ -1816,7 +1920,7 @@
     /* Раньше здесь любая ошибка отрисовки трактовалась как «нет аккаунта»:
        сессия стиралась, SSE не подключался, и партия замирала на экране
        регистрации. Теперь выход из аккаунта только по 401. */
-    if (e && e.status === 401) { API.clear(); show('auth'); return; }
+    if (e && e.status === 401) { API.clear(); showAuthGate(); return; }
     console.error('Не удалось показать стол:', e);
     API.toast('Сбой отрисовки: ' + ((e && e.message) || 'неизвестно'), 'bad');
   }).then(function () {

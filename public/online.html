@@ -102,7 +102,7 @@
 .stagewrap{position:relative;overflow:hidden;background:#070606}
 #stage{position:absolute;inset:0}
 #stage canvas{display:block}
-#marks{position:absolute;inset:0;pointer-events:none}
+#marks{position:absolute;inset:0;z-index:1;pointer-events:none}
 
 /* Подпись места: рисуется HTML поверх сцены, поэтому текст всегда резкий
    и его можно нажать пальцем. */
@@ -162,7 +162,7 @@
 
 /* Планшет фазы — сверху сцены */
 .phaseband{
-  position:absolute;left:var(--s4);right:var(--s4);top:var(--s4);z-index:4;
+  position:absolute;left:var(--s4);right:var(--s4);top:var(--s4);z-index:8;
   display:flex;align-items:center;gap:var(--s4);flex-wrap:wrap;padding:10px 14px;border-radius:var(--r-lg);
   background:rgba(10,8,9,.72);border:1px solid var(--hair);backdrop-filter:blur(8px);
 }
@@ -178,7 +178,7 @@
 
 /* Карта роли — слева */
 .rolepane{
-  position:absolute;left:var(--s4);top:78px;z-index:3;width:250px;
+  position:absolute;left:var(--s4);top:78px;z-index:9;width:250px;
   padding:var(--s4);border-radius:var(--r-lg);
   background:rgba(10,8,9,.74);border:1px solid var(--hair);backdrop-filter:blur(8px);
   /* Карта роли растёт вместе с тем, что игрок про себя знает: у шерифа к
@@ -204,7 +204,7 @@
 
 /* Док действий — снизу */
 .actiondock{
-  position:absolute;left:336px;right:var(--s4);bottom:var(--s4);z-index:4;
+  position:absolute;left:336px;right:var(--s4);bottom:var(--s4);z-index:8;
   display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap;
   padding:12px 14px;border-radius:var(--r-lg);
   background:rgba(10,8,9,.8);border:1px solid var(--hair);backdrop-filter:blur(8px);
@@ -231,8 +231,14 @@
 .msg .flag{display:inline-block;margin-right:5px;padding:1px 7px;border-radius:99px;font-size:var(--t-3xs);
   background:rgba(226,180,120,.18);color:var(--tallow)}
 .msg .men{color:var(--tallow);border-bottom:1px dotted rgba(226,180,120,.55)}
-.msg .say{margin-left:6px;color:var(--plaster-faint);vertical-align:middle}
+.msg .say{width:24px;height:24px;margin-left:6px;color:var(--plaster-faint);vertical-align:middle}
 .msg .say:hover{color:var(--tallow)}
+/* Пальцем в квадрат 24×24 не попасть. На касании кнопка «прочитать вслух»
+   вырастает до нормальной цели, не раздвигая реплику: растёт только область
+   нажатия, знак остаётся тем же. */
+@media (pointer:coarse){
+  .msg .say{width:34px;height:34px;margin:-5px 0 -5px 4px}
+}
 .composer{display:flex;gap:var(--s2);padding:var(--s3) var(--s4);border-top:1px solid var(--hair)}
 .composer .inp{min-height:42px}
 .composer .btn{min-height:42px;padding:0 14px}
@@ -274,7 +280,19 @@
 .seat.picked{border-color:var(--tallow)}
 .seat.pickable{cursor:pointer}
 .seat.pickable:hover{border-color:var(--line-warm)}
-.flatwrap{position:absolute;inset:0;z-index:70;overflow:auto;padding:78px var(--s4) 96px;
+/* СЛОИ СЦЕНЫ. Плоский стол лежит НАД декорацией и подписями мест, но ПОД
+   планшетом фазы, доком действий, панелью роли и занавесом финала.
+
+   Раньше он стоял на z-index:70 — выше всего внутри сцены. На телефоне это
+   означало ровно то, чего быть не должно: игрок открывал вкладку «Стол»,
+   чтобы посмотреть на людей, и терял и название фазы, и таймер, и кнопку
+   «Я высказался» — они оказывались под непрозрачным столом и не нажимались
+   вовсе. Если партия кончалась в этот момент, итог тоже оставался под столом,
+   и выглядело это как зависшая игра.
+
+   Порядок теперь такой:  сцена 0 · подписи 1 · плоский стол 6 ·
+   планшет фазы и док 8 · панель роли 9 · финал 20. */
+.flatwrap{position:absolute;inset:0;z-index:6;overflow:auto;padding:78px var(--s4) 96px;
   background:var(--ink);}
 .flatwrap.plain{background:none;backdrop-filter:none}
 
@@ -324,11 +342,20 @@ body.playing #toast{bottom:96px}
 
 /* нижняя панель вкладок и кнопка чата в шапке — только на телефоне */
 .mobtabs{display:none}
-#btnChat{display:none!important}
+/* Короткая подпись выхода включается только во время партии на узком экране. */
+.exithome .narrow{display:none}
+/* Кнопка чата нужна только там, где чат уехал в шторку, то есть на узком
+   экране. Раньше правило было записано наоборот: «спрятать всегда, а на
+   телефоне показать через #btnChat{display:inline-grid!important}». По
+   специфичности этот !important с идентификатором перебивал
+   [hidden]{display:none!important} — и кнопка висела в шапке всегда: и в
+   лобби, и на экране «нужно имя», где ей нечего открывать. Теперь скрытием
+   на широком экране занимается медиазапрос, а внутри партии кнопкой
+   распоряжается атрибут hidden, как и всеми остальными. */
+@media (min-width:901px){ #btnChat{display:none!important} }
 
 /* ---------------- телефон ---------------- */
 @media (max-width:900px){
-  #btnChat{display:inline-grid!important}
   .board{grid-template-columns:1fr;gap:var(--s4)}
   .play{grid-template-columns:1fr;grid-template-rows:1fr}
   .stagewrap{grid-row:1}
@@ -372,7 +399,7 @@ body.playing #toast{bottom:96px}
   .timer{font-size:var(--t-lg);min-width:54px}
   .actiondock{left:var(--s2);right:var(--s2);bottom:66px;padding:10px}
   /* Тост не должен садиться на панель вкладок и на док действий. */
-  body.playing #toast{bottom:132px}
+  body.playing #toast{bottom:160px}
   .mark{min-width:78px;max-width:132px;padding:5px 7px}
   .flatwrap{padding:70px var(--s3) 130px}
   .mobtabs{
@@ -409,6 +436,19 @@ body.playing #toast{bottom:96px}
   .topbar{flex-wrap:wrap;height:auto;min-height:54px}
   .topbar #whoName{display:none}
   .topbar .btn.sm{padding:8px 9px}
+  /* Во время партии шапка обязана быть одной строкой. На 390 пикселях
+     перенос срабатывал всегда, и шапка занимала 115 пикселей из 844 —
+     четырнадцать процентов экрана под две ссылки, которые в партии не
+     нужны. «Правила» во время партии не открывают (роль и подсказка уже
+     на экране), а выход домой остаётся: им работает само слово «Мафия»,
+     как и на любом сайте. */
+  body.playing .topbar{flex-wrap:nowrap}
+  body.playing .topbar .exitrules{display:none}
+  body.playing .topbar .brand{font-size:17px;letter-spacing:.02em}
+  /* «На главную» в одну строку не влезает и обрезается на полуслове.
+     Во время партии выход подписан коротко — «Выход». */
+  body.playing .exithome .wide{display:none}
+  body.playing .exithome .narrow{display:inline}
 }
 </style>
 </head>
@@ -418,7 +458,7 @@ body.playing #toast{bottom:96px}
 <div class="houselights"></div>
 
 <header class="topbar" id="topbar">
-  <a class="brand" href="/">Мафия</a>
+  <a class="brand" href="/" title="На главную" aria-label="Мафия — на главную">Мафия</a>
   <span class="brand-sub" id="roomTag" hidden></span>
   <div class="spacer"></div>
   <div class="who"><span class="dot" id="netDot"></span><span id="whoName">—</span></div>
@@ -426,20 +466,43 @@ body.playing #toast{bottom:96px}
   <button class="iconbtn labeled" id="btnMic" title="Говорить голосом" aria-label="Голосовой чат"><span class="lbl">Микрофон</span></button>
   <button class="iconbtn labeled" id="btnTts" title="Читать реплики вслух" aria-label="Озвучивать реплики"><span class="lbl">Озвучка</span></button>
   <button class="iconbtn labeled" id="btnChat" title="Окно чата" aria-label="Окно чата" hidden><span class="lbl">Чат</span></button>
-  <a class="btn ghost sm" href="/rules.html">Правила</a>
-  <a class="btn ghost sm" href="/">На главную</a>
+  <a class="btn ghost sm exitrules" href="/rules.html">Правила</a>
+  <a class="btn ghost sm exithome" href="/" title="Выйти к афише"><span class="wide">На главную</span><span class="narrow">Выход</span></a>
 </header>
 
 <!-- =============== НЕТ АККАУНТА =============== -->
+<!-- Раньше здесь стояла одна ссылка «На главную» — и это была самая дорогая
+     поломка воронки. Друг присылает ссылку-приглашение, у пришедшего имени
+     ещё нет, он видит «вернитесь на главную и назовитесь» — и приглашение
+     теряется вместе с адресом. Назваться можно прямо здесь: приглашение
+     остаётся в адресной строке и срабатывает сразу после имени. -->
 <main class="shell" id="needAuth" hidden>
-  <h1>Нужно имя<em>за стол пускают только по имени</em></h1>
-  <p class="lede">Чтобы играть по сети, вернитесь на главную и назовитесь. Пароля нет — только имя, под которым вас позовут.</p>
-  <p><a class="btn primary lg" href="/">На главную</a></p>
+  <h1>Мафия по сети<em>за стол пускают по имени — без почты и пароля</em></h1>
+  <p class="lede" id="authLede" style="margin-top:var(--s4)">Чтобы сесть за стол по сети, нужно только имя. Оно останется
+    в этом браузере, и переименоваться можно в любой момент.</p>
+
+  <section class="panel pad lit" style="max-width:520px;margin-top:var(--s5)">
+    <label class="field">
+      <span class="label">Как вас звать за столом</span>
+      <input class="inp" id="authName" maxlength="16" placeholder="Например, Анна" autocomplete="nickname">
+    </label>
+    <div class="row" style="margin-top:var(--s4);flex-wrap:wrap">
+      <button class="btn primary" id="authGo">Назваться и сесть за стол</button>
+    </div>
+    <hr class="rule">
+    <p class="note" style="margin:0 0 var(--s3)">Играть можно и без имени: мы назовём вас гостем.</p>
+    <div class="row" style="flex-wrap:wrap">
+      <button class="btn ghost" id="authGuest">Сесть гостем</button>
+      <a class="btn ghost" href="/">На главную</a>
+    </div>
+  </section>
 </main>
 
 <!-- =============== ЛОББИ =============== -->
 <main class="shell" id="lobbyView" hidden>
-  <h1 id="lobbyTitle">Комната<em>от шести до двадцати человек</em></h1>
+  <!-- Тоже величиной с h1, но не h1: единственный h1 страницы стоит выше и
+       называет саму игру, а не текущий экран. -->
+  <h2 class="as-h1" id="lobbyTitle">Комната<em>от шести до двадцати человек</em></h2>
 
   <section id="noRoom" class="panel pad lit" style="margin-top:var(--s5)" hidden>
     <div class="between" style="align-items:flex-start;gap:var(--s3)">

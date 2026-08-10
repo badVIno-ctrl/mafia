@@ -17,9 +17,15 @@ const read = f => fs.readFileSync(path.join(root, f), 'utf8');
 
 console.log('\n=== ТЕСТ 9: гигиена страниц ===');
 
-const PAGES = ['public/index.html', 'public/online.html', 'public/bots.html'];
+const PAGES = ['public/index.html', 'public/online.html', 'public/bots.html',
+  'public/rules.html', 'public/404.html'];
 const CSS = ['public/css/theatre.css', 'public/css/app.css', 'public/css/fonts.css'];
-const SHARED = ['shared/game-config.js', 'shared/rng.js'];
+const SHARED = ['shared/game-config.js', 'shared/rng.js', 'shared/roles.js', 'shared/inquest.js'];
+/* Серверная часть проверялась только тестами поведения, и потому потерянный
+   байт в комментарии («роли уже роздан?ы») прожил в server.js до ручного
+   вычитывания. Битые символы ищем во всём тексте проекта, а не в трёх
+   страницах: терять их одинаково легко везде. */
+const SERVER = ['server.js', 'server/game.js', 'server/bots.js'];
 const JS = ['public/js/api.js', 'public/js/hub.js', 'public/js/online.js', 'public/js/icons.js',
   'public/js/voice.js', 'public/js/rtc.js', 'public/js/curtain.js', 'public/js/stage3d.js',
   'public/js/models3d.js', 'public/js/speech.js', 'public/js/scene2d.js',
@@ -56,9 +62,22 @@ PAGES.forEach(f => {
     'нет CDN в разметке: ' + f);
 });
 
-/* ---- 5. эмодзи и «тофу»-символы ---- */
+/* ---- 5. эмодзи и «тофу»-символы ----
+   Различаем две вещи. Цветной эмодзи (U+1F000 и выше, а также любой знак с
+   селектором начертания) рисуется системным шрифтом, на каждом телефоне
+   по-своему и всегда мимо палитры — его в проекте быть не должно нигде.
+   Типографские знаки вроде ♠ ✚ ★ ☾ — это обычные символы шрифта, они
+   набраны в цвет текста и стоят в правилах и в описаниях ролей по делу. */
+const PICTO = /[\u{1F000}-\u{1FAFF}\u{FE0F}]/u;
+[].concat(PAGES, JS, CSS, SHARED, SERVER).forEach(f => {
+  const body = read(f);
+  const bad = [];
+  body.split('\n').forEach((line, i) => { if (PICTO.test(line)) bad.push(i + 1); });
+  ok(bad.length === 0, 'нет цветных эмодзи в ' + f + (bad.length ? ' (строки ' + bad.slice(0, 6).join(', ') + ')' : ''));
+});
+
 const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
-[].concat(PAGES, JS).forEach(f => {
+['public/index.html', 'public/online.html', 'public/bots.html'].concat(JS).forEach(f => {
   const body = read(f);
   const bad = [];
   body.split('\n').forEach((line, i) => { if (EMOJI.test(line)) bad.push(i + 1); });
@@ -79,6 +98,32 @@ const TYPOS = [
     ok(!m, 'нет опечатки №' + (k + 1) + ' в ' + f + (m ? ' — «' + String(m[0]).slice(0, 40) + '»' : ''));
   });
 });
+
+/* ---- 6b. потерянная кодировка во всём тексте проекта ----
+   Обход по каталогам, а не по списку: файл, забытый в списке, — это ровно
+   тот файл, в котором битый символ и живёт. */
+const TEXT_EXT = /\.(js|mjs|html|css|json|md|webmanifest|txt|xml)$/i;
+const SKIP_DIR = /^(\.git|node_modules|fonts|img|vendor)$/;
+function walk(dir, out) {
+  fs.readdirSync(dir, { withFileTypes: true }).forEach(e => {
+    if (e.isDirectory()) { if (!SKIP_DIR.test(e.name)) walk(path.join(dir, e.name), out); }
+    else if (TEXT_EXT.test(e.name)) out.push(path.join(dir, e.name));
+  });
+  return out;
+}
+const allText = walk(root, []);
+const broken = [];
+allText.forEach(abs => {
+  const rel = path.relative(root, abs);
+  /* Сам тест содержит символ-образец, иначе искать было бы нечем. */
+  if (rel === path.join('tests', 'test-assets.js')) return;
+  const body = fs.readFileSync(abs, 'utf8');
+  const at = body.indexOf('\uFFFD');
+  if (at >= 0) broken.push(rel + ':' + (body.slice(0, at).split('\n').length));
+  if (body.charCodeAt(0) === 0xFEFF) broken.push(rel + ': BOM');
+});
+ok(broken.length === 0, 'ни одного битого символа во всём проекте (' + allText.length + ' файлов)',
+  broken.slice(0, 8).join(', '));
 
 /* ---- 7. кегль: ниже 13px текст на телефоне не читается ---- */
 [].concat(PAGES, CSS).forEach(f => {
@@ -149,6 +194,80 @@ ok(models.indexOf('function buildHand') > 0, 'кисть собирается о
 ok(read('public/bots.html').indexOf("from '/js/models3d.js'") >= 0, 'бот-режим берёт модели из общего модуля');
 ok(read('public/js/stage3d.js').indexOf("from './models3d.js'") >= 0, 'сетевая сцена берёт модели оттуда же');
 ok(read('public/js/online.js').indexOf('/js/stage3d.js') >= 0, 'сетевой режим поднимает 3D-сцену');
+
+/* ---- 15. поломки, найденные прогулкой по режимам ----
+   Каждая проверка ниже стоит на месте настоящего бага: они держат не «стиль»,
+   а конкретные вещи, которые игрок видел на экране. */
+
+/* Кнопка-знак без знака — пустой квадрат в шапке на весь матч. */
+ok(onlineJs.indexOf('function paintChatBtn') > 0, 'кнопке чата в шапке рисуют знак');
+ok(/paintChatBtn\(\);/.test(onlineJs), 'знак на кнопке чата обновляется вместе с вкладками');
+
+/* Правило с !important и идентификатором перебивает [hidden] и оставляет
+   элемент на экране там, где скрипт его прячет. */
+const HIDDEN_BREAKER = /#[\w-]+\s*\{[^}]*display\s*:\s*(?!none)[a-z-]+\s*!important/;
+/* Комментарии выкидываем: в них разобран как раз тот случай, который правило
+   и запрещает, и ловить сам себя тест не должен. */
+const noComments = t => t.replace(/\/\*[\s\S]*?\*\//g, ' ');
+[].concat(PAGES, CSS).forEach(f => {
+  const m = HIDDEN_BREAKER.exec(noComments(read(f)));
+  ok(!m, 'нет display:…!important по id, перебивающего [hidden]: ' + f +
+    (m ? ' — «' + m[0].slice(0, 60) + '»' : ''));
+});
+
+/* Слои сцены: плоский стол не имеет права закрывать планшет фазы, док
+   действий и занавес финала — иначе на телефоне вкладка «Стол» отбирает у
+   игрока таймер и все кнопки. */
+const zOf = (css, sel) => {
+  const rx = new RegExp(sel.replace(/[.#]/g, '\\$&') + '\\s*\\{[^}]*?z-index\\s*:\\s*(\\d+)', 's');
+  const m = rx.exec(css);
+  return m ? Number(m[1]) : null;
+};
+const zFlat = zOf(onlineHtml, '.flatwrap');
+const zBand = zOf(onlineHtml, '.phaseband');
+const zDock = zOf(onlineHtml, '.actiondock');
+const zRole = zOf(onlineHtml, '.rolepane');
+const zEnd = zOf(onlineHtml, '.finale');
+ok(zFlat !== null && zBand !== null && zDock !== null && zRole !== null && zEnd !== null,
+  'у слоёв сцены объявлен z-index', JSON.stringify({ zFlat, zBand, zDock, zRole, zEnd }));
+ok(zFlat < zBand, 'планшет фазы выше плоского стола (' + zFlat + ' < ' + zBand + ')');
+ok(zFlat < zDock, 'док действий выше плоского стола (' + zFlat + ' < ' + zDock + ')');
+ok(zFlat < zRole, 'панель роли выше плоского стола (' + zFlat + ' < ' + zRole + ')');
+ok(zFlat < zEnd, 'финал выше плоского стола (' + zFlat + ' < ' + zEnd + ')');
+
+/* Пришедший по ссылке-приглашению обязан назваться на месте. */
+ok(/id="authName"/.test(onlineHtml), 'на экране без имени есть поле имени');
+ok(/id="authGo"/.test(onlineHtml), 'на экране без имени есть кнопка «назваться»');
+ok(onlineJs.indexOf('function claimName') > 0, 'имя заводится, не покидая приглашения');
+ok(onlineJs.indexOf('location.reload()') > 0, 'после имени страница возвращается на тот же адрес');
+
+/* Подсказка выбывшему. */
+ok(/you\.alive === false/.test(onlineJs), 'выбывшему пишут своё, а не «выберите, кого выводит город»');
+
+/* Высота шапки пересчитывается: иначе после поворота телефона между шапкой
+   и сценой остаётся мёртвая полоса. */
+ok(onlineJs.indexOf('function syncBarH') > 0, 'высота шапки пересчитывается');
+ok(/ResizeObserver/.test(onlineJs), 'за размером шапки следят, а не мерят один раз');
+
+/* Ровно один h1 на страницу: остальные заголовки той же величины — .as-h1. */
+['public/index.html', 'public/online.html', 'public/bots.html', 'public/rules.html', 'public/404.html']
+  .forEach(f => {
+    /* Заголовок внутри <noscript> не считаем: он и есть единственный
+       заголовок страницы, когда скриптов нет, и вместе с остальными
+       на экране никогда не оказывается. */
+    const body = read(f).replace(/<noscript>[\s\S]*?<\/noscript>/g, ' ');
+    const n = (body.match(/<h1[\s>]/g) || []).length;
+    ok(n === 1, 'ровно один h1 в ' + f + ' (найдено ' + n + ')');
+  });
+ok(theatre.indexOf('.as-h1') > 0, 'в дизайн-системе есть заголовок величиной с h1 без тега h1');
+
+/* Абсолютные адреса в og:image и canonical собирает сервер: в файлах домена
+   знать неоткуда, а соцсети относительный путь не разворачивают. */
+const srv = read('server.js');
+ok(srv.indexOf('function absolutizeHtml') > 0, 'сервер разворачивает адреса в разметке до абсолютных');
+ok(/og:\(\?:url\|image\)|og:\(\?:image\|url\)/.test(srv) || /og:\(\?:url\|image\)/.test(srv) ||
+  srv.indexOf('twitter:image') > 0, 'разворачиваются именно og:* и twitter:image');
+ok(srv.indexOf('if-none-match') > 0, 'страницы отдаются с меткой версии: повтор — 304, а не 320 КБ');
 
 console.log(fails === 0 ? '\n✓ ТЕСТ 9 ПРОЙДЕН' : '\n✗ ТЕСТ 9: ошибок ' + fails);
 process.exit(fails ? 1 : 0);

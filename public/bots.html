@@ -283,7 +283,10 @@ body.topview #bottomBar{opacity:.28;pointer-events:none;transition:opacity .3s e
 #startscreen h1{font-family:var(--serif);font-size:clamp(38px,8vw,74px);line-height:.94;margin:0;
   letter-spacing:.16em;text-transform:uppercase;color:var(--paper);
   text-shadow:0 1px 0 rgba(241,236,225,.16), 0 -1px 0 rgba(0,0,0,.6), 0 12px 34px rgba(0,0,0,.5)}
-#startscreen h1 em{display:block;font-style:normal;font-size:.3em;letter-spacing:.5em;color:var(--gold);margin-top:14px;text-indent:.5em}
+/* Подзаголовок считается от кегля заголовка, а тот на телефоне упирается в
+   свои 38 пикселей: три десятых от них — 11.4px вразрядку в пол-буквы, то
+   есть нечитаемо. Пол не даём опускаться ниже 12.5px. */
+#startscreen h1 em{display:block;font-style:normal;font-size:max(12.5px,.3em);letter-spacing:.5em;color:var(--gold);margin-top:14px;text-indent:.5em}
 .lede{max-width:56ch;color:var(--paper-dim);font-size:14.5px;margin:18px 0 0}
 .sect{margin-top:34px}
 .sect > .eyebrow{display:block;margin-bottom:11px}

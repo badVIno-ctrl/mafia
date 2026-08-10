@@ -466,14 +466,14 @@ function cacheFor(pathname, ext) {
   return 'no-cache';
 }
 
-function sendAsset(res, code, buf, pathname) {
+function sendAsset(res, code, buf, pathname, extra) {
   const ext = path.extname(pathname);
-  res.writeHead(code, {
+  res.writeHead(code, Object.assign({
     'Content-Type': MIME[ext] || 'application/octet-stream',
     'Cache-Control': cacheFor(pathname, ext),
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'strict-origin-when-cross-origin'
-  });
+  }, extra || {}));
   res.end(buf);
 }
 
@@ -486,6 +486,46 @@ function siteOrigin(req) {
   return proto + '://' + host;
 }
 
+/* -------------------------------------------------------------------------
+   АБСОЛЮТНЫЕ АДРЕСА В РАЗМЕТКЕ
+
+   В файлах лежит «/img/og-image.png» — и это правильно: домен площадки в
+   исходниках знать неоткуда, а sitemap и robots уже собираются на лету из
+   адреса запроса. Но четыре тега такой относительности не переносят:
+
+     • og:image и twitter:image — ни одна соцсеть не разворачивает
+       относительный путь, и превью не собирается вообще ни одно;
+     • og:url — по нему считают, какая страница расшарена;
+     • canonical — работает и относительным, но абсолютный однозначен.
+
+   Поэтому HTML на выходе получает домен запроса. Тот же адрес подставляется
+   в структурированные данные: и «url», и «image» у VideoGame Google читает
+   как ссылки, а не как строки.
+   ------------------------------------------------------------------------- */
+const ABSOLUTE_META = /(<(?:link|meta)\b[^>]*?(?:rel="canonical"|property="og:(?:url|image)"|name="twitter:image")[^>]*?\b(?:href|content)=")(\/[^"]*)"/g;
+const ABSOLUTE_LD = /("(?:url|image|item|@id)"\s*:\s*")(\/[^"]*)"/g;
+
+function absolutizeHtml(text, origin) {
+  return text
+    .replace(ABSOLUTE_META, (m, head, url) => head + origin + url + '"')
+    .replace(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g,
+      (m, body) => '<script type="application/ld+json">' +
+        body.replace(ABSOLUTE_LD, (x, head, url) => head + origin + url + '"') + '</script>');
+}
+
+/* Один разобранный вариант страницы на домен. Ключ включает время правки
+   файла: во время работы над сайтом страница обновляется, а не залипает. */
+const htmlCache = new Map();
+function htmlForOrigin(file, buf, mtimeMs, origin) {
+  const key = file + '|' + origin + '|' + mtimeMs;
+  const hit = htmlCache.get(key);
+  if (hit) return hit;
+  const out = Buffer.from(absolutizeHtml(buf.toString('utf8'), origin), 'utf8');
+  if (htmlCache.size > 64) htmlCache.clear();
+  htmlCache.set(key, out);
+  return out;
+}
+
 function serveStatic(req, res, pathname) {
   let rel = decodeURIComponent(pathname);
   if (rel === '/') rel = '/index.html';
@@ -494,18 +534,39 @@ function serveStatic(req, res, pathname) {
   if (/^\/(online|bots|rules)$/.test(rel)) rel += '.html';
   const file = path.join(PUBLIC, path.normalize(rel).replace(/^([.][.][/\\])+/, ''));
   if (!file.startsWith(PUBLIC)) return send(res, 403, { error: 'forbidden' });
-  fs.readFile(file, (err, buf) => {
-    if (err) {
-      /* Честные 404. Раньше любой мусорный адрес отдавал главную с кодом
-         200 — поисковики считают это дублями и режут весь сайт. */
-      fs.readFile(path.join(PUBLIC, '404.html'), (e2, page) => {
-        if (e2) return send(res, 404, 'Страница не найдена', 'text/plain; charset=utf-8');
-        res.writeHead(404, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' });
-        res.end(page);
-      });
-      return;
+
+  const notFound = () => {
+    /* Честные 404. Раньше любой мусорный адрес отдавал главную с кодом
+       200 — поисковики считают это дублями и режут весь сайт. */
+    fs.readFile(path.join(PUBLIC, '404.html'), (e2, page) => {
+      if (e2) return send(res, 404, 'Страница не найдена', 'text/plain; charset=utf-8');
+      res.writeHead(404, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' });
+      res.end(page);
+    });
+  };
+
+  /* Метка версии файла. Без неё страница с «no-cache» приезжала целиком на
+     каждый переход: bots.html это 320 КБ по мобильной сети каждый раз.
+     С меткой браузер спрашивает «не изменилось?» и получает 304 в двести
+     байт. Размер и время правки берём из stat — считать хэш от трёхсот
+     килобайт на каждый запрос было бы дороже самой пересылки. */
+  fs.stat(file, (se, st) => {
+    if (se || !st.isFile()) return notFound();
+    const ext = path.extname(file);
+    const html = ext === '.html';
+    /* У страницы содержимое зависит от домена (canonical, og:*), поэтому
+       домен входит в метку: иначе за прокси отдавался бы чужой адрес. */
+    const tag = '"' + st.size.toString(36) + '-' + Math.round(st.mtimeMs).toString(36) +
+      (html ? '-' + crypto.createHash('sha1').update(siteOrigin(req)).digest('hex').slice(0, 8) : '') + '"';
+    if (req.headers['if-none-match'] === tag) {
+      res.writeHead(304, { ETag: tag, 'Cache-Control': cacheFor(file, ext) });
+      return res.end();
     }
-    sendAsset(res, 200, buf, file);
+    fs.readFile(file, (err, buf) => {
+      if (err) return notFound();
+      const body = html ? htmlForOrigin(file, buf, st.mtimeMs, siteOrigin(req)) : buf;
+      sendAsset(res, 200, body, file, { ETag: tag });
+    });
   });
 }
 
@@ -1154,7 +1215,7 @@ function leaveRoom(user) {
   if (!room) return;
   room.members = room.members.filter(i => i !== user.id);
 
-  /* Если партия идёт, место за столом остаётся: роли уже роздан�ы, и вынуть
+  /* Если партия идёт, место за столом остаётся: роли уже розданы, и вынуть
      игрока из состава нельзя. Но ждать его ходов больше не нужно — движок
      узнаёт об этом сразу, а не через полный таймаут каждой фазы. */
   const seated = room.game && !room.game.finished && room.game.p(user.id);

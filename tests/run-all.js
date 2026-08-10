@@ -58,6 +58,7 @@ const must = [
   'tests/test-lastword.js', 'tests/test-balance-sim.js', 'tests/test-roles.js',
   'tests/test-solo.js', 'tests/roles-lab.js',
   'tests/ab-compare.js', 'tests/ab-figures.js',
+  'tests/e2e-modes.js', 'tests/e2e-play.js', 'tests/e2e-smoke.js',
   'public/figure-lab.html', 'public/compare.html',
   'public/js/render-pipeline.js', 'public/js/notes.js'
 ];
@@ -68,6 +69,26 @@ must.forEach(f => {
   if (!ok) miss++;
 });
 if (miss) bad++;
+
+/* тест 20 · прогулка по режимам живым браузером
+   Нужен Chromium, и на машине без него это не провал сборки, а пропуск:
+   всё остальное проверяется без браузера. Прогон длинный, поэтому в общий
+   тест входит только часть без партий целиком (ONLY=ui); партии гоняют
+   руками: node tests/e2e-modes.js */
+console.log('\n─── Тест 20 · прогулка по режимам (браузер) ───');
+const chromeBin = process.env.CHROME_BIN || '/usr/local/bin/chromium';
+let hasBrowser = fs.existsSync(chromeBin);
+if (!hasBrowser) {
+  try { require.resolve('playwright'); } catch (e) { hasBrowser = false; }
+}
+if (!hasBrowser) {
+  console.log('  ⚠ пропущено: нет Chromium (' + chromeBin + '). Прогон: CHROME_BIN=… node tests/e2e-modes.js');
+} else {
+  const r = spawnSync('node', [path.join(__dirname, 'e2e-modes.js')], {
+    stdio: 'inherit', env: Object.assign({}, process.env, { ONLY: 'ui' })
+  });
+  if (r.status !== 0) bad++;
+}
 
 console.log(bad === 0
   ? '\n✅ ОБЩИЙ ТЕСТ ПРОЙДЕН — все проверки зелёные'
