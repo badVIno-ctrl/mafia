@@ -1,5 +1,9 @@
 /* =============================================================================
-   ab-figures.js — слепое сравнение «до» и «после».
+   ab-figures.js — слепое сравнение двух сборок человека.
+
+   Сравниваются не пайплайны кадра (это делает tests/ab-compare.js), а сами
+   фигуры: классическая, выросшая из примитивов, и скиннингованная из
+   human.js — при одном свете, одной камерой, в одном пайплайне.
 
    Правило простое: два варианта фигуры снимаются одной камерой, при одном
    свете, в одном кадре — и складываются рядом в случайном порядке. Кто где,
@@ -58,11 +62,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     for (const view of VIEWS) {
       const size = /head|face|prof/.test(view) ? { width: 900, height: 900 } : { width: 1200, height: 800 };
       const shots = {};
-      for (const variant of ['legacy', 'new']) {
+      for (const variant of ['classic', 'skinned']) {
         const page = await browser.newPage({ viewport: size, deviceScaleFactor: 1 });
         const url = BASE + '/figure-lab.html?view=' + view +
           '&w=' + size.width + '&h=' + size.height + '&freeze=1' +
-          (variant === 'legacy' ? '&legacy=1' : '');
+          (variant === 'skinned' ? '&rig=skinned' : '');
         await page.goto(url, { waitUntil: 'load' });
         await page.waitForFunction('window.__labReady === true', { timeout: 45000 }).catch(() => { });
         await sleep(1500);
@@ -72,8 +76,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       /* Случайный порядок: монетка от криптографического источника, чтобы её
          нельзя было угадать по номеру прогона. */
       const flipLeftIsNew = crypto.randomBytes(1)[0] % 2 === 0;
-      const left = flipLeftIsNew ? shots['new'] : shots['legacy'];
-      const right = flipLeftIsNew ? shots['legacy'] : shots['new'];
+      const left = flipLeftIsNew ? shots['skinned'] : shots['classic'];
+      const right = flipLeftIsNew ? shots['classic'] : shots['skinned'];
       const file = path.join(OUT, 'ab-' + view + '.png');
       if (sharp) {
         await sharp({
@@ -89,8 +93,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
         fs.writeFileSync(path.join(OUT, 'ab-' + view + '-A.png'), left);
         fs.writeFileSync(path.join(OUT, 'ab-' + view + '-B.png'), right);
       }
-      key.push(view + ': слева ' + (flipLeftIsNew ? 'НОВЫЙ' : 'СТАРЫЙ') +
-        ', справа ' + (flipLeftIsNew ? 'СТАРЫЙ' : 'НОВЫЙ'));
+      key.push(view + ': слева ' + (flipLeftIsNew ? 'СКИННИНГ' : 'КЛАССИКА') +
+        ', справа ' + (flipLeftIsNew ? 'КЛАССИКА' : 'СКИННИНГ'));
       console.log('  ab-' + view + '.png');
     }
   } finally {

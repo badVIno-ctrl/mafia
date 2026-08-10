@@ -27,7 +27,7 @@
 <script type="module">
 import * as THREE from '/vendor/three/three.module.js';
 import { createModels } from '/js/models3d.js';
-import { createRenderStack, LIGHT_RIG } from '/js/render-stack.js';
+import { createPipeline } from '/js/render-pipeline.js';
 
 const q = new URLSearchParams(location.search);
 const W = +(q.get('w') || 1400), H = +(q.get('h') || 900);
@@ -41,14 +41,17 @@ renderer.setSize(W, H, false);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = LIGHT_RIG.exposure;
+renderer.toneMappingExposure = 1.12;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0809);
 const M = createModels(THREE, {});
-const LEGACY = !!q.get('legacy');
+/* Какой сборкой строить человека: классической (из примитивов, но с картами
+   кожи и мимикой) или скиннингованной из human.js. Слепое сравнение гоняет
+   обе через этот параметр. */
+const RIG = q.get('rig') || '';
 const camera = new THREE.PerspectiveCamera(45, W / H, 0.05, 100);
 
 /* Свет — копия рига сцены партии (stage3d.js, LIGHT.day). Стенд обязан
@@ -57,8 +60,10 @@ const camera = new THREE.PerspectiveCamera(45, W / H, 0.05, 100);
    соломой, а лицо фарфором. */
 /* Свет берётся из общего рига: стенд обязан светить ровно так же, как партия,
    иначе по его снимкам нельзя выбирать ни палитру кожи, ни цвет волос. */
-const LIT = { amb: LIGHT_RIG.ambient, hemi: LIGHT_RIG.hemi, fill: LIGHT_RIG.fill,
-  table: LIGHT_RIG.table, spot: LIGHT_RIG.spot, point: LIGHT_RIG.point };
+/* Свет — копия рига сцены партии (stage3d.js, LIGHT.day). Стенд обязан светить
+   ровно так же, иначе по его снимкам нельзя выбирать ни палитру кожи, ни цвет
+   волос: при вдвое ярком свете каштановые волосы выглядят соломой. */
+const LIT = { amb: 0.42, hemi: 0.34, fill: 4.6, table: 3.4, spot: 34, point: 5.6 };
 scene.add(new THREE.AmbientLight(0x6a6070, LIT.amb));
 scene.add(new THREE.HemisphereLight(0x8b9bb4, 0x3a2c26, LIT.hemi));
 [[0, 2.6, 3.4, 0xffd7ad], [-3.2, 2.4, -2.2, 0x9db4de], [3.2, 2.4, -2.2, 0xdda98a]].forEach(c => {
@@ -126,7 +131,7 @@ if (VIEW === 'table') {
     chair.position.z = -0.30;
     g.add(chair);
     const f = M.buildFigure(COATS[i % COATS.length], i % 5 === 0 ? 'cap' : 'hair', i + 1,
-      { sex: i % 3 === 1 ? 'f' : 'm', pose: i % 4, legacy: LEGACY });
+      { sex: i % 3 === 1 ? 'f' : 'm', pose: i % 4, rig: RIG });
     g.add(f);
     figures.push(f);
   }
@@ -144,7 +149,7 @@ if (VIEW === 'table') {
     const idx = N === 1 ? (+(q.get('seed') || 1)) : i + 1;
     const hat = N === 1 ? (q.get('hat') || 'hair') : (i % 5 === 0 ? 'cap' : 'hair');
     const sex = N === 1 ? (q.get('sex') || 'm') : (i % 3 === 1 ? 'f' : 'm');
-    const f = M.buildFigure(COATS[i % COATS.length], hat, idx, { sex, pose: i % 4, legacy: LEGACY });
+    const f = M.buildFigure(COATS[i % COATS.length], hat, idx, { sex, pose: i % 4, rig: RIG });
     g.add(f);
     figures.push(f);
   }
@@ -213,7 +218,7 @@ function frame(now) {
     }
     if (u.animate) u.animate(t + i * 900, 16, { speaking: i === 0 && (t % 4000) < 2000 });
   });
-  if (stack) stack.render(16, now); else renderer.render(scene, camera);
+  if (stack) stack.render(16); else renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -223,10 +228,11 @@ requestAnimationFrame(frame);
 let stack = null;
 if (!q.get('nopost')) {
   try {
-    stack = createRenderStack(THREE, { renderer, scene, camera, tier: q.get('tier') || 'high' });
-    stack.setSize(W, H);
-    if (!STUDIO) stack.buildEnvironment({ y: 1.15 });
-    stack.applyGrade(q.get('grade') || 'day', 1);
+    stack = await createPipeline(THREE, renderer, scene, camera, {
+      tier: q.get('tier') || 'cinema', exposure: 1.12
+    });
+    stack.resize(W, H);
+    stack.setGrade(q.get('grade') || 'day', 0);
   } catch (e) { stack = null; console.error('постобработка не поднялась: ' + e.message); }
 }
 window.__stack = stack;

@@ -364,6 +364,10 @@
     paintTimer(g.secondsLeft, g.phaseSeconds);
     setText($('gHint'), hintFor(g, you));
 
+    /* Блокнот привязан к столу: метки одной партии не должны всплывать
+       в другой. Открываем его на идентификаторе комнаты. */
+    if (window.Notes) Notes.open(room && room.id ? room.id : 'net');
+
     /* Состав стола сменился — раздаём голоса и пересобираем сцену. */
     var key = g.players.map(function (p) { return p.id; }).join(',');
     if (state.seatsKey !== key) {
@@ -482,7 +486,8 @@
       function () {
         var d = document.createElement('button');
         d.className = 'mark';
-        d.innerHTML = '<span class="seatno"></span><span class="nm"></span><span class="sub"></span><span class="lvl"></span>';
+        d.innerHTML = '<span class="seatno"></span><span class="nm"></span><span class="sub"></span>' +
+          '<span class="note-chip" hidden></span><span class="lvl"></span>';
         return d;
       },
       function (el, p) {
@@ -500,6 +505,8 @@
         setText(el.querySelector('.seatno'), String(p.seat));
         setText(el.querySelector('.nm'), p.name + (p.id === you.id ? ' · вы' : ''));
         setText(el.querySelector('.sub'), subFor(g, p));
+        paintNote(el.querySelector('.note-chip'), p.id);
+        el.dataset.note = p.id;
         var lvl = state.levels.get(p.id) || 0;
         el.querySelector('.lvl').style.setProperty('--lvl', Math.min(1, lvl).toFixed(3));
       });
@@ -561,7 +568,8 @@
       function () {
         var b = document.createElement('button');
         b.className = 'seat';
-        b.innerHTML = '<span class="no"></span><span class="avatar"></span><span class="nm"></span><span class="sub"></span>';
+        b.innerHTML = '<span class="no"></span><span class="avatar"></span><span class="nm"></span>' +
+          '<span class="sub"></span><span class="note-chip" hidden></span>';
         return b;
       },
       function (el, p) {
@@ -574,7 +582,46 @@
         setText(el.querySelector('.avatar'), API.initial(p.name));
         setText(el.querySelector('.nm'), p.name + (p.id === you.id ? ' · вы' : ''));
         setText(el.querySelector('.sub'), subFor(g, p));
+        paintNote(el.querySelector('.note-chip'), p.id);
+        el.dataset.note = p.id;
       });
+  }
+
+  /* ------------------------------ блокнот ------------------------------
+     Пометки на местах: «чёрный», «шериф», «врёт». Живут только у своего
+     хозяина (см. notes.js) и появляются на месте маленьким цветным ярлыком.
+     Ставятся долгим нажатием или правой кнопкой — тот же жест, которым
+     на живом столе двигают к себе бумажку. */
+  function paintNote(el, id) {
+    if (!el || !window.Notes) return;
+    var t = Notes.get(id);
+    el.hidden = !t;
+    if (!t) return;
+    el.textContent = t.ru;
+    el.style.setProperty('--tag', t.color);
+  }
+
+  /** Меню меток для одного места. */
+  function openNotes(id) {
+    var g = state.game;
+    if (!g || !window.Notes) return;
+    var p = g.players.filter(function (x) { return x.id === id; })[0];
+    if (!p) return;
+    var cur = Notes.get(id);
+    var h = '<div class="expert"><h3>Блокнот · место ' + p.seat + '</h3>' +
+      '<p class="note">Пометка видна только вам и остаётся на этом устройстве. ' +
+      'Ни сервер, ни другие игроки её не получают.</p><div class="grid2">';
+    Notes.tags().forEach(function (t) {
+      h += '<button class="btn sm noteopt' + (cur && cur.id === t.id ? ' on' : '') +
+        '" data-note-set="' + id + ':' + t.id + '" style="--tag:' + t.color + '">' +
+        API.esc(t.ru) + ' <em>' + API.esc(t.hint) + '</em></button>';
+    });
+    h += '</div>' +
+      (cur ? '<button class="btn ghost sm" data-note-set="' + id + ':">Снять пометку</button>' : '') +
+      '<button class="btn ghost sm" id="expertClose">Закрыть</button></div>';
+    var box = $('expertBox');
+    setHTML(box, h);
+    box.hidden = false;
   }
 
   /* ---------------------------- карта роли ---------------------------- */
@@ -587,6 +634,10 @@
     var h = '<div class="role">' + ico(Icons.role(you.role), 22) +
       '<h3>' + API.esc(you.roleRu || 'Наблюдатель') + '</h3></div>' +
       '<p>' + API.esc(you.roleDesc || 'Вы смотрите со стороны.') + '</p>';
+    /* Подсказка про блокнот. Механику, которую не видно, считай что её нет:
+       про долгое нажатие на месте игрок сам не догадается никогда. */
+    h += '<p class="hintline">Долгое нажатие на месте — <b>пометка в блокноте</b>: ' +
+      'чёрный, красный, шериф, «врёт». Видно только вам.</p>';
     if (you.partners && you.partners.length) {
       h += '<div class="known">Свои: ' + you.partners.map(function (p) {
         return '<b>' + API.esc(p.name) + '</b> (№' + p.seat + (p.alive ? '' : ', выбыл') + ')';
@@ -880,7 +931,7 @@
 
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-join],[data-sit],[data-invite],[data-kick],[data-scen],[data-target],' +
-      '[data-tab],[data-say],[data-panel],[data-method],[data-expert]');
+      '[data-tab],[data-say],[data-panel],[data-method],[data-expert],[data-note-set]');
     if (el) {
       if (el.dataset.join) return call('/api/rooms/join', { roomId: el.dataset.join });
       /* Сесть за открытый стол — без ссылки и без приглашения. */
@@ -904,6 +955,12 @@
       if (el.dataset.panel) return openPanel(el.dataset.panel);
       if (el.dataset.method) return act('method', el.dataset.method);
       if (el.dataset.expert) return act('expert', el.dataset.expert);
+      if (el.dataset.noteSet) {
+        var parts = el.dataset.noteSet.split(':');
+        Notes.set(parts[0], parts[1] || null);
+        $('expertBox').hidden = true;
+        return;
+      }
       if (el.dataset.target) return el.dataset.target === 'skip' ? act('vote', 'skip') : pickTarget(el.dataset.target);
     }
     /* Экспертиза заказывается парой «кого» и «по какой примете»: город
@@ -914,6 +971,63 @@
     if (e.target.closest('#btnPass')) return act('pass', null);
     if (e.target.closest('#btnRestart')) return call('/api/rooms/restart');
   });
+
+  /* Метку поставили — перекрашиваем ярлыки, не дожидаясь пуша с сервера.
+     Полная перерисовка тут не нужна: меняется только цветной ярлык. */
+  if (window.Notes) {
+    Notes.onChange(function () {
+      var g = state.game;
+      if (!g) return;
+      document.querySelectorAll('[data-note]').forEach(function (el) {
+        var chip = el.querySelector('.note-chip');
+        if (chip) paintNote(chip, el.dataset.note);
+      });
+      var b = $('btnNotes');
+      if (b) setText(b.querySelector('.n'), Notes.count() ? String(Notes.count()) : '');
+    });
+  }
+
+  /* Жест для блокнота: правая кнопка на настольном компьютере, долгое
+     нажатие на телефоне. Обычное короткое касание оставляем игре — им
+     выбирают цель, и перехватывать его нельзя.
+
+     Порог 480 мс подобран по тому же правилу, что у системного «долгого
+     нажатия»: короче — и метки будут ставиться случайно при попытке
+     выбрать жертву, дольше — и жест перестаёт находиться сам. */
+  (function () {
+    var timer = null, startedOn = null, moved = 0;
+
+    function target(e) {
+      var el = e.target.closest ? e.target.closest('[data-note]') : null;
+      return el ? el.dataset.note : null;
+    }
+
+    document.addEventListener('contextmenu', function (e) {
+      var id = target(e);
+      if (!id) return;
+      e.preventDefault();
+      openNotes(id);
+    });
+
+    document.addEventListener('pointerdown', function (e) {
+      var id = target(e);
+      if (!id) return;
+      startedOn = id; moved = 0;
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        if (startedOn === id && moved < 12) {
+          startedOn = null;
+          openNotes(id);
+        }
+      }, 480);
+    });
+    document.addEventListener('pointermove', function (e) {
+      if (startedOn) moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
+    });
+    ['pointerup', 'pointercancel', 'scroll'].forEach(function (ev) {
+      document.addEventListener(ev, function () { clearTimeout(timer); startedOn = null; }, true);
+    });
+  })();
 
   /* Экспертиза: выбираем, кого и по какой примете проверить. Список примет
      — только те, что уже всплывали в уликах: проверять то, о чём улик не
@@ -1102,7 +1216,9 @@
        слушать можно всем, говорить только тому, у кого слово. */
     var canTalk = open && !v.mute;
     var on = state.micOn && canTalk;
-    setHTML($('btnMic'), ico(on ? 'mic' : 'micoff', 20));
+    /* Иконка меняется, подпись остаётся: setHTML вычистил бы её вместе со
+       старым знаком, и кнопка снова стала бы немой. */
+    setHTML($('btnMic'), ico(on ? 'mic' : 'micoff', 20) + '<span class="lbl">Микрофон</span>');
     $('btnMic').style.color = on
       ? (v.channel === 'mafia' ? 'var(--ember)' : v.channel === 'ghost' ? 'var(--bruise)' : 'var(--verdigris)')
       : '';
@@ -1129,9 +1245,11 @@
     state.rtc.reconcile(v.peers || []);
   }
   function paintTts() {
-    setHTML($('btnTts'), ico(Voice.enabled ? 'sound' : 'mute', 20));
+    setHTML($('btnTts'), ico(Voice.enabled ? 'sound' : 'mute', 20) +
+      '<span class="lbl">' + (Voice.enabled ? 'Озвучка' : 'Без звука') + '</span>');
     $('btnTts').style.color = Voice.enabled ? 'var(--tallow)' : '';
     $('btnTts').title = Voice.enabled ? 'Реплики читаются вслух' : 'Читать реплики вслух';
+    $('btnTts').setAttribute('aria-pressed', Voice.enabled ? 'true' : 'false');
   }
 
   /* Сервера ICE площадки спрашиваем один раз: без них голос через интернет

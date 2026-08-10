@@ -185,6 +185,9 @@
 .rolepane h3{font-size:var(--t-lg);color:var(--bone)}
 .rolepane p{font-size:var(--t-2xs);color:var(--plaster-dim);margin:var(--s2) 0 0}
 .rolepane .known{margin-top:var(--s3);font-size:var(--t-2xs);color:var(--plaster);line-height:1.5}
+.rolepane .hintline{margin-top:var(--s3);padding-top:var(--s3);border-top:1px solid var(--border);
+  font-size:var(--t-3xs);color:var(--text-faint);line-height:1.5}
+.rolepane .hintline b{color:var(--text-muted)}
 .rolepane .known b{color:var(--tallow)}
 
 /* Док действий — снизу */
@@ -401,9 +404,9 @@ body.playing #toast{bottom:96px}
   <div class="spacer"></div>
   <div class="who"><span class="dot" id="netDot"></span><span id="whoName">—</span></div>
   <button class="iconbtn viewbtn" id="btnView" title="Переключить на 3D-вид" aria-label="Переключить на 3D-вид" hidden></button>
-  <button class="iconbtn" id="btnMic" title="Голосовой чат" aria-label="Голосовой чат"></button>
-  <button class="iconbtn" id="btnTts" title="Озвучивать реплики" aria-label="Озвучивать реплики"></button>
-  <button class="iconbtn" id="btnChat" title="Окно чата" aria-label="Окно чата" hidden></button>
+  <button class="iconbtn labeled" id="btnMic" title="Говорить голосом" aria-label="Голосовой чат"><span class="lbl">Микрофон</span></button>
+  <button class="iconbtn labeled" id="btnTts" title="Читать реплики вслух" aria-label="Озвучивать реплики"><span class="lbl">Озвучка</span></button>
+  <button class="iconbtn labeled" id="btnChat" title="Окно чата" aria-label="Окно чата" hidden><span class="lbl">Чат</span></button>
   <a class="btn ghost sm" href="/rules.html">Правила</a>
   <a class="btn ghost sm" href="/">На главную</a>
 </header>
@@ -596,6 +599,7 @@ body.playing #toast{bottom:96px}
 <div id="toast"></div>
 
 <script src="/js/icons.js"></script>
+<script src="/js/notes.js"></script>
 <script src="/js/view-mode.js"></script>
 <script src="/js/curtain.js"></script>
 <script src="/js/voice.js"></script>
