@@ -21,6 +21,7 @@ const suites = [
   ['Тест 15 · режим «Следствие»', 'test-inquest.js'],
   ['Тест 16 · последнее слово, лучший ход и темп', 'test-lastword.js'],
   ['Тест 18 · расширенный набор ролей и правила стола', 'test-roles.js'],
+  ['Тест 19 · один движок на всё: стол с соседями и воронка', 'test-solo.js'],
   /* Симулятор идёт последним и с малым числом партий: полный прогон на
      сотни партий запускают руками (node tests/test-balance-sim.js 2000),
      а в общем тесте он проверяет, что баланс не свалился совсем и что
@@ -55,6 +56,7 @@ const must = [
   'tests/test-lobby.js', 'tests/test-access.js', 'tests/test-speeches.js',
   'tests/test-seed.js', 'tests/test-inquest.js', 'tests/shot.js', 'tests/lab-shots.js',
   'tests/test-lastword.js', 'tests/test-balance-sim.js', 'tests/test-roles.js',
+  'tests/test-solo.js', 'tests/roles-lab.js',
   'tests/ab-compare.js', 'tests/ab-figures.js',
   'public/figure-lab.html', 'public/compare.html',
   'public/js/render-pipeline.js', 'public/js/notes.js'

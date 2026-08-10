@@ -269,8 +269,23 @@
     if (!room) { if (state.lobby) renderLobby(state.lobby); return; }
 
     var isHost = room.hostId === API.user.id;
-    setHTML($('lobbyTitle'), API.esc(room.title) + '<em>хозяин — ' + API.esc(room.hostName) + '</em>');
+    setHTML($('lobbyTitle'), API.esc(room.title) +
+      (room.solo ? '<em>стол на одного — соседи уже сидят</em>'
+        : '<em>хозяин — ' + API.esc(room.hostName) + '</em>'));
     setText($('inviteLink'), inviteUrl(room));
+    /* Стол на одного объявлять в общем зале нечего: человек сел играть один.
+       Ссылка при этом остаётся — передумает, позовёт живого, и тот сядет на
+       место соседа. */
+    /* Переключатель «показывать стол в общем зале» и его объяснение прячутся
+       вместе. Спрятать только галочку недостаточно: подпись про ссылку
+       уезжала под соседнюю галочку и объясняла не то, что рядом стоит. */
+    if ($('openTable')) $('openTable').closest('.check').hidden = !!room.solo;
+    if ($('openTableNote')) $('openTableNote').hidden = !!room.solo;
+    if ($('inviteNote')) {
+      setText($('inviteNote'), room.solo
+        ? 'Стол закрыт: вы играете с соседями. Захотите позвать живого человека — дайте ему эту ссылку, он сядет на место одного из соседей.'
+        : 'Одна ссылка — одна дверь. Кто пришёл по ней, садится за стол; если все места заняты соседями-ботами, один из них уступит место.');
+    }
     setText($('cntNow'), room.members.length + ' из ' + room.size);
     setText($('cntBots'), room.bots ? String(room.bots) : 'ни одного');
     setText($('cntGoal'), room.autoStart ? (room.size + ' игроках — сами') : 'ручном старте');
@@ -1384,11 +1399,12 @@
     if (quickBusy) return;
     var b = this, was = b.textContent;
     quickBusy = true; b.disabled = true; setText(b, 'Ищем стол…');
-    API.call('/api/rooms/quick', { size: 8 })
+    API.call('/api/rooms/quick', { size: 8, fill: true })
       .then(function (r) {
         if (r && r.room) renderRoom(r.room);
         API.toast(r && r.joined ? 'Вас посадили за стол — ждём остальных'
-          : 'Свободных столов не нашлось — открыли ваш');
+          : r && r.filled ? 'Людей на сайте нет — начали с соседями, стол открыт для всех'
+            : 'Свободных столов не нашлось — открыли ваш');
       })
       .catch(API.fail)
       .then(function () { quickBusy = false; b.disabled = false; setText(b, was); });
@@ -1761,6 +1777,39 @@
     }
     var wanted = q.get('room');
     if (wanted) return API.call('/api/rooms/join', { roomId: wanted }).then(function (x) { renderRoom(x.room); });
+
+    /* Воронка с главной приходит сюда адресом, а не пересказом. Три пути, и
+       каждый должен сработать без единого лишнего нажатия — в этом вся идея
+       «одна страница, одно очевидное действие».
+
+         ?solo    — вечер с соседями: закрытый стол, боты уже сидят;
+                    ?solo=setup оставляет выбор состава и сюжета за игроком;
+         ?quick   — быстрая игра: подберём стол, а если людей нет — начнём с
+                    соседями, но стол оставим объявленным;
+         ?create  — своя комната со ссылкой для друзей. */
+    var solo = q.get('solo');
+    if (solo) {
+      curtain.note('Соседи занимают места');
+      return API.call('/api/rooms/solo', {
+        size: Math.max(6, Math.min(20, Number(q.get('size')) || 8)),
+        rolePreset: q.get('preset') || 'classic',
+        mode: q.get('mode') === 'inquest' ? 'inquest' : 'classic',
+        speed: q.get('speed') || undefined,
+        start: solo !== 'setup'
+      }).then(function (x) { renderRoom(x.room); });
+    }
+    if (q.get('quick')) {
+      curtain.note('Ищем стол');
+      return API.call('/api/rooms/quick', { size: 8, fill: true })
+        .then(function (x) { renderRoom(x.room); });
+    }
+    if (q.get('create')) {
+      curtain.note('Открываем комнату');
+      return API.call('/api/rooms/create', {
+        size: 8, autoStart: true, visibility: 'public',
+        mode: q.get('mode') === 'inquest' ? 'inquest' : 'classic'
+      }).then(function (x) { renderRoom(x.room); });
+    }
     return API.call('/api/rooms/state').then(function (x) { renderRoom(x.room); })
       .catch(function () { renderRoom(null); });
   }).catch(function (e) {

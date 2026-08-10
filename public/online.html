@@ -485,7 +485,7 @@ body.playing #toast{bottom:96px}
             <button class="btn danger sm" id="btnLeave">Уйти</button>
           </div>
         </div>
-        <p class="note" style="margin-top:var(--s2)">Одна ссылка — одна дверь. Кто пришёл по ней, садится за стол;
+        <p class="note" id="inviteNote" style="margin-top:var(--s2)">Одна ссылка — одна дверь. Кто пришёл по ней, садится за стол;
           если все места заняты соседями-ботами, один из них уступит место.</p>
         <div style="margin-top:var(--s4)">
           <div class="kv"><span class="muted">Сейчас за столом</span><b id="cntNow">—</b></div>
@@ -505,7 +505,7 @@ body.playing #toast{bottom:96px}
           <label class="check" style="margin-top:var(--s2)">
             <input type="checkbox" id="openTable" checked> Показывать стол в списке открытых
           </label>
-          <p class="note" style="margin-top:var(--s2)">Снимете галочку — и за стол сядут только по вашей ссылке.</p>
+          <p class="note" id="openTableNote" style="margin-top:var(--s2)">Снимете галочку — и за стол сядут только по вашей ссылке.</p>
           <span class="label" style="display:block;margin-top:var(--s4)">Темп стола</span>
           <div class="row tight" id="speedPick" style="margin-top:var(--s2);flex-wrap:wrap"></div>
           <p class="note" style="margin-top:var(--s2)">Круг речей по сорок пять секунд на двадцать

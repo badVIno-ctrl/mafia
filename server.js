@@ -155,6 +155,10 @@ function roomView(room, forUserId) {
     /* 'public' — стол объявлен в общем зале, сесть можно без ссылки.
        'invite' — прежнее поведение: одна ссылка, одна дверь. */
     visibility: room.visibility || 'invite',
+    /* Стол на одного. Клиент по этому признаку меняет не правила, а слова:
+       «ссылка-приглашение» человеку, севшему играть один, нужна не в первую
+       очередь, а «Начать партию» — в первую. */
+    solo: !!room.solo,
     mode: room.mode || 'classic',
     speed: C.speedById(room.speed).id,
     speedList: C.SPEED_LIST.map(x => ({ id: x.id, ru: x.ru, hint: x.hint, speech: x.speech })),
@@ -695,6 +699,65 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { room: roomView(room, me.id) });
     }
 
+    /* ---------- вечер с соседями: стол на одного ----------
+
+       Главная поломка проекта, названная в плане первой: два разных движка и
+       два разных клиента. Партия с ботами жила отдельной страницей на 327 КБ
+       со своим движком внутри, и потому не знала ни «Следствия», ни последнего
+       слова, ни новых ролей, ни пресетов темпа — каждая механика приезжала в
+       сетевую игру и не приезжала к ботам. Любая правка правил делалась дважды
+       или (чаще) один раз и расходилась.
+
+       Здесь этого больше нет. Стол на одного — обычная комната, только
+       закрытая и заполненная соседями сразу: тот же движок, тот же клиент, те
+       же правила. Всё, что появляется в сетевой игре, с этого момента
+       появляется и в игре с ботами — без единой строки отдельного кода.
+
+       Комната именно закрытая (visibility: 'invite'): человек, севший играть
+       один, не звал за свой стол незнакомых, и объявлять его в общем зале
+       было бы обманом. Ссылка при этом есть — если он передумает, он позовёт
+       кого захочет, и пришедший займёт место одного из соседей. */
+    if (p === '/api/rooms/solo' && req.method === 'POST') {
+      leaveRoom(me);
+      const size = Math.max(C.MIN_PLAYERS, Math.min(C.MAX_PLAYERS, Number(body.size) || 8));
+      const pr = C.presetById(body.rolePreset);
+      const room = {
+        id: uid('r'),
+        invite: crypto.randomBytes(12).toString('base64url'),
+        title: 'Вечер с соседями',
+        hostId: me.id,
+        members: [me.id],
+        invites: [],
+        bots: [],
+        size,
+        visibility: 'invite',
+        deadSeeAll: false,
+        mode: body.mode === 'inquest' ? 'inquest' : 'classic',
+        rolePreset: (size >= pr.min && size <= pr.max) ? pr.id : 'classic',
+        autoStart: false,
+        scenarioId: body.scenarioId || (C.scenariosFor(size)[0] || C.SCENARIOS[0]).id,
+        chat: [],
+        game: null,
+        solo: true,
+        createdAt: Date.now()
+      };
+      if (body.speed !== undefined) room.speed = C.speedById(body.speed).id;
+      rooms.set(room.id, room);
+      me.roomId = room.id;
+      addBots(room, size);
+
+      /* start: false — «с ботами, но с настройками»: человек сначала выбирает
+         состав и сюжет, а партию начинает кнопкой. Без него — сразу за стол,
+         это путь с главной в один клик. */
+      if (body.start !== false) {
+        const r = startGame(room);
+        if (r.error) return send(res, 400, r);
+      } else {
+        pushAll(room);
+      }
+      return send(res, 200, { room: roomView(room, me.id), solo: true });
+    }
+
     const roomId = body.roomId || url.searchParams.get('roomId');
     const room = roomId ? rooms.get(roomId) : (me.roomId ? rooms.get(me.roomId) : null);
 
@@ -743,6 +806,18 @@ const server = http.createServer(async (req, res) => {
       };
       rooms.set(room2.id, room2);
       me.roomId = room2.id;
+
+      /* «Быстро» обещает партию, а не ожидание. Свободных столов не нашлось —
+         значит людей на сайте нет, и честный ответ на нажатие «Играть» это
+         начатая партия, а не пустая комната с надписью «ждём шестерых».
+         Стол при этом остаётся объявленным в общем зале, и пришедший человек
+         сядет на место соседа-бота: живой игрок важнее бота всегда. */
+      if (body.fill) {
+        addBots(room2, room2.size);
+        const r = startGame(room2);
+        if (r.error) return send(res, 400, r);
+        return send(res, 200, { room: roomView(room2, me.id), joined: false, filled: true });
+      }
       pushAll(room2);
       return send(res, 200, { room: roomView(room2, me.id), joined: false });
     }
@@ -848,6 +923,14 @@ const server = http.createServer(async (req, res) => {
       if (body.scenarioId !== undefined) room.scenarioId = body.scenarioId;
       if (body.size !== undefined) {
         room.size = Math.max(C.MIN_PLAYERS, Math.min(C.MAX_PLAYERS, Number(body.size) || 8));
+        /* Стол на одного всегда полон: человек сел играть, а не собирать
+           компанию. Двинул ползунок — соседи занимают новые места сами,
+           иначе он остался бы с надписью «8 из 12» и без объяснения, чего
+           ждать. */
+        if (room.solo && !room.game) {
+          if (room.members.length > room.size) dropBots(room, room.members.length - room.size);
+          if (room.members.length < room.size) addBots(room, room.size);
+        }
         /* Стол сжали — и выбранный пресет мог перестать на него садиться.
            Молча раздать другой состав нельзя, промолчать тоже: возвращаем
            классику и говорим об этом в общем чате комнаты. */

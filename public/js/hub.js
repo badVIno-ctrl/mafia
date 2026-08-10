@@ -56,11 +56,14 @@
     });
 
     if (!rooms.length && !invites.length) {
+      /* Пустой список — это состояние, а не ошибка, и оно обязано говорить,
+         что делать дальше. Кнопка «Играть» здесь работает в любом случае:
+         людей нет — сядут соседи, и стол всё равно останется объявленным. */
       html += users.length
-        ? '<div class="empty">Открытых столов сейчас нет. Нажмите «Стол на живых людей» — ' +
-            'ваш стол сразу появится в общем зале, и к вам смогут подсесть.</div>'
-        : '<div class="empty">Пока вы здесь один. Откройте стол по сети — его увидят все, кто зайдёт после вас.<br>' +
-            'А чтобы не ждать — сыграйте вечер с соседями-ботами.</div>';
+        ? '<div class="empty">Открытых столов сейчас нет. Нажмите «Играть» — ваш стол появится ' +
+            'в общем зале, и к вам смогут подсесть, пока идёт партия с соседями.</div>'
+        : '<div class="empty">Пока вы здесь один. Нажмите «Играть»: партия начнётся сразу, ' +
+            'соседи займут пустые места, а стол увидят все, кто зайдёт после вас.</div>';
     }
 
     users.slice(0, 30).forEach(function (u) {
@@ -143,15 +146,20 @@
     });
   }
 
-  /* --- знаки на афише --- */
+  /* --- знаки на воронке ---
+     Каждый знак ставится через проверку: страница переживает разметку без
+     этого элемента, и падать из-за отсутствующей иконки главная не должна. */
   function paintSigns() {
     if (!window.Icons) return;
-    $('signBots').innerHTML = Icons.svg('cards', { size: 26 });
-    $('signNet').innerHTML = Icons.svg('net', { size: 26 });
-    if ($('signInquest')) $('signInquest').innerHTML = Icons.svg('search', { size: 26 });
-    $('goBots').innerHTML = Icons.svg('chevron', { size: 15 });
-    $('goNet').innerHTML = Icons.svg('chevron', { size: 15 });
-    if ($('goInquest')) $('goInquest').innerHTML = Icons.svg('chevron', { size: 15 });
+    var put = function (id, name, size) {
+      var el = $(id);
+      if (el) el.innerHTML = Icons.svg(name, { size: size || 26 });
+    };
+    put('signPlay', 'play', 24);
+    put('goPlay', 'chevron', 20);
+    put('signBots', 'cards', 22);
+    put('signNet', 'net', 22);
+    put('signRules', 'scroll', 22);
   }
 
   /* --- старт --- */
@@ -160,6 +168,24 @@
   paintSigns();
   API.load();
   $('btnReg').addEventListener('click', register);
+  /* Игра без имени. Раньше это обещание держала отдельная страница с ботами —
+     она не спрашивала ничего. Теперь стол с соседями это обычная комната
+     общего движка, и комнате нужен игрок с именем; значит имя придумываем мы,
+     а человек переименуется, когда захочет. Терять из-за одного поля того,
+     кто зашёл посмотреть, нельзя: это самый дорогой отказ на сайте. */
+  if ($('btnGuest')) {
+    $('btnGuest').addEventListener('click', function () {
+      var b = this;
+      b.disabled = true;
+      API.call('/api/register', { name: 'Гость ' + (10 + Math.floor(Math.random() * 89)) })
+        .then(function (r) {
+          API.save(r.user);
+          location.href = '/online.html?solo=1';
+        })
+        .catch(API.fail)
+        .then(function () { b.disabled = false; });
+    });
+  }
   $('regName').addEventListener('keydown', function (e) { if (e.key === 'Enter') register(); });
   $('btnRename').addEventListener('click', rename);
   $('btnRefresh').addEventListener('click', function () {

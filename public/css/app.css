@@ -36,9 +36,66 @@
   padding-bottom:max(var(--s8), calc(var(--s7) + env(safe-area-inset-bottom)));
 }
 
+/* ------------------------------- воронка -------------------------------
+   Одна страница — одно очевидное действие. Три равные карточки читались как
+   развилка: чтобы выбрать, приходилось прочитать все три. Здесь одно крупное
+   действие и три пути под ним — заметно мельче, чтобы иерархия читалась до
+   чтения слов.
+
+   Классы .act/.playbill остались ниже: ими пользуется страница с ботами. */
+.funnel{margin-top:var(--s6)}
+.playnow{
+  position:relative;display:grid;grid-template-columns:auto 1fr auto;gap:var(--s5);
+  align-items:center;padding:var(--s6) var(--s5);overflow:hidden;text-decoration:none;
+  border:1px solid var(--line-warm);border-radius:var(--r-lg);
+  background:linear-gradient(180deg,rgba(226,180,120,.14),rgba(26,22,20,.94) 46%,rgba(9,8,8,.96));
+  transition:border-color var(--norm) var(--ease), transform var(--norm) var(--ease),
+    box-shadow var(--norm) var(--ease);
+}
+.playnow::after{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.6;
+  background:radial-gradient(520px 240px at 82% -20%, rgba(226,180,120,.2), transparent 70%);
+}
+.playnow:hover{border-color:var(--tallow);transform:translateY(-2px);
+  box-shadow:0 10px 34px -18px rgba(226,180,120,.5)}
+.playnow:active{transform:translateY(0)}
+/* Класс здесь именно .ring, а не .ico: знаки рисует icons.js, и у каждого
+   получившегося <svg> класс .ico. Правило «.playnow .ico» доставало и его —
+   стрелка справа получала золотой диск и начинала спорить с главной кнопкой
+   за внимание. Два одинаковых круга в одной строке значат, что нажимать можно
+   оба, а нажимать надо один. */
+.playnow .ring{
+  width:60px;height:60px;flex:none;display:grid;place-items:center;border-radius:50%;
+  color:var(--ink);border:1px solid var(--tallow);background:var(--tallow);
+}
+.playnow .txt{min-width:0}
+.playnow b{display:block;font-family:var(--display);font-size:var(--t-3xl);
+  line-height:1.05;color:var(--bone)}
+.playnow em{display:block;margin-top:6px;font-style:normal;font-size:var(--t-sm);
+  color:var(--plaster);max-width:52ch;text-wrap:pretty}
+.playnow .arr{flex:none;color:var(--tallow);display:grid;place-items:center}
+
+/* Второй уровень. Тот же материал, но втрое тише: у равных по весу кнопок
+   не бывает главной. */
+.ways{display:grid;gap:var(--s3);grid-template-columns:repeat(3,1fr);margin-top:var(--s4)}
+.way{
+  display:grid;gap:var(--s2);padding:var(--s4) var(--s4) var(--s5);text-decoration:none;
+  border:1px solid var(--hair);border-radius:var(--r-lg);
+  background:linear-gradient(180deg,rgba(20,17,16,.9),rgba(8,7,7,.94));
+  transition:border-color var(--norm) var(--ease), transform var(--norm) var(--ease);
+}
+.way:hover{border-color:var(--line-warm);transform:translateY(-1px)}
+.way .sign{
+  width:38px;height:38px;display:grid;place-items:center;border-radius:50%;
+  color:var(--tallow);border:1px solid var(--line);background:rgba(226,180,120,.07);
+}
+.way b{font-size:var(--t-lg);color:var(--bone)}
+.way em{font-style:normal;font-size:var(--t-2xs);color:var(--plaster-dim);line-height:1.5}
+.funnel-note{margin-top:var(--s4);max-width:74ch;line-height:1.6}
+
 /* ------------------------------- афиша ------------------------------- */
-/* Две равные плашки — самый предсказуемый вид главной. Здесь вместо них
-   театральная афиша: крупный первый спектакль и второй строкой ниже. */
+/* Плашки спектаклей. Остались для страницы с ботами и для узких мест, где
+   нужна крупная карточка с описанием. */
 .playbill{display:grid;gap:var(--s4);margin-top:var(--s6)}
 .act{
   position:relative;display:grid;grid-template-columns:auto 1fr;gap:var(--s5);
@@ -66,18 +123,6 @@
   color:var(--tallow);font-weight:600;font-size:var(--t-xs);
 }
 .act.second{background:linear-gradient(180deg,rgba(20,17,16,.9),rgba(8,7,7,.94))}
-/* Третий режим — новый, и на афише это должно быть видно без слова «новое»:
-   тёплая кромка и метка «новый режим» в углу. */
-.act.third{
-  background:linear-gradient(180deg,rgba(28,20,18,.94),rgba(10,8,8,.96));
-  border-color:var(--line-warm);
-}
-.act.third::before{
-  content:"новый режим";position:absolute;top:0;right:0;z-index:1;
-  padding:4px 10px;border-bottom-left-radius:var(--r);
-  font:600 10px/1.4 var(--sans);letter-spacing:.14em;text-transform:uppercase;
-  color:var(--ink);background:var(--tallow);
-}
 
 /* --------------------------- кто сейчас на сайте --------------------------- */
 .now{margin-top:var(--s6)}
@@ -125,6 +170,12 @@ a:focus-visible,button:focus-visible,input:focus-visible,[tabindex]:focus-visibl
   .shell{padding:var(--s6) var(--s4) var(--s8)}
   .act{grid-template-columns:1fr;gap:var(--s3);padding:var(--s5) var(--s4)}
   .act .sign{width:46px;height:46px}
+  /* На телефоне три пути встают колонкой: три ячейки по 110 px читаются как
+     ряд иконок без смысла. */
+  .ways{grid-template-columns:1fr}
+  .playnow{grid-template-columns:auto 1fr;gap:var(--s4);padding:var(--s5) var(--s4)}
+  .playnow .arr{display:none}
+  .playnow .ring{width:50px;height:50px}
   .brand-sub{display:none}
   .topbar{padding-left:var(--s4);padding-right:var(--s4);gap:var(--s2)}
 }
