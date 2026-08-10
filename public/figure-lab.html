@@ -27,12 +27,13 @@
 <script type="module">
 import * as THREE from '/vendor/three/three.module.js';
 import { createModels } from '/js/models3d.js';
+import { createPipeline } from '/js/render-pipeline.js';
 
 const q = new URLSearchParams(location.search);
 const W = +(q.get('w') || 1400), H = +(q.get('h') || 900);
 const VIEW = q.get('view') || 'front';
 let N = +(q.get('n') || 6);
-if (VIEW === 'head' || VIEW === 'hands' || VIEW === 'solo') N = 1;
+if (VIEW === 'head' || VIEW === 'hands' || VIEW === 'solo' || VIEW === 'face' || VIEW === 'prof' || VIEW === 'three4') N = 1;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(1);
@@ -40,19 +41,28 @@ renderer.setSize(W, H, false);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.34;
+renderer.toneMappingExposure = 1.12;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0809);
 const M = createModels(THREE, {});
+/* Какой сборкой строить человека: классической (из примитивов, но с картами
+   кожи и мимикой) или скиннингованной из human.js. Слепое сравнение гоняет
+   обе через этот параметр. */
+const RIG = q.get('rig') || '';
 const camera = new THREE.PerspectiveCamera(45, W / H, 0.05, 100);
 
 /* Свет — копия рига сцены партии (stage3d.js, LIGHT.day). Стенд обязан
    светить ровно так же, иначе по его снимкам нельзя выбирать ни палитру
    кожи, ни цвет волос: при вдвое ярком свете каштановые волосы выглядят
    соломой, а лицо фарфором. */
+/* Свет берётся из общего рига: стенд обязан светить ровно так же, как партия,
+   иначе по его снимкам нельзя выбирать ни палитру кожи, ни цвет волос. */
+/* Свет — копия рига сцены партии (stage3d.js, LIGHT.day). Стенд обязан светить
+   ровно так же, иначе по его снимкам нельзя выбирать ни палитру кожи, ни цвет
+   волос: при вдвое ярком свете каштановые волосы выглядят соломой. */
 const LIT = { amb: 0.42, hemi: 0.34, fill: 4.6, table: 3.4, spot: 34, point: 5.6 };
 scene.add(new THREE.AmbientLight(0x6a6070, LIT.amb));
 scene.add(new THREE.HemisphereLight(0x8b9bb4, 0x3a2c26, LIT.hemi));
@@ -65,10 +75,45 @@ const bounce = new THREE.PointLight(0xffe0b4, LIT.table, 3.2, 2);
 bounce.position.set(0, 0.94, 0);
 scene.add(bounce);
 
-const room = M.buildRoom(scene);
-const lamp = M.buildLamp(scene, { ceilY: 4.5, bulbY: 2.2 });
-lamp.baseSpot = LIT.spot; lamp.basePoint = LIT.point;
-scene.fog = new THREE.FogExp2(0x0a0809, 0.022);
+/* ------------------------------------------------------------------------
+   СТУДИЯ
+
+   Свет партии — одна лампа над столом с сильным пятном, и на нём белый гипс
+   выбивается в пересвет: судить о форме лица под ним нельзя. Режим ?studio=1
+   ставит нейтральный трёхточечный свет и серый фон — ровно так смотрят на
+   скульптуру. Все решения по геометрии принимаются здесь, а по палитре и
+   материалам — уже под лампой.
+   ------------------------------------------------------------------------ */
+const STUDIO = !!q.get('studio');
+let room = null, lamp = { animate() {} };
+if (STUDIO) {
+  scene.background = new THREE.Color(0x2a2a2e);
+  renderer.toneMappingExposure = 1.0;
+  const key = new THREE.DirectionalLight(0xfff2e2, 2.5);
+  key.position.set(1.2, 2.6, 2.2); key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.camera.near = 0.5; key.shadow.camera.far = 8;
+  key.shadow.camera.left = -1.2; key.shadow.camera.right = 1.2;
+  key.shadow.camera.top = 1.6; key.shadow.camera.bottom = -0.6;
+  /* Без смещения карта теней даёт «акне»: голова покрывается тёмным чепцом
+     с резкой границей, и по такому снимку нельзя судить о форме лба. */
+  key.shadow.bias = -0.0006; key.shadow.normalBias = 0.012;
+  scene.add(key);
+  const fill = new THREE.DirectionalLight(0xcfe0ff, 0.55);
+  fill.position.set(-2.4, 1.4, 1.6); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xffd9b0, 1.3);
+  rim.position.set(-1.0, 2.0, -2.6); scene.add(rim);
+  scene.add(new THREE.HemisphereLight(0x9fb0c8, 0x3a332c, 0.55));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20),
+    new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 0.9 }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
+  scene.add(floor);
+} else {
+  room = M.buildRoom(scene);
+  lamp = M.buildLamp(scene, { ceilY: 4.5, bulbY: 2.2 });
+  lamp.baseSpot = LIT.spot; lamp.basePoint = LIT.point;
+  scene.fog = new THREE.FogExp2(0x0a0809, 0.022);
+}
 
 const COATS = [0x6a4b52, 0x4c5a63, 0x6b5f45, 0x543f4d, 0x455448, 0x74544a];
 const figures = [];
@@ -86,7 +131,7 @@ if (VIEW === 'table') {
     chair.position.z = -0.30;
     g.add(chair);
     const f = M.buildFigure(COATS[i % COATS.length], i % 5 === 0 ? 'cap' : 'hair', i + 1,
-      { sex: i % 3 === 1 ? 'f' : 'm', pose: i % 4 });
+      { sex: i % 3 === 1 ? 'f' : 'm', pose: i % 4, rig: RIG });
     g.add(f);
     figures.push(f);
   }
@@ -104,7 +149,7 @@ if (VIEW === 'table') {
     const idx = N === 1 ? (+(q.get('seed') || 1)) : i + 1;
     const hat = N === 1 ? (q.get('hat') || 'hair') : (i % 5 === 0 ? 'cap' : 'hair');
     const sex = N === 1 ? (q.get('sex') || 'm') : (i % 3 === 1 ? 'f' : 'm');
-    const f = M.buildFigure(COATS[i % COATS.length], hat, idx, { sex, pose: i % 4 });
+    const f = M.buildFigure(COATS[i % COATS.length], hat, idx, { sex, pose: i % 4, rig: RIG });
     g.add(f);
     figures.push(f);
   }
@@ -117,11 +162,36 @@ if (VIEW === 'table') {
   else if (VIEW === 'head') { camera.position.set(0.26, 1.34, 0.66); camera.lookAt(0, 1.20, -0.10); camera.fov = 26; camera.updateProjectionMatrix(); }
   else if (VIEW === 'hands') { camera.position.set(0.34, 1.20, 0.74); camera.lookAt(0.04, 0.80, 0.14); camera.fov = 30; camera.updateProjectionMatrix(); }
   else if (VIEW === 'solo') { camera.position.set(0.9, 1.35, 1.5); camera.lookAt(0, 0.85, 0); camera.fov = 40; camera.updateProjectionMatrix(); }
+  /* Крупный план лица строго в лоб и строго в профиль: по этим двум кадрам
+     только и можно судить о носе, надбровье и подбородке. */
+  else if (VIEW === 'face') { camera.position.set(0, 1.222, 0.80); camera.lookAt(0, 1.205, -0.10); camera.fov = 24; camera.updateProjectionMatrix(); }
+  else if (VIEW === 'prof') { camera.position.set(0.86, 1.220, -0.10); camera.lookAt(0, 1.203, -0.10); camera.fov = 24; camera.updateProjectionMatrix(); }
+  else if (VIEW === 'three4') { camera.position.set(0.44, 1.275, 0.66); camera.lookAt(0, 1.200, -0.09); camera.fov = 25; camera.updateProjectionMatrix(); }
 }
 
 /* Отладка: красим материалы по номеру. Порядок в userData.materials:
    cloth, dark, skin, shirt, tie, trous, shoe, face, lid, lips, seam, felt,
    hair, hairGloss. */
+/* raw=1 — серый матовый гипс без единой карты. Единственный способ увидеть
+   форму как она есть: любая текстура на лице врёт и подсказывает глазу
+   детали, которых в геометрии нет. */
+if (q.get('raw')) {
+  const plaster = new THREE.MeshStandardMaterial({ color: 0x6e6862, roughness: 0.55, metalness: 0 });
+  figures.forEach(f => {
+    /* Волосы и головной убор в гипсовом режиме прячем: без альфа-карты
+       карточки прядей превращаются в бумажные полоски и мешают судить о
+       форме черепа. */
+    const u = f.userData;
+    if (u.hair && u.hair.group) u.hair.group.visible = false;
+    if (u.hat) u.hat.visible = false;
+    f.traverse(o => {
+      if (!o.material || !o.visible) return;
+      if (o.material.transparent && o.material.opacity < 0.5) { o.visible = false; return; }
+      o.material = plaster;
+    });
+  });
+  renderer.toneMappingExposure = 0.82;
+}
 if (q.get('paint')) {
   const C = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff,
              0xff8800, 0x8800ff, 0x00ff88, 0x884400, 0xffffff, 0x004488];
@@ -131,21 +201,43 @@ if (q.get('paint')) {
   }));
 }
 
+/* freeze=1 — заморозить жизнь фигуры: иначе снимок ловит человека в
+   случайной фазе мигания, и по нему нельзя сравнить два варианта глаза. */
+const FREEZE = !!q.get('freeze');
 const t0 = performance.now();
 function frame(now) {
   const t = now - t0;
   lamp.animate(now, 16);
   figures.forEach((f, i) => {
     const u = f.userData;
+    if (FREEZE) {
+      if (u.lookAt) u.lookAt(0, 0);
+      if (u.blink) u.blink(0);
+      if (u.talk) u.talk(0);
+      return;
+    }
     if (u.animate) u.animate(t + i * 900, 16, { speaking: i === 0 && (t % 4000) < 2000 });
   });
-  renderer.render(scene, camera);
+  if (stack) stack.render(16); else renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
+/* Постобработка: тот же слой, что в партии. Судить о картинке без него
+   бессмысленно — половина «пластика» лечится именно здесь. */
+let stack = null;
+if (!q.get('nopost')) {
+  try {
+    stack = await createPipeline(THREE, renderer, scene, camera, {
+      tier: q.get('tier') || 'cinema', exposure: 1.12
+    });
+    stack.resize(W, H);
+    stack.setGrade(q.get('grade') || 'day', 0);
+  } catch (e) { stack = null; console.error('постобработка не поднялась: ' + e.message); }
+}
+window.__stack = stack;
 window.__figs = figures;
-setTimeout(() => { window.__labReady = true; }, 500);
+setTimeout(() => { window.__labReady = true; }, 900);
 </script>
 </body>
 </html>

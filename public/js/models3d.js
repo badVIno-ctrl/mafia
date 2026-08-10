@@ -16,6 +16,8 @@
      const M = createModels(THREE, { ROLE, ROLE_INFO });
    ========================================================================= */
 
+import { createHuman } from '/js/human.js';
+
 export function createModels(THREE, cfg) {
   cfg = cfg || {};
 
@@ -2246,7 +2248,7 @@ export function createModels(THREE, cfg) {
     return m;
   }
 
-  function buildFigure(color, hatKind, seed, opts) {
+  function buildFigureClassic(color, hatKind, seed, opts) {
     opts = opts || {};
     const female = opts.sex === 'f';
     const grp = new THREE.Group();
@@ -2294,7 +2296,7 @@ export function createModels(THREE, cfg) {
     /* Сорочка не белая: на сцене со свечой чистый белый становится самым
        ярким пятном кадра и перетягивает взгляд с лица. Полотно глаже сукна
        и почти не ворсится. */
-        /* Полотно сорочки: рельеф переплетения приглушён. При сильном рельефе
+    /* Полотно сорочки: рельеф переплетения приглушён. При сильном рельефе
        площадной свет лампы рассыпается по манжете белыми искрами — в упор
        это читается как блёстки, а не как ткань. */
     const shirt = clothMaterial(new THREE.Color(0x9c9482), { roughness: 0.72, sheen: 0.06, weave: 0.22 });
@@ -3006,6 +3008,31 @@ export function createModels(THREE, cfg) {
     });
   }
 
+  /* -------------------------------------------------------------------------
+     ДВЕ СБОРКИ ЧЕЛОВЕКА
+
+     buildFigureClassic — фигура, выросшая из примитивов: череп лепится из
+     сферы, руки трубами, шея цилиндром. За несколько итераций она получила
+     карты кожи, мимику и настоящие глаза и на дистанции стола читается хорошо.
+
+     HUMAN.buildFigure (human.js) — другой пайплайн: скелет с именами костей
+     как в Mixamo, один SkinnedMesh на всё тело, лицо аналитическими полями с
+     десятью морф-таргетами, кисть с пальцами, посадка от края стола.
+
+     Обе живут одновременно, потому что выбор между ними делается не спором, а
+     слепым сравнением: tests/ab-figures.js снимает их одной камерой при одном
+     свете и складывает рядом в случайном порядке. Значение по умолчанию —
+     победитель последнего прогона; проигравший остаётся в дереве, иначе
+     сравнивать будет нечего.
+     ------------------------------------------------------------------------- */
+  const HUMAN = createHuman(THREE, { METRICS, TIER, LOWQ, sg, PAL });
+
+  function buildFigure(color, hatKind, seed, opts) {
+    opts = opts || {};
+    if (opts.rig === 'skinned') return HUMAN.buildFigure(color, hatKind, seed, opts);
+    return buildFigureClassic(color, hatKind, seed, opts);
+  }
+
   return {
     PAL, TIER, LOWQ, sg, prng, cvs, roundRect, texFromCanvas, disposeTree,
     METRICS, tableRadiusFor, loft, limb, buildHand,
@@ -3015,6 +3042,7 @@ export function createModels(THREE, cfg) {
     weaveNormalTexture, skinMaterials, clothMaterial, applySkinSSS,
     FACE_MORPH,
     BODY, skullPoint, buildEye, buildHair,
-    buildRoom, buildLamp, buildTable, buildChair, buildFigure
+    buildRoom, buildLamp, buildTable, buildChair,
+    buildFigure, buildFigureClassic, HUMAN
   };
 }

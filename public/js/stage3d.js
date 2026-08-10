@@ -203,53 +203,66 @@ export async function mountStage(container, opts) {
   /* ------------------------------------------------------------------ */
   /* кадр: окружение, затенение, свечение, грейд                          */
   /* ------------------------------------------------------------------ */
-  /* Пайплайн собирается не «до сцены», а «рядом со сценой».
+  /* Слой кадра поднимается ПОСЛЕ первого кадра, а не до него.
 
-     Компиляция шейдеров GTAO, bloom и SMAA занимает от десятых долей секунды
-     до нескольких секунд — на слабом железе и на программном WebGL ближе к
-     секундам. Если ждать её перед тем, как отдать сцену наружу, игрок
-     столько же смотрит в пустой прямоугольник, а страница не может ни
-     расставить подписи мест, ни принять нажатие: ручки сцены ещё не
-     существует.
+     Сборка стоит недёшево: динамический импорт таблиц площадного света, PMREM
+     по процедурному окружению, компиляция шейдеров GTAO и bloom. Если ждать
+     её на входе, стол появляется с задержкой — на программном WebGL прогонный
+     стенд успевал нажать кнопку вида, отсчитать три секунды и не найти ни
+     одной подписи места. Игрок видит то же самое: тыкнул «3D» и смотрит в
+     пустоту.
 
-     Поэтому сцена отдаётся сразу и первые кадры рисуются напрямую, а кадровый
-     пайплайн подменяет отрисовку, когда будет готов. Переход виден как
-     однократное изменение освещения — и это честнее, чем секунда пустоты. */
+     Поэтому сцена сразу начинает рисоваться обычным renderer.render, а
+     композитор подменяет его, когда будет готов. Заметить подмену можно
+     только по тому, что кадр становится лучше. */
   let pipe = null;
-  (async () => {
-    try {
-      const p = await createPipeline(THREE, renderer, scene, camera, {
-        tier: tierName,
-        width: container.clientWidth || 640,
-        height: container.clientHeight || 360,
-        /* Экспозиция ниже прежних 1,34: раньше ею компенсировали отсутствие
-           окружения, теперь свет приходит и от комнаты. */
-        exposure: 1.18
+  function adoptPipeline(p) {
+    pipe = p;
+    if (pipe && pipe.environment) {
+      FILL_K.amb = 0.14; FILL_K.hemi = 0.10; FILL_K.fill = 0.55; FILL_K.table = 0.55;
+      ambient.intensity *= FILL_K.amb;
+      hemi.intensity *= FILL_K.hemi;
+      fills.forEach(l => { l.intensity *= FILL_K.fill; });
+      tableLight.intensity *= FILL_K.table;
+      lamp.baseArea = 1.45;
+      /* Фигуры, севшие за стол до этой минуты, уже получили материалы без
+         окружения — обновляем их разом. */
+      scene.traverse(o => {
+        const m = o.material;
+        if (!m) return;
+        (Array.isArray(m) ? m : [m]).forEach(x => {
+          if (x && x.isMeshStandardMaterial) x.needsUpdate = true;
+        });
       });
-      if (!alive) { p.dispose(); return; }
-      pipe = p;
-      if (p.environment) {
-        FILL_K.amb = 0.14; FILL_K.hemi = 0.10; FILL_K.fill = 0.55; FILL_K.table = 0.55;
-        ambient.intensity *= FILL_K.amb;
-        hemi.intensity *= FILL_K.hemi;
-        fills.forEach(l => { l.intensity *= FILL_K.fill; });
-        tableLight.intensity *= FILL_K.table;
-        lamp.baseArea = 1.45;
-      } else if (lamp.area) {
-        lamp.area.intensity = 0;
-        lamp.baseArea = 0;
+      /* Размер — в пикселях буфера, как в resize(): композитор считает не в
+         CSS-точках, и без множителя на телефоне кадр выходит вчетверо мельче. */
+      if (pipe.resize) {
+        const pr = renderer.getPixelRatio();
+        pipe.resize((container.clientWidth || 640) * pr, (container.clientHeight || 360) * pr);
       }
-      p.setGrade(phase, 0);
-      const sp = speakerId ? seatsById.get(speakerId) : null;
-      p.focusOn(sp ? sp.figure : null);
-      p.resize(container.clientWidth || 640, container.clientHeight || 360);
-    } catch (e) {
-      /* Нет расширений, нет памяти, старый драйвер — рисуем как раньше.
-         Партия важнее картинки. */
-      pipe = null;
-      if (lamp.area) { lamp.area.intensity = 0; lamp.baseArea = 0; }
+      if (pipe.setGrade) pipe.setGrade(phase, 0);
+      /* Резкость сразу встаёт на говорящего, если слово уже у кого-то: иначе
+         первый кадр после подмены наводится на пустой центр стола. */
+      if (pipe.focusOn) {
+        const sp = speakerId ? seatsById.get(speakerId) : null;
+        pipe.focusOn(sp ? sp.figure : null);
+      }
+    } else if (lamp.area) {
+      lamp.area.intensity = 0;
+      lamp.baseArea = 0;
     }
-  })();
+  }
+  createPipeline(THREE, renderer, scene, camera, {
+    tier: tierName,
+    width: container.clientWidth || 640,
+    height: container.clientHeight || 360,
+    /* Экспозиция ниже прежних 1,34: раньше ею компенсировали отсутствие
+       окружения, теперь свет приходит и от комнаты. */
+    exposure: 1.18
+  }).then(p => { if (alive) adoptPipeline(p); else if (p && p.dispose) p.dispose(); })
+    /* Нет расширений, нет памяти, старый драйвер — рисуем как раньше.
+       Партия важнее картинки. */
+    .catch(() => { adoptPipeline(null); });
 
   /* ------------------------------------------------------------------ */
   /* места за столом                                                     */
