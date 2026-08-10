@@ -46,7 +46,13 @@
 
   /* --- типографическая шкала (16.5 базовый, шаг ≈1.22) --- */
   --t-3xs:12.5px;  /* только для номеров мест и монолинейных цифр */
-  --t-2xs:13.5px;  /* нижняя граница читаемого текста — ниже не спускаемся */
+  --t-2xs:14px;    /* нижняя граница читаемого текста на игровых экранах.
+                      Было 13,5 — и на телефоне подписи мест, состояния
+                      игроков и подсказка «что от вас нужно» оказывались
+                      на грани читаемости при том, что читать их нужно
+                      быстро и в темноте. 12,5 остаётся только для номеров
+                      мест и монолинейных цифр, где важна не читаемость
+                      текста, а компактность знака. */
   --t-xs:14.5px;
   --t-sm:15.5px;
   --t-md:16.5px;
@@ -72,6 +78,56 @@
   --lift:0 1px 0 rgba(241,236,225,.05), 0 14px 34px rgba(0,0,0,.55);
   --lift-lg:0 1px 0 rgba(241,236,225,.06), 0 30px 70px rgba(0,0,0,.68);
   --glow-tallow:0 0 24px rgba(226,180,120,.22);
+
+  /* -----------------------------------------------------------------------
+     СЕМАНТИЧЕСКИЙ СЛОЙ
+
+     Выше — материалы: «извёстка», «сальная свеча», «уголёк». Это словарь
+     художника, и он правильный: по нему видно, из чего сделана сцена.
+
+     Но в разметке нужен другой словарь — словарь роли: «поверхность
+     первого уровня», «основной текст», «опасное действие», «цвет мафии».
+     Пока компонент писал прямо --plaster, сменить тему было нельзя: чтобы
+     сделать светлый вариант или поднять контраст, пришлось бы переписать
+     каждое правило. Здесь один слой поверх материалов, и он же — точка,
+     в которой тема меняется целиком.
+
+     Правило: компоненты пользуются только этими именами. Материалы —
+     только внутри этого блока.
+     ----------------------------------------------------------------------- */
+  --surface-0:var(--void);         /* фон страницы */
+  --surface-1:var(--ink);          /* основная плоскость */
+  --surface-2:var(--ink-2);        /* панель на плоскости */
+  --surface-3:var(--ink-3);        /* панель на панели, поле ввода */
+  --surface-lit:rgba(226,180,120,.07);   /* «под лампой»: выбранное, своё */
+
+  --text-primary:var(--bone);
+  --text-body:var(--plaster);
+  --text-muted:var(--plaster-dim);
+  --text-faint:var(--plaster-faint);
+
+  --border:var(--hair);
+  --border-strong:var(--line);
+  --border-accent:var(--line-warm);
+
+  --accent:var(--tallow);          /* главное действие, «сейчас ваш ход» */
+  --accent-dim:var(--tallow-dim);
+  --danger:var(--ember);           /* казнить, уйти, ошибка */
+  --danger-soft:var(--ember-soft);
+  --success:var(--verdigris);      /* город, подтверждено */
+  --beyond:var(--bruise);          /* выбывшие, «за чертой» */
+
+  /* Роли различаются не только цветом (см. .role-*), но цвет нужен и здесь. */
+  --role-mafia:var(--ember);
+  --role-don:#a8402e;
+  --role-doctor:#8fb3d9;
+  --role-sheriff:var(--tallow);
+  --role-civilian:var(--verdigris);
+
+  /* Состояния, которых до сих пор не было ни у одного компонента, — и
+     именно поэтому сайт казался мёртвым: пока данные едут, экран пустой. */
+  --skeleton:rgba(241,236,225,.06);
+  --skeleton-shine:rgba(241,236,225,.13);
 
   /* совместимость со старой разметкой, пока она не переехала целиком */
   --paper:var(--plaster); --paper-dim:var(--plaster-dim); --paper-faint:var(--plaster-faint);
@@ -379,4 +435,85 @@ input[type=range]::-moz-range-thumb{
   display:block;height:100%;width:0;
   background:linear-gradient(90deg,rgba(226,180,120,.3),var(--tallow));
   box-shadow:0 0 12px rgba(226,180,120,.6);
+}
+
+
+/* =========================================================================
+   ПОДПИСИ У ИКОНОК
+
+   Главная жалоба на игровой экран — «непонятно, куда тыкать». Она рождалась
+   здесь: микрофон, озвучка и чат были голыми иконками. Иконка без подписи
+   узнаётся только той частью игроков, которая уже видела такую иконку в
+   другом приложении; всем остальным она не говорит ничего.
+
+   Правило теперь такое: иконка без подписи допустима только внутри игрового
+   HUD, где место действительно кончилось, и только если у неё есть
+   постоянное состояние (нажата / не нажата). Всё остальное подписано.
+   ========================================================================= */
+.iconbtn.labeled{
+  display:inline-flex;align-items:center;gap:6px;width:auto;padding:0 10px;
+  border-color:var(--border);
+}
+.iconbtn.labeled .lbl{font:600 12px/1 var(--sans);letter-spacing:.06em;white-space:nowrap}
+.iconbtn[aria-pressed=true]{color:var(--accent);border-color:var(--border-accent);background:var(--surface-lit)}
+/* Выключенное состояние должно читаться как выключенное, а не как «серое». */
+.iconbtn[aria-pressed=false] .lbl{color:var(--text-muted)}
+@media (max-width:560px){
+  /* На узком экране подпись уходит, но остаётся состояние: нажатая кнопка
+     подсвечена, и это по-прежнему видно без текста. */
+  .iconbtn.labeled{padding:0;width:44px}
+  .iconbtn.labeled .lbl{display:none}
+}
+
+/* =========================================================================
+   БЛОКНОТ: ярлык на месте
+   ========================================================================= */
+.note-chip{
+  display:inline-block;padding:1px 6px;border-radius:3px;
+  font:600 var(--t-3xs)/1.5 var(--sans);letter-spacing:.04em;
+  color:var(--tag,var(--accent));border:1px solid color-mix(in srgb,var(--tag,#e2b478) 55%,transparent);
+  background:color-mix(in srgb,var(--tag,#e2b478) 14%,transparent);
+}
+.noteopt{justify-content:flex-start;text-align:left;border-color:color-mix(in srgb,var(--tag) 50%,transparent)}
+.noteopt em{display:block;font-style:normal;font-size:var(--t-3xs);color:var(--text-faint);margin-top:2px}
+.noteopt.on{background:color-mix(in srgb,var(--tag) 18%,transparent);color:var(--text-primary)}
+
+/* =========================================================================
+   ЗАГРУЗКА И ПУСТОТА
+
+   Двух состояний не было ни у одного компонента, и от этого сайт казался
+   мёртвым: пока данные едут, экран пустой, а когда данных нет — тоже
+   пустой, и отличить одно от другого нельзя.
+   ========================================================================= */
+.skeleton{
+  border-radius:var(--r-sm);
+  background:linear-gradient(90deg,var(--skeleton) 0%,var(--skeleton-shine) 50%,var(--skeleton) 100%);
+  background-size:200% 100%;animation:sk 1.4s var(--ease-in-out) infinite;
+}
+.skeleton.line{height:1em;margin:.35em 0}
+.skeleton.line.short{width:42%}
+.skeleton.line.mid{width:68%}
+@keyframes sk{0%{background-position:120% 0}100%{background-position:-20% 0}}
+@media (prefers-reduced-motion:reduce){
+  .skeleton{animation:none;background:var(--skeleton)}
+}
+
+.empty{
+  display:grid;justify-items:center;gap:var(--s2);
+  padding:var(--s6) var(--s4);text-align:center;color:var(--text-muted);
+}
+.empty .glyph{font-size:var(--t-3xl);line-height:1;color:var(--text-faint);opacity:.6}
+.empty h4{font:600 var(--t-md)/1.3 var(--display);color:var(--text-body)}
+.empty p{font-size:var(--t-2xs);max-width:42ch;margin:0}
+
+/* Кнопка в работе: без этого игрок жмёт её второй раз и создаёт второй стол. */
+.btn[aria-busy=true]{position:relative;color:transparent!important;pointer-events:none}
+.btn[aria-busy=true]::after{
+  content:'';position:absolute;inset:0;margin:auto;width:16px;height:16px;
+  border:2px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;
+  animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){
+  .btn[aria-busy=true]::after{animation-duration:2.4s}
 }

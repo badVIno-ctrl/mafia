@@ -16,6 +16,7 @@
    ========================================================================= */
 
 import { createModels } from './models3d.js';
+import { createPipeline } from './render-pipeline.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -46,6 +47,14 @@ export async function mountStage(container, opts) {
 
   const THREE = await import('/vendor/three/three.module.js');
   const M = createModels(THREE, opts.config || {});
+
+  /* Уровень качества. Игрок мог выбрать его руками в настройках — тогда
+     уважаем выбор; иначе берём по классу устройства, а дальше кадр сам
+     понизит планку, если не успевает. */
+  const savedTier = (() => {
+    try { return localStorage.getItem('mafia.quality') || ''; } catch (e) { return ''; }
+  })();
+  let tierName = savedTier || (M.LOWQ ? 'light' : M.TIER === 'mid' ? 'balance' : 'cinema');
 
   /* ------------------------------------------------------------------ */
   /* рендерер, сцена, камера                                             */
@@ -83,6 +92,19 @@ export async function mountStage(container, opts) {
      видно: заполняющий свет здесь только чтобы тени не были чёрными
      дырами. Раньше ambient 1.2 и три заполняющих по 14 заливали сцену так,
      что тёмный костюм становился светлым, а кожа — фарфоровой. */
+  /* Бюджет заполняющего света.
+
+     Три точечных лампы по углам и «рампа» над сукном стояли здесь вместо
+     окружения: одна лампа физически не может осветить лица за столом, и без
+     заполнения сцена была нечитаема. Теперь окружение считается честно
+     (см. render-pipeline.js), и та же работа делается им. Если оставить и
+     то и другое, комната уходит в белое — поэтому при живом IBL заполнение
+     срезается почти полностью, а лампа остаётся ровно такой же.
+
+     Коэффициенты применяются в одном месте — в тексте фазы (LIGHT), — чтобы
+     не расходились. */
+  const FILL_K = { amb: 1, hemi: 1, fill: 1, table: 1 };
+
   const ambient = new THREE.AmbientLight(0x6a6070, 0.42);
   const hemi = new THREE.HemisphereLight(0x8b9bb4, 0x3a2c26, 0.34);
   const moon = new THREE.DirectionalLight(0x5878b8, 0);
@@ -179,6 +201,36 @@ export async function mountStage(container, opts) {
   el.addEventListener('touchend', () => { pinch = null; });
 
   /* ------------------------------------------------------------------ */
+  /* кадр: окружение, затенение, свечение, грейд                          */
+  /* ------------------------------------------------------------------ */
+  let pipe = null;
+  try {
+    pipe = await createPipeline(THREE, renderer, scene, camera, {
+      tier: tierName,
+      width: container.clientWidth || 640,
+      height: container.clientHeight || 360,
+      /* Экспозиция ниже прежних 1,34: раньше ею компенсировали отсутствие
+         окружения, теперь свет приходит и от комнаты. */
+      exposure: 1.18
+    });
+  } catch (e) {
+    /* Нет расширений, нет памяти, старый драйвер — рисуем как раньше.
+       Партия важнее картинки. */
+    pipe = null;
+  }
+  if (pipe && pipe.environment) {
+    FILL_K.amb = 0.14; FILL_K.hemi = 0.10; FILL_K.fill = 0.55; FILL_K.table = 0.55;
+    ambient.intensity *= FILL_K.amb;
+    hemi.intensity *= FILL_K.hemi;
+    fills.forEach(l => { l.intensity *= FILL_K.fill; });
+    tableLight.intensity *= FILL_K.table;
+    lamp.baseArea = 2.1;
+  } else if (lamp.area) {
+    lamp.area.intensity = 0;
+    lamp.baseArea = 0;
+  }
+
+  /* ------------------------------------------------------------------ */
   /* места за столом                                                     */
   /* ------------------------------------------------------------------ */
   let table = null;
@@ -273,7 +325,15 @@ export async function mountStage(container, opts) {
     lamp.nudge(0.05);
   }
 
-  function setSpeaker(id) { speakerId = id || null; }
+  function setSpeaker(id) {
+    speakerId = id || null;
+    /* Резкость идёт за говорящим: остальной стол мягко уходит из фокуса.
+       Это единственный способ показать «слово у него» без подписи. */
+    if (pipe) {
+      const s = speakerId ? seatsById.get(speakerId) : null;
+      pipe.focusOn(s ? s.figure : null);
+    }
+  }
 
   function setTargets(ids) { targets = new Set(ids || []); }
 
@@ -283,6 +343,9 @@ export async function mountStage(container, opts) {
     const night = p === 'night';
     lightTween = { t: 0, night, from: snapshotLight() };
     nightTarget = night ? 1 : 0;
+    /* Цвет кадра меняется вместе со светом и за то же время: иначе грейд
+       «догоняет» лампу и на секунду ночь выглядит холодным днём. */
+    if (pipe) pipe.setGrade(p, 1500);
   }
 
   function snapshotLight() {
@@ -319,10 +382,33 @@ export async function mountStage(container, opts) {
     if (!g) return;
     if (g.players) {
       g.players.forEach(p => { if (!p.alive) setDead(p.id); });
+      /* Кто уже отдал голос. Стол должен видеть это на сцене, а не в
+         списке сбоку: двадцать поднятых рук — самый сильный кадр партии,
+         и он же отвечает на вопрос «мы ждём кого?». */
+      const voting = g.phase === 'vote' || g.phase === 'runoff';
+      g.players.forEach(p => {
+        const s = seatsById.get(p.id);
+        if (!s || s.dead || !s.figure.userData.raiseHand) return;
+        s.figure.userData.raiseHand(voting && p.voted ? 1 : 0);
+      });
     }
     if (g.phase) setPhase(g.phase);
     if ('speakerId' in g) setSpeaker(g.speakerId);
     if (g.targets) setTargets(g.targets);
+  }
+
+  /* Короткая реакция на событие партии. Сцена не решает, когда её показать —
+     это делает страница, которая читает протокол: «на вас показали»,
+     «проверка сошлась», «казнили своего». */
+  function react(id, kind) {
+    const s = seatsById.get(id);
+    if (s && !s.dead && s.figure.userData.react) s.figure.userData.react(kind);
+  }
+
+  /** Выражение лица держится, пока его не сменят. */
+  function express(id, e) {
+    const s = seatsById.get(id);
+    if (s && !s.dead && s.figure.userData.express) s.figure.userData.express(e);
   }
 
   /* ------------------------------------------------------------------ */
@@ -375,7 +461,13 @@ export async function mountStage(container, opts) {
         degraded = true;
         pixelCap = Math.max(1, pixelCap - 0.5);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pixelCap));
-        if (fps < 24) renderer.shadowMap.enabled = false;
+        /* Понижаем не тени, а уровень целиком: сначала уходит затенение и
+           размытие по глубине, и только на совсем слабом железе — тени.
+           Раньше единственной реакцией было отключение shadowMap, после
+           которого фигуры повисали в воздухе без опоры. */
+        if (pipe && pipe.tier === 'cinema') pipe.setTier('balance');
+        else if (pipe && pipe.tier === 'balance' && fps < 26) pipe.setTier('light');
+        if (fps < 22) renderer.shadowMap.enabled = false;
       }
     }
 
@@ -394,13 +486,14 @@ export async function mountStage(container, opts) {
       const e = t * t * (3 - 2 * t);
       lamp.baseSpot = lerp(f.spot, to.spot, e);
       lamp.basePoint = lerp(f.point, to.point, e);
+      lamp.baseArea = lerp(f.spot, to.spot, e) * 0.062;
       lamp.glowLevel = lerp(f.glow, to.glow, e);
-      ambient.intensity = lerp(f.amb, to.amb, e);
-      hemi.intensity = lerp(f.hemi, to.hemi, e);
+      ambient.intensity = lerp(f.amb, to.amb, e) * FILL_K.amb;
+      hemi.intensity = lerp(f.hemi, to.hemi, e) * FILL_K.hemi;
       moon.intensity = lerp(f.moon, to.moon, e);
       scene.fog.density = lerp(f.fog, to.fog, e);
-      fills.forEach(l => { l.intensity = lerp(f.fill, to.fill, e); });
-      tableLight.intensity = lerp(f.table, to.table, e);
+      fills.forEach(l => { l.intensity = lerp(f.fill, to.fill, e) * FILL_K.fill; });
+      tableLight.intensity = lerp(f.table, to.table, e) * FILL_K.table;
       emberGlow.intensity = lerp(f.ember, to.ember, e);
       ambient.color.copy(f.ambColor).lerp(new THREE.Color(to.ambColor), e);
       hemi.color.copy(f.hemiColor).lerp(new THREE.Color(to.hemiColor), e);
@@ -472,7 +565,8 @@ export async function mountStage(container, opts) {
       }
     }
 
-    renderer.render(scene, camera);
+    if (pipe) pipe.render(dt);
+    else renderer.render(scene, camera);
   }
 
   function resize() {
@@ -483,6 +577,7 @@ export async function mountStage(container, opts) {
     el.style.height = h + 'px';
     camera.aspect = Math.max(0.2, w / Math.max(1, h));
     camera.updateProjectionMatrix();
+    if (pipe) pipe.resize(w * renderer.getPixelRatio(), h * renderer.getPixelRatio());
     /* После поворота телефона кадр меняет пропорции: пересчитываем отход,
        но только если игрок сам не отъехал колесом. */
     if (cam.fit && Math.abs(cam.dist - fitDistance(cam.fit)) > 2.6) cam.dist = fitDistance(cam.fit);
@@ -500,6 +595,7 @@ export async function mountStage(container, opts) {
   return {
     THREE, renderer, scene, camera, lamp,
     setSeats, sync, setPhase, setSpeaker, setTargets, setDead, project, resize,
+    react, express,
     /* удар по столу: лампа качнётся, кадр дрогнет */
     shake(k) {
       lamp.nudge(k || 0.06);
@@ -513,9 +609,18 @@ export async function mountStage(container, opts) {
       })();
     },
     seatCount() { return seats.length; },
+    /* Ручной выбор качества из настроек: «Кино», «Баланс», «Лёгкий». */
+    setQuality(name) {
+      if (['cinema', 'balance', 'light'].indexOf(name) < 0) return;
+      try { localStorage.setItem('mafia.quality', name); } catch (e) {}
+      if (pipe) pipe.setTier(name);
+    },
+    quality() { return pipe ? pipe.tier : 'light'; },
+
     dispose() {
       alive = false;
       cancelAnimationFrame(raf);
+      if (pipe) pipe.dispose();
       if (ro) ro.disconnect();
       window.removeEventListener('resize', resize);
       clearSeats();

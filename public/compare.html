@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<title>Слепое сравнение — Мафия</title>
+<style>
+  html,body{margin:0;background:#070607;color:#cfc7bd;font:13px/1.4 system-ui,sans-serif;overflow:hidden}
+  #wrap{display:flex;height:100vh;width:100vw}
+  .half{position:relative;flex:1 1 50%;min-width:0}
+  .half canvas{display:block;width:100%;height:100%}
+  .tag{position:absolute;left:12px;top:10px;padding:3px 9px;border:1px solid #4a4038;
+       background:#0b0908cc;letter-spacing:.14em;font-size:11px;text-transform:uppercase}
+  .split{width:1px;background:#2a2320;flex:0 0 1px}
+  #answer{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);
+          padding:4px 10px;border:1px solid #4a4038;background:#0b0908ee;font-size:11px}
+  #answer[hidden]{display:none}
+</style>
+</head>
+<body>
+<!--
+  Слепое сравнение двух пайплайнов рендера на одной и той же сцене.
+
+  Зачем именно слепое. Когда правишь картинку сам, новое всегда кажется
+  лучше: ты знаешь, сколько в него вложено. Единственный способ судить
+  честно — не знать, где какой вариант. Страница ставит два вида рядом,
+  подписывает их «А» и «Б», а какой из них новый — решает семя в адресе и
+  раскрывается только по &reveal=1.
+
+      /compare.html?view=head&seed=3&pair=42
+      /compare.html?view=table&n=8&phase=night&pair=7&reveal=1
+
+  Параметры:
+    view   head | face | table | three | hands   — что снимаем
+    n      сколько людей за столом (для table)
+    seed   семя фигуры
+    phase  day | night | vote | morning
+    pair   номер пары: от него зависит, слева новый вариант или справа
+    reveal 1 — показать ответ внизу
+    only   legacy | modern — оба вида одним пайплайном (для отладки)
+-->
+<div id="wrap">
+  <div class="half" id="left"><span class="tag">А</span></div>
+  <div class="split"></div>
+  <div class="half" id="right"><span class="tag">Б</span></div>
+</div>
+<div id="answer" hidden></div>
+
+<script type="module">
+import * as THREE from '/vendor/three/three.module.js';
+import { createModels } from '/js/models3d.js';
+import { createPipeline } from '/js/render-pipeline.js';
+
+const q = new URLSearchParams(location.search);
+const VIEW = q.get('view') || 'head';
+const SEED = +(q.get('seed') || 3);
+const PHASE = q.get('phase') || 'day';
+const N = Math.max(1, +(q.get('n') || (VIEW === 'table' || VIEW === 'three' ? 8 : 1)));
+const PAIR = +(q.get('pair') || 1);
+const ONLY = q.get('only') || '';
+
+/* Какой вариант слева. Считаем от номера пары, а не от Math.random():
+   иначе один и тот же снимок нельзя пересдать и сравнить с прошлым. */
+const modernLeft = ONLY ? (ONLY === 'modern') : (PAIR * 2654435761 % 2 === 0);
+
+const LIGHT = {
+  day:     { amb: 0.42, hemi: 0.34, fill: 4.6, table: 3.4, spot: 34, point: 5.6, area: 5.2, fog: 0.022, moon: 0 },
+  night:   { amb: 0.16, hemi: 0.16, fill: 0.9, table: 0.7, spot: 5.2, point: 1.1, area: 0.9, fog: 0.046, moon: 1.1 },
+  vote:    { amb: 0.34, hemi: 0.26, fill: 2.8, table: 4.4, spot: 44, point: 7.0, area: 6.6, fog: 0.026, moon: 0 },
+  morning: { amb: 0.52, hemi: 0.44, fill: 6.0, table: 3.2, spot: 27, point: 4.6, area: 4.4, fog: 0.018, moon: 0 }
+}[PHASE] || null;
+
+const COATS = [0x6a4b52, 0x4c5a63, 0x6b5f45, 0x543f4d, 0x455448, 0x74544a, 0x3f4a5c, 0x5f5340];
+
+/* Каждая половина — своя сцена, свой рендерер, свой пайплайн. Делить сцену
+   между двумя рендерерами нельзя: у материалов кэшируются программы, и
+   «старый» вариант получил бы патчи нового. */
+async function build(host, modern) {
+  const W = host.clientWidth, H = host.clientHeight;
+  const renderer = new THREE.WebGLRenderer({ antialias: !modern, alpha: false });
+  renderer.setPixelRatio(1);
+  renderer.setSize(W, H, false);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  if (!modern) {
+    /* Старый вариант ровно такой, каким он был до правок: ACES с той же
+       экспозицией, никакого окружения, никакого пост-процесса. */
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.34;
+  }
+  host.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0809);
+  scene.fog = new THREE.FogExp2(0x0a0809, LIGHT.fog);
+  const camera = new THREE.PerspectiveCamera(VIEW === 'head' || VIEW === 'face' ? 34 : 45, W / H, 0.03, 100);
+
+  const M = createModels(THREE, {});
+  const room = M.buildRoom(scene);
+  const lamp = M.buildLamp(scene, { ceilY: 4.5, bulbY: 2.2 });
+  lamp.baseSpot = LIGHT.spot;
+  lamp.basePoint = LIGHT.point;
+  lamp.baseArea = LIGHT.area;
+  /* Площадной свет — часть нового пайплайна: без таблицы LTC он всё равно
+     не работает, а в старом варианте его быть не должно. */
+  if (!modern && lamp.area) lamp.area.intensity = 0;
+
+  /* Бюджет света.
+
+     Заполняющие источники в старом риге стоят вместо окружения: три
+     точечных лампы по углам комнаты и «рампа» над сукном подсвечивали то,
+     чего одна лампа осветить не может. Когда появляется IBL, эта работа
+     достаётся ему — и если оставить оба, сцена уходит в белое. Поэтому у
+     нового пайплайна свой бюджет: лампа та же, а заполнение вырезано почти
+     полностью. */
+  const K = modern ? { amb: 0.14, hemi: 0.10, fill: 0.55, table: 0.55 } : { amb: 1, hemi: 1, fill: 1, table: 1 };
+  scene.add(new THREE.AmbientLight(0x6a6070, LIGHT.amb * K.amb));
+  scene.add(new THREE.HemisphereLight(0x8b9bb4, 0x3a2c26, LIGHT.hemi * K.hemi));
+  if (LIGHT.moon) {
+    const moon = new THREE.DirectionalLight(0x5878b8, LIGHT.moon);
+    moon.position.set(-6, 7, -5);
+    scene.add(moon);
+  }
+  [[0, 2.6, 3.4, 0xffd7ad], [-3.2, 2.4, -2.2, 0x9db4de], [3.2, 2.4, -2.2, 0xdda98a]].forEach(c => {
+    const l = new THREE.PointLight(c[3], LIGHT.fill * K.fill, 12, 2);
+    l.position.set(c[0], c[1], c[2]);
+    scene.add(l);
+  });
+  const bounce = new THREE.PointLight(0xffe0b4, LIGHT.table * K.table, 3.2, 2);
+  bounce.position.set(0, 0.94, 0);
+  scene.add(bounce);
+
+  const figures = [];
+  if (VIEW === 'table' || VIEW === 'three') {
+    const table = M.buildTable(scene, N);
+    const R = table.seatRadius;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const g = new THREE.Group();
+      g.position.set(Math.sin(a) * R, 0, Math.cos(a) * R);
+      g.lookAt(0, 0, 0);
+      scene.add(g);
+      const chair = M.buildChair(); chair.position.z = -0.30; g.add(chair);
+      const f = M.buildFigure(COATS[i % COATS.length], i % 5 === 0 ? 'cap' : 'hair', SEED + i,
+        { sex: i % 3 === 1 ? 'f' : 'm', pose: i % 4 });
+      g.add(f); figures.push(f);
+    }
+    const d = VIEW === 'three' ? R + 1.5 : R + 2.3;
+    camera.position.set(d * 0.62, VIEW === 'three' ? 1.62 : 2.05, d * 0.78);
+    camera.lookAt(0, 1.02, 0);
+  } else {
+    const table = M.buildTable(scene, 6);
+    const g = new THREE.Group();
+    g.position.set(0, 0, table.seatRadius);
+    g.lookAt(0, 0, 0);
+    scene.add(g);
+    const chair = M.buildChair(); chair.position.z = -0.30; g.add(chair);
+    const f = M.buildFigure(COATS[SEED % COATS.length], 'hair', SEED, { sex: SEED % 3 === 1 ? 'f' : 'm', pose: 0 });
+    g.add(f); figures.push(f);
+
+    if (VIEW === 'hands') {
+      camera.position.set(0.34, 1.06, table.seatRadius - 0.52);
+      camera.lookAt(0.02, 0.80, table.seatRadius - 0.16);
+    } else {
+      /* Голова в упор. Камера стоит на уровне глаз и чуть в стороне: строго
+         в лоб человеческое лицо не читается ни в жизни, ни в кадре — нужен
+         три четверти, чтобы был виден объём носа и скулы. Высота 1,235 —
+         это центр черепа из BODY.skull, то есть ровно линия глаз. */
+      const close = VIEW === 'face' ? 0.42 : 0.62;
+      camera.position.set(close * 0.42, 1.255, table.seatRadius - close);
+      camera.lookAt(0, 1.225, table.seatRadius - 0.10);
+    }
+  }
+
+  let pipe = null;
+  if (modern) {
+    pipe = await createPipeline(THREE, renderer, scene, camera, {
+      tier: 'cinema', width: W, height: H, exposure: 1.22
+    });
+    pipe.setGrade(PHASE, 0);
+    if (figures[0]) pipe.focusOn(figures[0]);
+  }
+
+  /* Мимика и жест, чтобы сравнивать живые лица, а не покойников. */
+  figures.forEach((f, i) => {
+    if (!f.userData.express) return;
+    if (i % 4 === 0) f.userData.express({ browUp: 0.5, smile: 0.25 });
+    else if (i % 4 === 1) f.userData.express({ browDown: 0.55, squint: 0.4, press: 0.3 });
+    else if (i % 4 === 2) f.userData.express({ smile: 0.6, squint: 0.35 });
+    if (PHASE === 'vote' && f.userData.raiseHand) f.userData.raiseHand(i % 3 === 0 ? 1 : 0);
+  });
+
+  /* Один и тот же «момент времени» для обеих половин: иначе сравниваешь
+     не пайплайны, а случайные фазы дыхания. */
+  const T0 = 1000;
+  for (let step = 0; step < 40; step++) {
+    const t = T0 + step * 16;
+    lamp.animate(t, 16);
+    figures.forEach((f, i) => f.userData.animate(t, 16, {
+      speaking: i === 0 && PHASE !== 'night', night: PHASE === 'night'
+    }));
+  }
+
+  function draw() {
+    if (pipe) pipe.render(16);
+    else renderer.render(scene, camera);
+  }
+  draw();
+  /* Ещё пара кадров: SMAA и GTAO греют свои буферы на первом проходе. */
+  draw(); draw();
+  return { draw };
+}
+
+const L = await build(document.getElementById('left'), modernLeft);
+const R = await build(document.getElementById('right'), !modernLeft);
+
+if (q.get('reveal') === '1') {
+  const a = document.getElementById('answer');
+  a.hidden = false;
+  a.textContent = 'А — ' + (modernLeft ? 'новый' : 'старый') + ' · Б — ' + (modernLeft ? 'старый' : 'новый');
+}
+
+/* Стенд снимают из скрипта: он ждёт этот флаг. */
+window.__compareReady = { modernLeft: modernLeft, view: VIEW, phase: PHASE, pair: PAIR };
+document.title = 'ready';
+</script>
+</body>
+</html>
