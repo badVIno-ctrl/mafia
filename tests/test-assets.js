@@ -11,7 +11,12 @@ const fs = require('fs');
 const path = require('path');
 
 let fails = 0;
-const ok = (c, m) => { if (!c) { fails++; console.log('  FAIL: ' + m); } else console.log('  ✓ ' + m); };
+const ok = (c, m, extra) => {
+  if (!c) {
+    fails++;
+    console.log('  FAIL: ' + m + (extra ? '\n        ' + String(extra).slice(0, 400) : ''));
+  } else console.log('  ✓ ' + m);
+};
 const root = path.join(__dirname, '..');
 const read = f => fs.readFileSync(path.join(root, f), 'utf8');
 
@@ -213,6 +218,60 @@ const noComments = t => t.replace(/\/\*[\s\S]*?\*\//g, ' ');
   const m = HIDDEN_BREAKER.exec(noComments(read(f)));
   ok(!m, 'нет display:…!important по id, перебивающего [hidden]: ' + f +
     (m ? ' — «' + m[0].slice(0, 60) + '»' : ''));
+});
+
+/* Мёртвая правка в медиазапросе. Классический промах каскада: правило для
+   сенсорных экранов пишут выше, а ниже в том же файле тот же селектор с той
+   же специфичностью объявляет то же свойство — и более позднее объявление
+   отменяет правку. В bots.html так восемь месяцев жил крестик 30 пикселей
+   шириной, при том что рядом лежал комментарий «делаем 44x44».
+   Проверяем ровно это: селектор из медиазапроса не должен повторяться ниже
+   с тем же свойством вне медиазапроса. */
+function deadMediaRules(css) {
+  const clean = noComments(css);
+  const dead = [];
+  /* Границы медиазапросов: считаем вложенность фигурных скобок. */
+  const blocks = [];
+  let i = 0;
+  while ((i = clean.indexOf('@media', i)) >= 0) {
+    const open = clean.indexOf('{', i);
+    if (open < 0) break;
+    let depth = 0, j = open;
+    for (; j < clean.length; j++) {
+      if (clean[j] === '{') depth++;
+      else if (clean[j] === '}') { depth--; if (!depth) break; }
+    }
+    blocks.push({ start: open, end: j, body: clean.slice(open + 1, j) });
+    i = j + 1;
+  }
+  const inMedia = pos => blocks.some(b => pos > b.start && pos < b.end);
+  blocks.forEach(b => {
+    const rx = /([.#][\w-]+)\s*\{([^}]*)\}/g;
+    let m;
+    while ((m = rx.exec(b.body))) {
+      const sel = m[1];
+      const props = (m[2].match(/([a-z-]+)\s*:/g) || []).map(x => x.replace(':', '').trim());
+      props.forEach(prop => {
+        if (/!important/.test(m[2])) return;   // важное правило переспорит и позднее
+        /* Ищем то же объявление ниже медиазапроса и вне медиазапросов. */
+        const after = new RegExp('\\' + sel + '\\s*\\{[^}]*\\b' + prop + '\\s*:', 'g');
+        let k;
+        while ((k = after.exec(clean))) {
+          if (k.index > b.end && !inMedia(k.index)) {
+            dead.push(sel + ' { ' + prop + ' } — перебивается ниже, строка ' +
+              (clean.slice(0, k.index).split('\n').length));
+            break;
+          }
+        }
+      });
+    }
+  });
+  return dead;
+}
+[].concat(PAGES, CSS).forEach(f => {
+  const dead = deadMediaRules(read(f));
+  ok(dead.length === 0, 'ни одна правка в медиазапросе не отменена ниже: ' + f,
+    dead.slice(0, 4).join(' | '));
 });
 
 /* Слои сцены: плоский стол не имеет права закрывать планшет фазы, док

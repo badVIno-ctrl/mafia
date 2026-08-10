@@ -401,13 +401,18 @@ body.installed #btnInstall{display:none}
 @media (pointer:coarse){
   .tbtn{width:42px;height:42px}
   .btn,.opt,button{min-height:44px}
-  /* Крестики панелей: правило выше тянуло только высоту, ширина
-     оставалась 30px — в такой крестик палецом не попасть. На сенсорных
-     экранах делаем полноценный квадрат 44x44, на мыши остаётся аккуратный 30px. */
-  .panelClose{width:44px;height:44px}
+  /* Крестики панелей вырастают до 44x44 — но правило стоит не здесь, а после
+     объявления .panelClose ниже: иначе более позднее width:30px его
+     перебивает по каскаду, и вся правка оказывается мёртвой. */
 }
-/* ---------- мобильный / узкий экран ---------- */
-#mobTabs{display:none;position:fixed;z-index:7;left:12px;bottom:16px;flex-direction:column;gap:7px}
+/* ---------- мобильный / узкий экран ----------
+   Док переключения панелей. Всё, кроме display, объявлено здесь и только
+   здесь: ниже в файле лежала вторая копия этого правила, и она перебивала
+   по каскаду и медиазапросы, и сам display:none — из-за чего два
+   телефонных переключателя висели в углу настольного экрана, где обе
+   панели и без них открыты. */
+#mobTabs{display:none;position:fixed;z-index:8;flex-direction:row;gap:7px;
+  left:calc(14px + var(--sal));bottom:calc(16px + var(--sab))}
 @media (max-width:1080px){
   #leftpanel{width:224px}
   #rightpanel{width:270px}
@@ -509,15 +514,22 @@ body[data-dread="5"] #vignette::after{content:'';position:absolute;inset:0;backg
   color:var(--paper-faint);display:grid;place-items:center;font-size:13px;line-height:1;
   background:rgba(0,0,0,.3);transition:.16s}
 .panelClose:hover{color:var(--gold);border-color:var(--gold)}
+/* Палец в крестик 30x30 не попадает. Правка эта в файле уже была — но стояла
+   выше самого объявления .panelClose, и та же специфичность с более поздним
+   width:30px её отменяла: кнопка так и оставалась 30 в ширину и 44 в высоту.
+   Отсюда правило и стоит здесь, после объявления. */
+@media (pointer:coarse){
+  .panelClose{width:44px;height:44px}
+}
 #leftHead{display:flex;align-items:center;gap:8px;margin:-2px 0 10px}
 #leftHead .eyebrow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ---------- панели закрываются на любом экране ---------- */
 #leftpanel.closed,#rightpanel.closed{display:none!important}
 
-/* ---------- док переключения панелей ---------- */
-#mobTabs{display:flex;flex-direction:row;gap:7px;
-  left:calc(14px + var(--sal));bottom:calc(16px + var(--sab));z-index:8}
+/* ---------- док переключения панелей ----------
+   Раскладка дока объявлена выше, рядом с display:none. Здесь только вид
+   кнопок: второе объявление #mobTabs отменяло бы медиазапросы. */
 #mobTabs .tbtn{margin-left:0;background:rgba(8,6,9,.86);backdrop-filter:blur(6px)}
 #mobTabs .tbtn.on{color:var(--gold);border-color:var(--gold)}
 
