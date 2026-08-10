@@ -16,6 +16,8 @@
      const M = createModels(THREE, { ROLE, ROLE_INFO });
    ========================================================================= */
 
+import { createHuman } from '/js/human.js';
+
 export function createModels(THREE, cfg) {
   cfg = cfg || {};
 
@@ -1668,7 +1670,7 @@ export function createModels(THREE, cfg) {
     };
   }
 
-  function buildFigure(color, hatKind, seed, opts) {
+  function buildFigureLegacy(color, hatKind, seed, opts) {
     opts = opts || {};
     const female = opts.sex === 'f';
     const grp = new THREE.Group();
@@ -2193,6 +2195,22 @@ export function createModels(THREE, cfg) {
     });
   }
 
+  /* -------------------------------------------------------------------------
+     ЛЮДИ
+
+     Фигуры собирает отдельная мастерская human.js: скелет, скиннинг, лицо
+     полями, мимика морф-таргетами, PBR-кожа. Старая сборка из труб и шаров
+     осталась под именем buildFigureLegacy — на ней стоит слепое сравнение
+     «до/после» в стенде фигур, и выкидывать её до конца работы нельзя.
+     ------------------------------------------------------------------------- */
+  const HUMAN = createHuman(THREE, { METRICS, TIER, LOWQ, sg, PAL });
+
+  function buildFigure(color, hatKind, seed, opts) {
+    opts = opts || {};
+    if (opts.legacy) return buildFigureLegacy(color, hatKind, seed, opts);
+    return HUMAN.buildFigure(color, hatKind, seed, opts);
+  }
+
   return {
     PAL, TIER, LOWQ, sg, prng, cvs, roundRect, texFromCanvas, disposeTree,
     METRICS, tableRadiusFor, loft, limb, buildHand,
@@ -2200,6 +2218,7 @@ export function createModels(THREE, cfg) {
     cardBackCanvas, cardFaceCanvas, nameCanvas, crossCanvas,
     skinCanvas,
     BODY, skullPoint, buildEye, buildHair,
-    buildRoom, buildLamp, buildTable, buildChair, buildFigure
+    buildRoom, buildLamp, buildTable, buildChair,
+    buildFigure, buildFigureLegacy, HUMAN
   };
 }

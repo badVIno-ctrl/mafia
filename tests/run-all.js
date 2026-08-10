@@ -40,11 +40,17 @@ const must = [
   'public/js/api.js', 'public/js/hub.js', 'public/js/online.js', 'public/js/speech.js',
   'public/js/icons.js', 'public/js/voice.js', 'public/js/rtc.js', 'public/js/curtain.js',
   'public/js/models3d.js', 'public/js/stage3d.js', 'public/js/view-mode.js',
+  'public/js/human.js', 'public/js/render-stack.js',
+  'public/vendor/three/postprocessing/EffectComposer.js',
+  'public/vendor/three/postprocessing/GTAOPass.js',
+  'public/vendor/three/postprocessing/UnrealBloomPass.js',
+  'public/vendor/three/postprocessing/SMAAPass.js',
   'public/vendor/three/three.module.js',
   'tests/test-speech.js', 'tests/test-chat.js', 'tests/test-offline.js',
   'tests/test-signal.js', 'tests/test-assets.js', 'tests/test-bots.js',
   'tests/test-lobby.js', 'tests/test-access.js', 'tests/test-speeches.js',
   'tests/test-seed.js', 'tests/test-inquest.js', 'tests/shot.js', 'tests/lab-shots.js',
+  'tests/ab-figures.js',
   'public/figure-lab.html'
 ];
 let miss = 0;

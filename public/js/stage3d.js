@@ -46,6 +46,11 @@ export async function mountStage(container, opts) {
 
   const THREE = await import('/vendor/three/three.module.js');
   const M = createModels(THREE, opts.config || {});
+  /* Постобработка и IBL живут отдельным модулем и грузятся динамически: если
+     их не удалось поднять (старый браузер, нет float-текстур), партия должна
+     идти без них, а не падать. */
+  let RS = null;
+  try { RS = await import('/js/render-stack.js'); } catch (e) { RS = null; }
 
   /* ------------------------------------------------------------------ */
   /* рендерер, сцена, камера                                             */
@@ -62,7 +67,7 @@ export async function mountStage(container, opts) {
   renderer.shadowMap.enabled = !M.LOWQ;
   renderer.shadowMap.type = M.TIER === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.34;
+  renderer.toneMappingExposure = RS ? RS.LIGHT_RIG.exposure : 1.34;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.domElement.style.display = 'block';
   container.appendChild(renderer.domElement);
@@ -83,14 +88,18 @@ export async function mountStage(container, opts) {
      видно: заполняющий свет здесь только чтобы тени не были чёрными
      дырами. Раньше ambient 1.2 и три заполняющих по 14 заливали сцену так,
      что тёмный костюм становился светлым, а кожа — фарфоровой. */
-  const ambient = new THREE.AmbientLight(0x6a6070, 0.42);
-  const hemi = new THREE.HemisphereLight(0x8b9bb4, 0x3a2c26, 0.34);
+  /* Числа света теперь одни на все сцены — в render-stack.js. Раньше их было
+     три набора (боты, сеть, стенд), и они расходились. */
+  const RIG = RS ? RS.LIGHT_RIG : { spot: 34, point: 5.6, ambient: 0.42, hemi: 0.34, fill: 4.6, table: 3.4, exposure: 1.34, envIntensity: { day: 0, night: 0 } };
+  const ambient = new THREE.AmbientLight(0x6a6070, RIG.ambient);
+  const hemi = new THREE.HemisphereLight(0x8b9bb4, 0x3a2c26, RIG.hemi);
   const moon = new THREE.DirectionalLight(0x5878b8, 0);
   moon.position.set(-6, 7, -5);
   const emberGlow = new THREE.PointLight(0xc4563a, 0, 7, 2);
   emberGlow.position.set(0, 1.55, 0);
   const fills = [];
-  [[0, 2.6, 3.4, 0xffd7ad, 5], [-3.2, 2.4, -2.2, 0x9db4de, 3.4], [3.2, 2.4, -2.2, 0xdda98a, 3.4]].forEach(c => {
+  [[0, 2.6, 3.4, 0xffd7ad, RIG.fill * 1.1], [-3.2, 2.4, -2.2, 0x9db4de, RIG.fill * 0.75],
+   [3.2, 2.4, -2.2, 0xdda98a, RIG.fill * 0.75]].forEach(c => {
     const l = new THREE.PointLight(c[3], c[4], 12, 2);
     l.position.set(c[0], c[1], c[2]);
     fills.push(l); scene.add(l);
@@ -101,7 +110,7 @@ export async function mountStage(container, opts) {
      отражённый от стола, поэтому здесь стоит тёплая точка чуть выше сукна:
      она подсвечивает лица и кисти снизу-спереди, как театральная рампа.
      Раньше на этом месте стоял ещё один прожектор сверху. */
-  const tableLight = new THREE.PointLight(0xffe0b4, 3.4, 3.2, 2);
+  const tableLight = new THREE.PointLight(0xffe0b4, RIG.table, 3.2, 2);
   tableLight.position.set(0, 0.94, 0);
   scene.add(ambient, hemi, moon, emberGlow, tableLight);
 
@@ -251,6 +260,12 @@ export async function mountStage(container, opts) {
       seatsById.set(p.id, s);
     });
 
+    /* Фигуры садятся за стол уже после того, как поднялся слой картинки, и
+       их материалы не получили силу отражённого света. Без этой строки новые
+       люди светятся вдвое ярче комнаты — заметно сразу, как только кто-то
+       подсел к столу. */
+    if (stack) stack.setEnvIntensity(stack.envIntensity);
+
     cam.fit = R;
     cam.dist = fitDistance(R);
     /* Смотрим со стороны своего места — но не строго в затылок, а вполоборота,
@@ -290,18 +305,24 @@ export async function mountStage(container, opts) {
       spot: lamp.baseSpot, point: lamp.basePoint, amb: ambient.intensity, hemi: hemi.intensity,
       moon: moon.intensity, fog: scene.fog.density, fill: fills[0].intensity, table: tableLight.intensity,
       ambColor: ambient.color.clone(), hemiColor: hemi.color.clone(), glow: lamp.glowLevel,
-      ember: emberGlow.intensity
+      ember: emberGlow.intensity,
+      env: stack ? stack.envIntensity : 0
     };
   }
 
   /* Куда светим в каждой фазе. Ночь — почти без света, только лампа и луна;
      голосование — жёсткий верхний свет; смерть — короткая вспышка угля. */
+  /* Все интенсивности пересчитаны от общего рига: пятно 34 выбивало сукно,
+     кисти и рукава в чистый белый независимо от их цвета — под таким светом
+     любая ткань становится кремовой. Теперь основной свет доносит отражённая
+     комната (IBL), а лампа только акцентирует. */
+  const S = RIG.spot / 34, Pt = RIG.point / 5.6, F = RIG.fill / 4.6, Tb = RIG.table / 3.4;
   const LIGHT = {
-    day: { spot: 34, point: 5.6, amb: 0.42, hemi: 0.34, moon: 0, fog: 0.022, fill: 4.6, table: 3.4, glow: 1, ember: 0, ambColor: 0x6a6070, hemiColor: 0x8b9bb4 },
-    night: { spot: 5.2, point: 1.1, amb: 0.16, hemi: 0.16, moon: 1.1, fog: 0.046, fill: 0.9, table: 0.7, glow: 0.14, ember: 0, ambColor: 0x3a4a70, hemiColor: 0x56769f },
-    vote: { spot: 44, point: 7, amb: 0.34, hemi: 0.26, moon: 0, fog: 0.026, fill: 2.8, table: 4.4, glow: 1, ember: 0.6, ambColor: 0x6d5f5a, hemiColor: 0x8b8a86 },
-    morning: { spot: 27, point: 4.6, amb: 0.52, hemi: 0.44, moon: 0, fog: 0.018, fill: 6, table: 3.2, glow: 0.8, ember: 0, ambColor: 0x7a7268, hemiColor: 0xa8b0bb },
-    over: { spot: 18, point: 3.4, amb: 0.28, hemi: 0.22, moon: 0.4, fog: 0.03, fill: 2.2, table: 2.1, glow: 0.6, ember: 1.1, ambColor: 0x5c4c52, hemiColor: 0x6f6a72 }
+    day: { spot: 34 * S, point: 5.6 * Pt, amb: 0.42 * (RIG.ambient / 0.42), hemi: 0.34 * (RIG.hemi / 0.34), moon: 0, fog: 0.022, fill: 4.6 * F, table: 3.4 * Tb, glow: 1, ember: 0, ambColor: 0x6a6070, hemiColor: 0x8b9bb4, grade: 'day', env: RIG.envIntensity.day },
+    night: { spot: 5.2 * S, point: 1.1 * Pt, amb: 0.16, hemi: 0.16, moon: 1.1, fog: 0.046, fill: 0.9 * F, table: 1.5 * Tb, glow: 0.14, ember: 0, ambColor: 0x3a4a70, hemiColor: 0x56769f, grade: 'night', env: RIG.envIntensity.night },
+    vote: { spot: 44 * S, point: 7 * Pt, amb: 0.34, hemi: 0.26, moon: 0, fog: 0.026, fill: 2.8 * F, table: 4.4 * Tb, glow: 1, ember: 0.6, ambColor: 0x6d5f5a, hemiColor: 0x8b8a86, grade: 'vote', env: RIG.envIntensity.day },
+    morning: { spot: 27 * S, point: 4.6 * Pt, amb: 0.52, hemi: 0.44, moon: 0, fog: 0.018, fill: 6 * F, table: 3.2 * Tb, glow: 0.8, ember: 0, ambColor: 0x7a7268, hemiColor: 0xa8b0bb, grade: 'day', env: RIG.envIntensity.day * 1.2 },
+    over: { spot: 18 * S, point: 3.4 * Pt, amb: 0.28, hemi: 0.22, moon: 0.4, fog: 0.03, fill: 2.2 * F, table: 2.1 * Tb, glow: 0.6, ember: 1.1, ambColor: 0x5c4c52, hemiColor: 0x6f6a72, grade: 'curtain', env: RIG.envIntensity.night }
   };
   function lightFor(p) {
     if (p === 'night') return LIGHT.night;
@@ -404,6 +425,14 @@ export async function mountStage(container, opts) {
       emberGlow.intensity = lerp(f.ember, to.ember, e);
       ambient.color.copy(f.ambColor).lerp(new THREE.Color(to.ambColor), e);
       hemi.color.copy(f.hemiColor).lerp(new THREE.Color(to.hemiColor), e);
+      /* Цветокоррекция и сила отражённого света едут вместе со светом: ночь
+         уходит в холодную зелень, голосование — в жёсткую тёплую известь,
+         занавес — в сепию. Раньше фаза читалась только по яркости лампы. */
+      if (stack) {
+        stack.applyGrade(to.grade, Math.min(1, dt / 900));
+        stack.setEnvIntensity(lerp(
+          f.env === undefined ? to.env : f.env, to.env, e));
+      }
       if (t >= 1) lightTween = null;
     }
     nightPose += (nightTarget - nightPose) * Math.min(1, dt / 900);
@@ -472,13 +501,14 @@ export async function mountStage(container, opts) {
       }
     }
 
-    renderer.render(scene, camera);
+    if (stack) stack.render(dt, now); else renderer.render(scene, camera);
   }
 
   function resize() {
     const w = container.clientWidth || 640;
     const h = container.clientHeight || 360;
     renderer.setSize(w, h, false);
+    if (stack) stack.setSize(w, h);
     el.style.width = w + 'px';
     el.style.height = h + 'px';
     camera.aspect = Math.max(0.2, w / Math.max(1, h));
@@ -492,6 +522,19 @@ export async function mountStage(container, opts) {
   const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
   if (ro) ro.observe(container);
   window.addEventListener('resize', resize, { passive: true });
+
+  /* Слой картинки поднимается после того, как комната собрана: панораму для
+     IBL снимаем с готовой сцены, иначе отражать нечего. */
+  let stack = null;
+  if (RS && !M.LOWQ) {
+    try {
+      stack = RS.createRenderStack(THREE, {
+        renderer, scene, camera, tier: M.TIER,
+        envIntensity: RIG.envIntensity.day
+      });
+      stack.buildEnvironment({ y: 1.2 });
+    } catch (e) { stack = null; }
+  }
 
   resize();
   applyCamera();
