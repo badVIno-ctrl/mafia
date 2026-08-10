@@ -359,7 +359,15 @@
 .finale .seat.town .sub{color:var(--verdigris)}
 .finale .seat.maniac .sub{color:#c9a6d6}
 
-body.playing #toast{bottom:96px}
+/* Тост встаёт над доком действий, а не поверх него. Высота дока непостоянна:
+   подсказка на разных фазах занимает от одной строки до четырёх, а кнопок в
+   доке бывает и одна, и три в два ряда. Отступ, подобранный числом, верен для
+   какой-то одной фазы и неверен для остальных — на длинной подсказке плашка
+   садилась прямо на текст. Живую высоту дока измеряет js/online.js и кладёт в
+   --dockH; здесь остаётся прибавить отступ самого дока от низа и зазор.
+   Значение по умолчанию подобрано так, чтобы до первого замера отступ был
+   тем же, что и раньше. */
+body.playing #toast{bottom:calc(34px + var(--dockH, 62px))}
 
 /* нижняя панель вкладок и кнопка чата в шапке — только на телефоне */
 .startbar{margin-top:var(--s3)}
@@ -421,7 +429,8 @@ body.playing #toast{bottom:96px}
   .timer{font-size:var(--t-lg);min-width:54px}
   .actiondock{left:var(--s2);right:var(--s2);bottom:66px;padding:10px}
   /* Тост не должен садиться на панель вкладок и на док действий. */
-  body.playing #toast{bottom:160px}
+  /* Снизу отсчитываем и панель вкладок (56 px), и док действий. */
+  body.playing #toast{bottom:calc(78px + var(--dockH, 82px))}
   .mark{min-width:78px;max-width:132px;padding:5px 7px}
   .flatwrap{padding:70px var(--s3) 130px}
   /* Полоса с главным действием: всегда под рукой, но внутри своей панели —

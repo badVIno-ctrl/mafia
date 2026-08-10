@@ -484,6 +484,9 @@
     renderMarks(g, you);
     renderFlatSeats(g, you);
     renderActions(g, you, room);
+    /* Зовём после дока и после подсказки: высоту дока задаёт как раз она, а
+       подсказка меняется и без смены кнопок. */
+    measureDock();
     renderChat(g, you);
     renderLog(g);
     renderFinale(g);
@@ -962,6 +965,17 @@
       a += '<button class="btn primary sm" id="btnPickList">Выбрать в списке</button>';
     }
     setHTML($('actions'), a);
+  }
+
+  /* Высота дока действий — в переменную, из которой считается отступ тоста.
+     Мерить приходится живьём: подсказка занимает от одной строки до четырёх, а
+     кнопок бывает и одна, и три в два ряда. Одно чтение раскладки после
+     отрисовки дешевле, чем плашка тоста поверх кнопки хода. */
+  function measureDock() {
+    var dock = $('actionDock');
+    if (!dock) return;
+    var h = dock.offsetHeight || 0;
+    if (h) document.documentElement.style.setProperty('--dockH', h + 'px');
   }
 
   /* Ждёт ли партия от игрока выбора человека и есть ли кого выбирать. */
@@ -1950,6 +1964,7 @@
       renderMarks(g, you);
       renderActions(g, you, state.room);
       setText($('gHint'), hintFor(g, you));
+      measureDock();
     }, 160);
   }, { passive: true });
   /* Шрифты приезжают после первого кадра и меняют высоту строки. */
