@@ -341,6 +341,7 @@
 body.playing #toast{bottom:96px}
 
 /* нижняя панель вкладок и кнопка чата в шапке — только на телефоне */
+.startbar{margin-top:var(--s3)}
 .mobtabs{display:none}
 /* Короткая подпись выхода включается только во время партии на узком экране. */
 .exithome .narrow{display:none}
@@ -402,6 +403,14 @@ body.playing #toast{bottom:96px}
   body.playing #toast{bottom:160px}
   .mark{min-width:78px;max-width:132px;padding:5px 7px}
   .flatwrap{padding:70px var(--s3) 130px}
+  /* Полоса с главным действием: всегда под рукой, но внутри своей панели —
+     значит не мешает ни чату комнаты, ни списку сюжетов. */
+  .startbar{
+    position:sticky;bottom:0;z-index:5;margin:var(--s3) calc(var(--s4) * -1) calc(var(--s4) * -1);
+    padding:var(--s3) var(--s4) calc(var(--s3) + env(safe-area-inset-bottom));
+    background:linear-gradient(180deg,rgba(16,13,14,0),rgba(16,13,14,.97) 38%);
+    border-top:1px solid var(--hair);
+  }
   .mobtabs{
     display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;
     background:rgba(8,7,7,.97);border-top:1px solid var(--hair);
@@ -610,7 +619,14 @@ body.playing #toast{bottom:96px}
             <button class="btn" id="btnBots">Добрать ботами</button>
             <button class="btn ghost" id="btnBotsOff" hidden>Убрать ботов</button>
           </div>
-          <button class="btn primary wide" id="btnStart" style="margin-top:var(--s3)">Начать партию</button>
+          <!-- Главное действие комнаты. На телефоне оно уезжало под шесть
+               галочек, темп, набор ролей и список сюжетов: человек, зашедший
+               «сыграть с соседями», сначала видел ссылку-приглашение, которая
+               ему не нужна, а кнопку «Начать партию» находил после четырёх
+               экранов прокрутки. Теперь она прилипает к низу экрана. -->
+          <div class="startbar" id="startBar">
+            <button class="btn primary wide" id="btnStart">Начать партию</button>
+          </div>
         </div>
       </section>
 

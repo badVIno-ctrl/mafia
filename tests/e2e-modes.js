@@ -593,6 +593,93 @@ async function testRules(browser) {
   } finally { await ctx.close(); }
 }
 
+/* =============================================================================
+   8. Телефон в руках: вкладки, поворот, большой стол
+   ============================================================================= */
+async function testPhoneHandling(browser) {
+  console.log('\n─── 8. Телефон в руках ───');
+  const bag = emptyBag();
+  const { ctx, page } = await newPlayer(browser, MOBILE, bag);
+  try {
+    await register(page, nm('Рука'));
+    /* Двадцать человек, полный набор — самый тяжёлый стол, какой бывает. */
+    await page.goto(BASE + '/online.html?solo=1&size=20&speed=blitz&preset=full', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#gameView:not([hidden])', { timeout: 30000 });
+    await wait(3000);
+
+    const seats = await page.evaluate(() => document.querySelectorAll('#seats .seat').length);
+    ok(seats === 20, 'на телефоне собирается стол на двадцать мест (' + seats + ')');
+
+    /* Шапка одной строкой: раньше на 390px она переносилась и съедала
+       115 пикселей из 844 — четырнадцать процентов игрового экрана. */
+    const bar = await page.evaluate(() => ({
+      h: Math.round(document.getElementById('topbar').getBoundingClientRect().height),
+      varH: getComputedStyle(document.documentElement).getPropertyValue('--barH').trim()
+    }));
+    ok(bar.h <= 72, 'шапка партии в одну строку (' + bar.h + 'px)');
+
+    /* Вкладка «Стол»: планшет фазы, таймер и кнопки обязаны остаться и
+       видимыми, и нажимаемыми. Именно здесь плоский стол их закрывал. */
+    await page.click('#tabTable');
+    await wait(900);
+    const onTable = await page.evaluate(() => {
+      const at = (x, y) => {
+        const el = document.elementFromPoint(x, y);
+        if (!el) return 'none';
+        for (let p = el; p; p = p.parentElement) if (p.id) return '#' + p.id;
+        return el.tagName.toLowerCase();
+      };
+      const c = el => { const r = el.getBoundingClientRect(); return at(Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)); };
+      const band = document.querySelector('.phaseband');
+      const dock = document.getElementById('actionDock');
+      return {
+        band: c(band), dock: c(dock),
+        timer: (document.getElementById('gTimer') || {}).textContent,
+        bandUnderTable: c(band) === '#flatWrap', dockUnderTable: c(dock) === '#flatWrap'
+      };
+    });
+    ok(!onTable.bandUnderTable, 'на вкладке «Стол» видно фазу и таймер (' + onTable.band + ')');
+    ok(!onTable.dockUnderTable, 'на вкладке «Стол» доступен док действий (' + onTable.dock + ')');
+    ok(/\d:\d\d/.test(onTable.timer || ''), 'таймер идёт и на вкладке «Стол»: ' + onTable.timer);
+    await screen(page, 'phone-table-tab', bag, 'вкладка «Стол»');
+
+    /* Пока подписи мест спрятаны, их положение не считается: на телефоне это
+       четыре вкладки из пяти и тысяча двести проекций в секунду вхолостую. */
+    const marksHidden = await page.evaluate(() => document.getElementById('marks').hidden);
+    ok(marksHidden, 'вне вкладки «Сцена» жетоны мест сняты с пересчёта');
+
+    /* Поворот телефона. Раньше высота шапки мерилась один раз, и после
+       поворота между шапкой и сценой оставалась мёртвая чёрная полоса. */
+    await page.setViewportSize({ width: 844, height: 390 });
+    await wait(1200);
+    const rot = await page.evaluate(() => {
+      const t = document.getElementById('topbar').getBoundingClientRect();
+      const p = document.querySelector('.play').getBoundingClientRect();
+      return { gap: Math.round(p.top - t.bottom), barH: Math.round(t.height), playTop: Math.round(p.top) };
+    });
+    ok(Math.abs(rot.gap) <= 2, 'после поворота сцена начинается ровно под шапкой (зазор ' + rot.gap + 'px)');
+    await screen(page, 'phone-landscape', bag, 'поворот экрана');
+
+    /* Кадр. Порог заведомо щедрый: тест ловит не «мало кадров», а
+       остановившуюся сцену и бесконечный цикл в кадре. */
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.click('#tabStage');
+    await wait(1200);
+    const fr = await page.evaluate(() => new Promise(res => {
+      let n = 0; const t0 = performance.now(); let prev = t0, worst = 0;
+      const step = t => {
+        n++; worst = Math.max(worst, t - prev); prev = t;
+        if (t - t0 < 2500) requestAnimationFrame(step);
+        else res({ fps: Math.round(n / ((t - t0) / 1000)), worst: Math.round(worst) });
+      };
+      requestAnimationFrame(step);
+    }));
+    ok(fr.fps >= 20, 'сцена на двадцать человек живая: ' + fr.fps + ' кадр/с');
+    ok(fr.worst <= 200, 'ни один кадр не встал: худший ' + fr.worst + ' мс');
+    reportBag('телефон в руках', bag);
+  } finally { await ctx.close(); }
+}
+
 /* ============================================================================= */
 (async () => {
   require('fs').mkdirSync(SHOTS, { recursive: true });
@@ -615,6 +702,7 @@ async function testRules(browser) {
       await testInvite(browser);
       await testStaticSeo(browser);
       await testRules(browser);
+      await testPhoneHandling(browser);
     }
     if (only === 'ui') { /* партии пропускаем */ } else {
     await playThrough(browser, {
