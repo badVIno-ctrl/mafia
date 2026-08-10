@@ -491,9 +491,15 @@ input[type=range]::-moz-range-thumb{
   color:var(--tag,var(--accent));border:1px solid color-mix(in srgb,var(--tag,#e2b478) 55%,transparent);
   background:color-mix(in srgb,var(--tag,#e2b478) 14%,transparent);
 }
-.noteopt{justify-content:flex-start;text-align:left;border-color:color-mix(in srgb,var(--tag) 50%,transparent)}
+/* --tag приезжает на элемент из скрипта (online.js ставит его по цвету
+   ярлыка). Рядом стоящий .note-chip запасное значение указывает, а эти два
+   правила его не указывали — и без --tag разваливалось не только окрашивание:
+   var() без запасного значения делает недопустимым всё объявление целиком, то
+   есть строка border-color / background выбрасывается, а не «берёт цвет по
+   умолчанию». Ярлык оставался вообще без рамки. */
+.noteopt{justify-content:flex-start;text-align:left;border-color:color-mix(in srgb,var(--tag,#e2b478) 50%,transparent)}
 .noteopt em{display:block;font-style:normal;font-size:var(--t-3xs);color:var(--text-faint);margin-top:2px}
-.noteopt.on{background:color-mix(in srgb,var(--tag) 18%,transparent);color:var(--text-primary)}
+.noteopt.on{background:color-mix(in srgb,var(--tag,#e2b478) 18%,transparent);color:var(--text-primary)}
 
 /* =========================================================================
    ЗАГРУЗКА И ПУСТОТА

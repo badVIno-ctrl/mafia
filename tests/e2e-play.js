@@ -220,12 +220,18 @@ async function runViewport(browser, vp){
   return { vp, mode, agg };
 }
 
+/* Путь к браузеру передаём только если файл существует: иначе playwright не
+   может воспользоваться своим собственным Chromium (см. tests/e2e-modes.js). */
+function launchOptions() {
+  const opts = { args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=swiftshader'] };
+  const bin = process.env.CHROME_BIN || '/usr/local/bin/chromium';
+  if (require('fs').existsSync(bin)) opts.executablePath = bin;
+  return opts;
+}
+
 (async () => {
   const srv = await startServer();
-  const browser = await chromium.launch({
-    executablePath: process.env.CHROME_BIN || '/usr/local/bin/chromium',
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=swiftshader']
-  });
+  const browser = await chromium.launch(launchOptions());
 
   let failures = 0;
   try {

@@ -34,6 +34,19 @@ const SHOTS = process.env.SHOTS || path.join(os.tmpdir(), 'mafia-shots');
 const DATA = path.join(os.tmpdir(), 'mafia-test-users-e2emodes.json');
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
+
+/* Как запускать браузер. Жёсткий executablePath ломал прогон на любой машине,
+   где Chromium не лежит ровно по /usr/local/bin/chromium: playwright умеет
+   находить свой собственный, но только если путь ему не навязывать. Поэтому
+   путь передаём лишь тогда, когда файл по нему действительно есть. */
+function launchOptions(extraArgs) {
+  const opts = {
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=swiftshader'].concat(extraArgs || [])
+  };
+  const bin = process.env.CHROME_BIN || '/usr/local/bin/chromium';
+  if (require('fs').existsSync(bin)) opts.executablePath = bin;
+  return opts;
+}
 /* Имена в игре уникальны на весь сервер: «Игрок» со второго прогона уже занят.
    Поэтому у каждого прогона свой суффикс — иначе тест ломает сам себя. */
 const RUN = Math.random().toString(36).slice(2, 5);
@@ -680,17 +693,197 @@ async function testPhoneHandling(browser) {
   } finally { await ctx.close(); }
 }
 
+/* =============================================================================
+   9. Шапка партии на всех ширинах подряд
+
+   Прогулка выше ходит по двум экранам — 390×844 и 844×390 — и на обоих шапка
+   влезала. Между ними и настольной раскладкой лежит полоса, которую никто не
+   мерил, и в ней шапка не влезала на трёх участках сразу: 320, 440…480 и
+   560…790 пикселей. Причина не в числах, а в том, что правила сжатия были
+   привязаны к 430 пикселям, а одноколонная раскладка начинается с 900.
+
+   Проверка идёт по ширинам с шагом, а не по двум любимым телефонам: это
+   единственный способ поймать провал внутри диапазона. И спрашиваем не «как
+   выглядит», а два измеримых факта:
+
+     1. содержимое шапки влезает в саму шапку. Мерить документ против
+        window.innerWidth здесь нельзя, и это отдельная ловушка: в режиме
+        телефона браузер ведёт себя как настоящий телефон — страницу шире
+        экрана он не обрезает, а отдаёт пользователю масштаб, расширяя
+        видимую область под содержимое. Экран 320 при поломанной шапке
+        показывает innerWidth 352, и сравнение «документ шире экрана»
+        оказывается ложно-зелёным. Поэтому спрашиваем то, что от масштаба не
+        зависит: scrollWidth шапки против её же clientWidth. Заодно ловим и
+        сам факт отданного масштаба — innerWidth против заказанной ширины;
+     2. ни одна кнопка в шапке не сжата ниже 44 пикселей — flex-shrink по
+        умолчанию равен единице, и до правки микрофон с озвучкой сжимались
+        ровно до 22 пикселей, аккуратно проходя прежний порог проверки.
+   ============================================================================= */
+async function testBarWidths(browser) {
+  console.log('\n─── 9. Шапка партии на всех ширинах ───');
+  const bag = emptyBag();
+  /* Свой контекст, и намеренно без isMobile. Режим телефона у Chromium
+     занижает именно эту поломку: при заказанных 600 пикселях он показывал
+     шапку как влезающую (600 из 600), тогда как честный замер той же
+     страницы требовал 716. Сенсорный ввод оставляем — от него зависят
+     правила pointer:coarse, то есть настоящие размеры кнопок. */
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 780 },
+    hasTouch: true, isMobile: false, deviceScaleFactor: 1, locale: 'ru-RU'
+  });
+  const page = await ctx.newPage();
+  watchPage(page, bag);
+  try {
+    /* Имя берём максимальной длины, какую пускает поле (maxlength=16). Это не
+       придирка: величина переезда зависит от длины имени в шапке, и с коротким
+       именем та же поломка проявлялась только на одной ширине из двадцати.
+       Проверять надо худший допустимый случай, а не удобный. */
+    await register(page, nm('Длинноимённа'));
+    await page.goto(BASE + '/online.html?solo=1&size=12&speed=blitz', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#gameView:not([hidden])', { timeout: 30000 });
+    await wait(2500);
+
+    const widths = [320, 340, 360, 390, 412, 430, 440, 480, 540, 560, 600,
+      680, 740, 768, 800, 860, 900, 901, 1024, 1280];
+    const tight = [];
+    const squashed = [];
+    const clipped = [];
+    const blank = [];
+    for (const w of widths) {
+      await page.setViewportSize({ width: w, height: 780 });
+      await wait(260);
+      const m = await page.evaluate(() => {
+        const tb = document.getElementById('topbar');
+        const parts = [...tb.children].filter(c => {
+          const cs = getComputedStyle(c);
+          return cs.display !== 'none' && c.getBoundingClientRect().width > 0;
+        });
+        return {
+          barScroll: tb.scrollWidth, barClient: tb.clientWidth,
+          vw: window.innerWidth, docW: document.documentElement.scrollWidth,
+          barH: Math.round(tb.getBoundingClientRect().height),
+          /* Меряем только настоящие кнопки и ссылки: заголовок и распорка
+             сжиматься обязаны, в этом их работа. */
+          controls: parts.filter(c => c.matches('button, a.btn')).map(c => {
+            const r = c.getBoundingClientRect();
+            return {
+              id: c.id || (c.className || '').split(/\s+/).slice(-1)[0],
+              w: Math.round(r.width), h: Math.round(r.height),
+              /* Сколько кнопка просит на самом деле против того, сколько ей
+                 дали. Разница означает обрезанную подпись. */
+              need: c.scrollWidth, got: c.clientWidth,
+              txt: (c.innerText || '').trim().slice(0, 12),
+              empty: !(c.innerText || '').trim() && !c.querySelector('svg, img, canvas')
+            };
+          })
+        };
+      });
+      /* Ничто не имеет права требовать больше заказанной ширины: ни шапка,
+         ни документ, ни сама видимая область. Три независимых признака —
+         потому что режим телефона умеет прятать поломку за каждым из них
+         по отдельности: расширив видимую область, он делает clientWidth
+         шапки равным её же scrollWidth, и «не влезает» превращается в
+         «влезает» на глазах. */
+      const need = Math.max(m.barScroll, m.docW, m.vw);
+      if (need > w + 1) {
+        tight.push(w + 'px: требуется ' + need +
+          ' (шапка ' + m.barScroll + ', документ ' + m.docW + ', видимая область ' + m.vw + ')');
+      }
+      m.controls.forEach(c => {
+        if (c.w < 44 || c.h < 40) squashed.push(w + 'px: ' + c.id + ' ' + c.w + '×' + c.h);
+        if (c.need > c.got + 1) {
+          clipped.push(w + 'px: ' + c.id + ' «' + c.txt + '» просит ' + c.need + ', дали ' + c.got);
+        }
+        if (c.empty) blank.push(w + 'px: ' + c.id + ' без знака и подписи');
+      });
+      if (w === 320 || w === 768) {
+        await page.screenshot({ path: path.join(SHOTS, 'bar-' + w + '.png') });
+      }
+    }
+    ok(tight.length === 0, 'экран партии влезает в заказанную ширину на всех ширинах 320…1280',
+      JSON.stringify(tight.slice(0, 8)));
+    ok(squashed.length === 0, 'ни одна кнопка шапки не сжата ниже 44px',
+      JSON.stringify(squashed.slice(0, 6)));
+    /* Самая коварная из трёх проверок. Шапка умеет «влезать» неправдой:
+       flex-shrink сжимает кнопки, подписи обрезаются, и суммарная ширина
+       сходится. На ширинах 480…740 так и было — «Микрофон» жил в коробке
+       70 пикселей вместо 117, то есть читался как «Микро». Ширина документа
+       при этом сходилась, и тест был зелёным. */
+    ok(clipped.length === 0, 'ни одна подпись в шапке не обрезана сжатием',
+      JSON.stringify(clipped.slice(0, 8)));
+    ok(blank.length === 0, 'сжатая шапка не оставляет пустых кнопок',
+      JSON.stringify(blank.slice(0, 6)));
+    await page.setViewportSize({ width: MOBILE.width, height: MOBILE.height });
+    reportBag('шапка партии', bag);
+  } finally { await ctx.close(); }
+}
+
+/* =============================================================================
+   10. Листы поверх сцены обязаны быть непрозрачными
+
+   Два окна посреди партии — «Лучший ход» (его получает убитый первой ночью) и
+   «Экспертиза» в «Следствии» — рисуются одной и той же разметкой .sheet >
+   .expert. Фон у неё был задан переменной, которой на этой странице не
+   существует, и потому не был задан вовсе: var() без запасного значения делает
+   недопустимым всё объявление, а не подставляет что-то по умолчанию. Текст
+   читался прямо поверх освещённой сцены с фигурами за столом.
+
+   Ловится это только замером: геометрия сходилась, консоль молчала, разметка
+   была на месте. Поэтому спрашиваем прямо — есть ли за текстом хоть что-то.
+   ============================================================================= */
+async function testSheets(browser) {
+  console.log('\n─── 10. Листы поверх сцены ───');
+  const bag = emptyBag();
+  const { ctx, page } = await newPlayer(browser, MOBILE, bag);
+  try {
+    await register(page, nm('Лист'));
+    await page.goto(BASE + '/online.html?solo=1&size=8&speed=blitz', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#gameView:not([hidden])', { timeout: 30000 });
+    await wait(2000);
+
+    const res = await page.evaluate(() => {
+      const box = document.getElementById('expertBox');
+      /* Та же разметка, что строят askBestMove() и askExpert(). */
+      box.innerHTML = '<div class="expert"><h3>Лучший ход</h3>' +
+        '<p class="note">Назовите трёх, на кого показываете.</p>' +
+        '<div class="grid2"><button class="btn sm">№2 · Клим</button>' +
+        '<button class="btn sm">№3 · Вера</button></div></div>';
+      box.hidden = false;
+      const ex = box.querySelector('.expert');
+      const cs = getComputedStyle(ex);
+      const back = getComputedStyle(box);
+      const alpha = str => {
+        const m = /rgba?\(([^)]+)\)/.exec(str || '');
+        if (!m) return 0;
+        const p = m[1].split(',').map(x => parseFloat(x));
+        return p.length > 3 ? p[3] : 1;
+      };
+      return {
+        color: cs.backgroundColor, image: cs.backgroundImage,
+        alpha: alpha(cs.backgroundColor),
+        backdropAlpha: alpha(back.backgroundColor),
+        border: cs.borderTopWidth
+      };
+    });
+    const hasBack = res.image !== 'none' || res.alpha >= 0.85;
+    ok(hasBack, 'у листа «Лучший ход» есть свой фон, а не только затемнение сцены',
+      JSON.stringify(res));
+    ok(res.backdropAlpha >= 0.5, 'сцена под листом затемнена (' + res.backdropAlpha + ')');
+    await screen(page, 'sheet-bestmove', bag, 'лист «Лучший ход»');
+    await page.evaluate(() => { document.getElementById('expertBox').hidden = true; });
+    reportBag('листы поверх сцены', bag);
+  } finally { await ctx.close(); }
+}
+
 /* ============================================================================= */
 (async () => {
   require('fs').mkdirSync(SHOTS, { recursive: true });
   try { require('fs').unlinkSync(DATA); } catch (e) { /* первого файла может и не быть */ }
   console.log('\n=== ТЕСТ 20: прогулка по всем режимам (' + BASE + ') ===');
   const srv = await startServer();
-  const browser = await chromium.launch({
-    executablePath: process.env.CHROME_BIN || '/usr/local/bin/chromium',
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=swiftshader',
-      '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream']
-  });
+  const browser = await chromium.launch(launchOptions([
+    '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'
+  ]));
   /* ONLY=play — только партии целиком: они самые долгие, и во время правки
      правил гонять с ними всю прогулку незачем. ONLY=ui — всё остальное. */
   const only = process.env.ONLY || '';
@@ -703,6 +896,8 @@ async function testPhoneHandling(browser) {
       await testStaticSeo(browser);
       await testRules(browser);
       await testPhoneHandling(browser);
+      await testBarWidths(browser);
+      await testSheets(browser);
     }
     if (only === 'ui') { /* партии пропускаем */ } else {
     await playThrough(browser, {

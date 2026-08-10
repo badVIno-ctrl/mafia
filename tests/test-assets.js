@@ -204,16 +204,32 @@ ok(read('public/js/online.js').indexOf('/js/stage3d.js') >= 0, 'сетевой �
    Каждая проверка ниже стоит на месте настоящего бага: они держат не «стиль»,
    а конкретные вещи, которые игрок видел на экране. */
 
-/* Кнопка-знак без знака — пустой квадрат в шапке на весь матч. */
-ok(onlineJs.indexOf('function paintChatBtn') > 0, 'кнопке чата в шапке рисуют знак');
-ok(/paintChatBtn\(\);/.test(onlineJs), 'знак на кнопке чата обновляется вместе с вкладками');
-
 /* Правило с !important и идентификатором перебивает [hidden] и оставляет
    элемент на экране там, где скрипт его прячет. */
 const HIDDEN_BREAKER = /#[\w-]+\s*\{[^}]*display\s*:\s*(?!none)[a-z-]+\s*!important/;
 /* Комментарии выкидываем: в них разобран как раз тот случай, который правило
    и запрещает, и ловить сам себя тест не должен. */
 const noComments = t => t.replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+/* Кнопки чата в шапке больше нет: она открывала ту же шторку, что вкладка
+   «Чат», и жила ровно на тех ширинах, где эта вкладка и так на экране. Раньше
+   здесь стояли две проверки, что кнопке рисуют знак, — они держали настоящий
+   баг (пустой квадрат 44×44 в шапке на весь матч). Теперь держать надо
+   обратное и более сильное: элемента нет ни в разметке, ни в скрипте, ни в
+   стилях. Полуудаление хуже, чем оба состояния: скрытая кнопка с живым
+   обработчиком — это код, который читают, но который никогда не работает. */
+const chatBtnLeftovers = []
+  .concat(/id="btnChat"/.test(onlineHtml) ? ['разметка: id="btnChat"'] : [])
+  .concat(/#btnChat\b/.test(noComments(onlineHtml)) ? ['стили: #btnChat'] : [])
+  .concat(/\bbtnChat\b/.test(noComments(onlineJs)) ? ['скрипт: btnChat'] : []);
+ok(chatBtnLeftovers.length === 0,
+  'кнопка чата в шапке убрана целиком, без осиротевших ссылок',
+  chatBtnLeftovers.join(' | '));
+/* А вкладка «Чат» внизу, наоборот, обязана быть: это единственный вход в чат
+   на телефоне. */
+ok(/id="tabChat"/.test(onlineHtml), 'вход в чат остался на панели вкладок');
+ok(/'tabChat'/.test(onlineJs), 'вкладка чата подписывается и считает непрочитанное');
+
 [].concat(PAGES, CSS).forEach(f => {
   const m = HIDDEN_BREAKER.exec(noComments(read(f)));
   ok(!m, 'нет display:…!important по id, перебивающего [hidden]: ' + f +
@@ -272,6 +288,71 @@ function deadMediaRules(css) {
   const dead = deadMediaRules(read(f));
   ok(dead.length === 0, 'ни одна правка в медиазапросе не отменена ниже: ' + f,
     dead.slice(0, 4).join(' | '));
+});
+
+/* -------------------------------------------------------------------------
+   НЕИЗВЕСТНАЯ ПЕРЕМЕННАЯ НА СТРАНИЦЕ
+
+   Неизвестная переменная в CSS ведёт себя не так, как ждёт человек. Это не
+   «цвет по умолчанию» и не ошибка в консоли: var(--нет-такой) без запасного
+   значения делает всё объявление недопустимым, и браузер молча выбрасывает
+   его целиком. Свойство просто не применяется, и никто об этом не узнаёт.
+
+   Именно так лист «Лучший ход» полпартии стоял без фона. В app.css было
+   написано background:var(--panel), а объявлена --panel только внутри
+   <style> в bots.html. На online.html, где этот лист и живёт, переменной не
+   существовало — и текст читался прямо поверх сцены со фигурами за столом.
+   Ни одна проверка этого не видела: геометрия сходилась, консоль молчала,
+   фон никто не мерил.
+
+   Проверяем по-страничному, а не по файлам: переменная считается известной,
+   если она объявлена в самой странице или в любом подключённом ею файле.
+   ------------------------------------------------------------------------- */
+function declaredVars(text) {
+  const out = new Set();
+  const clean = noComments(text);
+  /* объявления в CSS и через style.setProperty в скриптах */
+  for (const m of clean.matchAll(/(--[A-Za-z0-9_-]+)\s*:/g)) out.add(m[1]);
+  for (const m of clean.matchAll(/setProperty\(\s*['"`](--[A-Za-z0-9_-]+)/g)) out.add(m[1]);
+  return out;
+}
+/* Используется ли переменная без запасного значения: var(--x) — да,
+   var(--x, 12px) — нет, там есть чем закрыться. */
+function usedVarsHard(text) {
+  const out = new Map();
+  const clean = noComments(text);
+  for (const m of clean.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)\s*([,)])/g)) {
+    if (m[2] === ',') continue;
+    if (!out.has(m[1])) out.set(m[1], clean.slice(0, m.index).split('\n').length);
+  }
+  return out;
+}
+/* Что страница подключает: свои <link rel=stylesheet> и <script src>. */
+function assetsOf(html) {
+  const list = [];
+  for (const m of html.matchAll(/<link[^>]+rel=["']?stylesheet["']?[^>]*>/gi)) {
+    const href = /href\s*=\s*["']([^"']+)["']/i.exec(m[0]);
+    if (href && href[1].charAt(0) === '/') list.push('public' + href[1]);
+  }
+  for (const m of html.matchAll(/<script[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi)) {
+    if (m[1].charAt(0) === '/') list.push('public' + m[1]);
+  }
+  return list.filter(f => fs.existsSync(path.join(root, f)));
+}
+PAGES.forEach(page => {
+  const html = read(page);
+  const files = [page].concat(assetsOf(html));
+  const known = new Set();
+  files.forEach(f => declaredVars(read(f)).forEach(v => known.add(v)));
+  const missing = [];
+  files.forEach(f => {
+    usedVarsHard(read(f)).forEach((line, v) => {
+      if (!known.has(v)) missing.push(v + ' (' + f + ':' + line + ')');
+    });
+  });
+  ok(missing.length === 0,
+    'на странице нет неизвестных переменных: ' + page + ' (файлов ' + files.length + ')',
+    missing.slice(0, 6).join(' | '));
 });
 
 /* Слои сцены: плоский стол не имеет права закрывать планшет фазы, док

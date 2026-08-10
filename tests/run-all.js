@@ -76,13 +76,29 @@ if (miss) bad++;
    тест входит только часть без партий целиком (ONLY=ui); партии гоняют
    руками: node tests/e2e-modes.js */
 console.log('\n─── Тест 20 · прогулка по режимам (браузер) ───');
+/* Браузер ищем двумя способами, и второй из них до этой правки не работал
+   вовсе. Было так:
+
+     let hasBrowser = fs.existsSync(chromeBin);
+     if (!hasBrowser) {
+       try { require.resolve('playwright'); } catch (e) { hasBrowser = false; }
+     }
+
+   Ветка с playwright не присваивает hasBrowser ничего: в успешном случае она
+   молчит, а в неуспешном пишет false, которое там и так уже лежало. То есть
+   флаг не мог стать истинным ни при каких условиях, кроме файла ровно по
+   пути /usr/local/bin/chromium. На машине, где Chromium лежит внутри
+   playwright (а он так и лежит по умолчанию), тест 20 печатал «пропущено» —
+   и общий прогон оставался зелёным, ничего не проверив в браузере.
+   Такой пропуск опаснее падения: он выглядит как успех. */
 const chromeBin = process.env.CHROME_BIN || '/usr/local/bin/chromium';
 let hasBrowser = fs.existsSync(chromeBin);
 if (!hasBrowser) {
-  try { require.resolve('playwright'); } catch (e) { hasBrowser = false; }
+  try { require.resolve('playwright'); hasBrowser = true; } catch (e) { hasBrowser = false; }
 }
 if (!hasBrowser) {
-  console.log('  ⚠ пропущено: нет Chromium (' + chromeBin + '). Прогон: CHROME_BIN=… node tests/e2e-modes.js');
+  console.log('  ⚠ пропущено: нет ни Chromium (' + chromeBin + '), ни playwright. ' +
+    'Прогон: CHROME_BIN=… node tests/e2e-modes.js');
 } else {
   const r = spawnSync('node', [path.join(__dirname, 'e2e-modes.js')], {
     stdio: 'inherit', env: Object.assign({}, process.env, { ONLY: 'ui' })

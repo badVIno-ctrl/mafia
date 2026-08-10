@@ -1530,7 +1530,11 @@ class Game {
         methods: Inquest.METHODS
       };
       if (me) {
-        view.inquest.myTraits = (revealAll || true) ? (this.traits[me.id] || []).slice() : [];
+        /* Свои приметы игрок видит всегда — в этом и смысл режима: свои три
+           знаешь, чужие нет. Стояло здесь (revealAll || true), то есть условие,
+           истинное при любом revealAll; ветка с пустым списком была недостижима
+           и только притворялась правилом. */
+        view.inquest.myTraits = (this.traits[me.id] || []).slice();
         view.inquest.myTraitsRu = view.inquest.myTraits.map(t => Inquest.traitRu(t));
         view.inquest.myExpert = this.expertVotes[me.id] || null;
         if (iAmMafia && this.phase === 'night') view.inquest.method = this.nightMethod;

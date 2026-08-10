@@ -124,7 +124,6 @@
     $('gameView').hidden = which !== 'game';
     $('logSheet').hidden = which !== 'game';
     $('mobTabs').hidden = which !== 'game';
-    $('btnChat').hidden = which !== 'game';
     $('roomTag').hidden = which !== 'game';
     document.body.classList.toggle('playing', which === 'game');
   }
@@ -1767,22 +1766,13 @@
     if (which === 'chat') { state.unread = 0; $('gFeed').scrollTop = $('gFeed').scrollHeight; }
     paintTabs();
   }
-  /* Кнопка чата в шапке. Знак ей никто не рисовал: в разметке лежит только
-     подпись «Чат», а на телефоне подписи у кнопок-знаков спрятаны — и всю
-     партию в шапке висел пустой квадрат 44×44, в который никто не жал.
-     Заодно кнопка показывает состояние: открыта шторка чата или нет —
-     непрочитанные считает панель вкладок, дублировать счётчик незачем. */
-  function paintChatBtn() {
-    var b = $('btnChat');
-    if (!b) return;
-    var open = state.panel === 'chat';
-    setHTML(b, ico('chat', 20) + '<span class="lbl">Чат</span>');
-    b.setAttribute('aria-pressed', open ? 'true' : 'false');
-    b.title = open ? 'Закрыть чат стола' : 'Открыть чат стола';
-  }
-
+  /* Вкладки внизу. Кнопки чата в шапке здесь больше нет, и это не сокращение
+     ради места: она открывала ту же шторку, что вкладка «Чат», а счётчик
+     непрочитанного и без неё жил на вкладке. Пока обе были на экране, чат имел
+     два входа рядом — и оба отбирали по 44 пикселя у шапки, которой их не
+     хватало. На широком экране шторки нет вовсе: чат стоит рядом со сценой
+     отдельной колонкой, и открывать его нечем и незачем. */
   function paintTabs() {
-    paintChatBtn();
     [['tabStage', 'mask', 'Сцена', 'stage'], ['tabTable', 'people', 'Стол', 'table'],
      ['tabRole', 'scroll', 'Роль', 'role'],
      ['tabChat', 'chat', 'Чат', 'chat'], ['tabLog', 'hourglass', 'Протокол', 'log']]
@@ -1794,8 +1784,6 @@
         setCls(el, 'on', state.panel === t[3]);
       });
   }
-  $('btnChat').addEventListener('click', function () { openPanel(state.panel === 'chat' ? 'stage' : 'chat'); });
-
   /* Вход на месте: имя, гость и Enter в поле. */
   if ($('authGo')) {
     $('authGo').addEventListener('click', function () { claimName($('authName').value, this); });
@@ -1816,6 +1804,17 @@
   $('logGrip').addEventListener('click', function () { $('logSheet').classList.toggle('open'); });
   setHTML($('btnChatClose'), ico('close', 18));
   setHTML($('logIcon'), ico('scroll', 16));
+
+  /* Знак у выхода. На самых узких экранах внутри партии подпись «Выход» не
+     влезает в шапку, и её прячет медиазапрос — но кнопка без знака и без
+     подписи превращается в пустой квадрат, в который никто не жмёт. Знак
+     дорисовываем один раз здесь, а показывать его или подпись решает CSS. */
+  (function () {
+    var exit = document.querySelector('.exithome');
+    if (exit && !exit.querySelector('svg')) {
+      exit.insertAdjacentHTML('afterbegin', ico('home', 20));
+    }
+  })();
 
   /* =======================================================================
      кадр: таймер, подписи, гашение говорящего

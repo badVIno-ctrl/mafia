@@ -136,7 +136,10 @@
   padding:var(--s5);background:rgba(6,5,5,.72);backdrop-filter:blur(6px);
   animation:modalIn var(--fast) var(--ease-out);
 }
-.modalbox{width:min(420px,100%);max-height:86vh;overflow:auto}
+/* dvh с запасным vh: на телефоне vh считается по самой большой видимой
+   области, и пока адресная строка на месте, окно с потолком 86vh уезжает
+   нижним краем под неё вместе со своими кнопками. */
+.modalbox{width:min(420px,100%);max-height:86vh;max-height:86dvh;overflow:auto}
 @keyframes modalIn{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion:reduce){ .modalback{animation:none} }
 
@@ -188,10 +191,26 @@ a:focus-visible,button:focus-visible,input:focus-visible,[tabindex]:focus-visibl
   position:fixed;inset:0;z-index:40;display:grid;place-items:center;
   background:rgba(6,5,6,.72);padding:var(--s4);
 }
+/* Фон здесь стоял как background:var(--panel) — переменной, которой на этой
+   странице нет вовсе. Объявлена она только внутри <style> в bots.html, а лист
+   экспертизы живёт в online.html, где подключены fonts/theatre/app. Неизвестная
+   переменная без запасного значения даёт не «цвет по умолчанию», а недопустимое
+   значение: свойство отбрасывается целиком, и фон остаётся прозрачным.
+
+   Видно это было не в лобби, а в двух окнах посреди партии — «Лучший ход»
+   (его получает убитый первой ночью, то есть кто-то почти в каждой партии) и
+   «Экспертиза» в «Следствии». Текст читался прямо поверх сцены: сквозь него
+   просвечивали фигуры за столом и лампа. Ни один тест этого не поймал —
+   геометрия была в порядке, а фон никто не мерил.
+
+   Берём материал из общего словаря: тот же непрозрачный слой, что у .panel.
+   Непрозрачный, а не полупрозрачный: лист лежит поверх освещённой сцены, и
+   читаемость здесь важнее вида сквозь. */
 .sheet .expert{
-  max-width:640px;width:100%;max-height:80vh;overflow:auto;
-  background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
-  padding:var(--s5);box-shadow:0 24px 60px rgba(0,0,0,.6);
+  max-width:640px;width:100%;max-height:80vh;max-height:80dvh;overflow:auto;
+  background:linear-gradient(180deg,var(--surface-3),var(--surface-1));
+  border:1px solid var(--border-strong);border-radius:var(--r-lg);
+  padding:var(--s5);box-shadow:var(--lift-lg);
 }
 .sheet .expert h3{margin:0 0 var(--s2)}
 .sheet .grid2{
