@@ -73,6 +73,22 @@ function makeBot(takenNames) {
    сказать и мирный, и мафия — на этом и держится игра.
    ========================================================================= */
 const LINES = {
+  /* Последнее слово. Говорит человек, который уже вне игры, и потому
+     говорит прямо — это главное, чем последнее слово ценно столу. */
+  lastWordTown: [
+    'Я мирный(ая), и вы это узнаете через минуту. Смотрите на тех, кто громче всех меня выводил.',
+    'Меня убрали не случайно. Ищите среди тех, кто вчера меня и не защищал, и не топил — просто молчал.',
+    'Ухожу с чистой картой. Верьте тем, кто говорил по делу, а не громко.',
+    'Проверьте {T}. Больше мне сказать нечего.',
+    'Я всё сказал(а) днём. Если вы меня вывели — вы уже проиграли один ход.'
+  ],
+  lastWordMafia: [
+    'Ну что вы. Я такой же мирный, как и вы. Ошиблись — бывает.',
+    'Ладно, ваша взяла. Но {T} вы зря не слушали.',
+    'Ухожу молча. Подумайте о {T}.',
+    'Поздравляю, вывели своего. Дальше сами.',
+    'Я бы на вашем месте посмотрел(а) на {T}. Просто совет напоследок.'
+  ],
   open: [
     'Ну что, с кого начнём? Молчать всё равно не получится.',
     'Давайте по кругу: кто что видел, кто где сидел.',
@@ -136,9 +152,21 @@ function fill(tpl, vars) {
    Партия помнит последние сказанные заготовки и выбирает из оставшихся. */
 function pickFresh(list, game) {
   if (!list || !list.length) return undefined;
+  /* Случайность берём у партии, если она есть.
+
+     Раньше выбор заготовки шёл через общий pick, а тот пользуется семенем
+     партии только внутри такта — RNG выставляется в tick(). Всё, что зовёт
+     pickFresh снаружи такта (симулятор, тесты, разбор партии по семени),
+     получало Math.random, и результат от прогона к прогону менялся. Тест на
+     повторы заготовок из-за этого падал примерно раз из пяти: не потому,
+     что боты повторялись, а потому, что «одна и та же партия» каждый раз
+     была разной. Реплики — часть партии, и по семени они обязаны
+     воспроизводиться так же, как раздача ролей. */
+  const r = game && game.rng ? game.rng : null;
+  const pickOne = (l) => (r ? l[Math.floor(r.next() * l.length)] : pick(l));
   const used = game._botSaid = game._botSaid || [];
   const free = list.filter(x => used.indexOf(x) < 0);
-  const chosen = pick(free.length ? free : list);
+  const chosen = pickOne(free.length ? free : list);
   used.push(chosen);
   const keep = Math.max(6, Math.min(28, list.length * 2));
   while (used.length > keep) used.shift();
@@ -349,7 +377,20 @@ function voteChoice(game, me, sus) {
   return mostSuspected(pool, personalSus(game, me, sus));
 }
 
+/* Реплика бота днём.
+
+   Обёртка нужна ровно для одного: любая функция, которой передали партию,
+   должна брать случайность у этой партии. Внутри такта RNG выставляет tick(),
+   но реплики просят и снаружи — симулятор баланса, разбор партии по семени,
+   тесты. Пока этого не было, «та же партия» каждый раз говорила по-другому. */
 function dayLine(game, me, sus, said) {
+  const prev = RNG;
+  RNG = (game && game.rng) || RNG;
+  try { return dayLineInner(game, me, sus, said); }
+  finally { RNG = prev; }
+}
+
+function dayLineInner(game, me, sus, said) {
   const alive = game.alive().filter(p => p.id !== me.id);
   if (!alive.length) return null;
   const mates = game.isMafia(me.id) ? game.alive().filter(p => game.isMafia(p.id)).map(p => p.id) : [];
@@ -390,29 +431,42 @@ function dayLine(game, me, sus, said) {
    ========================================================================= */
 function planFor(room, game, now) {
   const jobs = [];
+  /* Сроки ходов тоже часть партии. Пока они брались из Math.random, стол по
+     одному сиду каждый раз говорил в другом порядке — а порядок речей меняет
+     то, кого стол успевает заподозрить. Здесь та же случайность, что у
+     раздачи ролей. */
+  const R = game.rng ? () => game.rng.next() : Math.random;
   const bots = game.players.filter(p => p.alive && isBotId(p.id));
   const phaseMs = Math.max(6, game.phaseSeconds()) * 1000;
 
   bots.forEach(b => {
     if (game.phase === 'night') {
-      jobs.push({ id: b.id, at: now + 2000 + Math.random() * Math.min(9000, phaseMs * 0.5), kind: 'night' });
+      jobs.push({ id: b.id, at: now + 2000 + R() * Math.min(9000, phaseMs * 0.5), kind: 'night' });
     } else if (game.phase === 'day') {
       const trait = b._trait || TRAITS[0];
       const lines = trait.talk === 2 ? (chance(0.5) ? 2 : 1) : (chance(0.35) ? 1 : 0);
       const window = Math.min(phaseMs * 0.6, 16000);
       for (let i = 0; i < lines; i++) {
-        jobs.push({ id: b.id, at: now + 2500 + Math.random() * window + i * 5000, kind: 'say' });
+        jobs.push({ id: b.id, at: now + 2500 + R() * window + i * 5000, kind: 'say' });
       }
       /* «Я высказался» боты нажимают, поговорив, — и дальше день держит только
          человек. День всё равно не закроется, пока не готовы все живые, так
          что раннее «готов» у ботов не отбирает у игрока ни секунды. */
-      jobs.push({ id: b.id, at: now + Math.min(phaseMs * 0.6, 17000 + Math.random() * 9000), kind: 'ready' });
+      jobs.push({ id: b.id, at: now + Math.min(phaseMs * 0.6, 17000 + R() * 9000), kind: 'ready' });
     } else if (game.phase === 'vote' || game.phase === 'runoff') {
-      jobs.push({ id: b.id, at: now + 1500 + Math.random() * Math.min(8000, phaseMs * 0.6), kind: 'vote' });
+      jobs.push({ id: b.id, at: now + 1500 + R() * Math.min(8000, phaseMs * 0.6), kind: 'vote' });
     } else if (game.phase === 'morning') {
-      if (chance(0.5)) jobs.push({ id: b.id, at: now + 1200 + Math.random() * 3000, kind: 'mourn' });
+      if (chance(0.5)) jobs.push({ id: b.id, at: now + 1200 + R() * 3000, kind: 'mourn' });
     }
   });
+  /* Последнее слово выбывшего-бота. Стол не должен сидеть в тишине двадцать
+     секунд из-за того, что вывели соседа: бот говорит одну фразу и уходит.
+     Первой ночью он вместе с фразой называет три имени — лучший ход. */
+  if (game.phase === 'lastword' && game.lastWordId && isBotId(game.lastWordId)) {
+    jobs.push({ id: game.lastWordId, at: now + 1200 + R() * 1800, kind: 'lastword' });
+    jobs.push({ id: game.lastWordId, at: now + 4200 + R() * 2200, kind: 'lastpass' });
+  }
+
   /* В круге речей говорящий меняется по нескольку раз за фазу, поэтому в
      ключ плана входит и он: иначе бот, получивший слово, ждал бы следующей
      фазы, чтобы что-нибудь сказать. */
@@ -425,18 +479,19 @@ function planFor(room, game, now) {
          сосед-бот додумает мысль. */
       const lines = trait.talk === 2 ? 2 : 1;
       for (let i = 0; i < lines; i++) {
-        jobs.push({ id: me.id, at: now + 1400 + Math.random() * 2200 + i * 2600, kind: 'speak' });
+        jobs.push({ id: me.id, at: now + 1400 + R() * 2200 + i * 2600, kind: 'speak' });
       }
       jobs.push({
         id: me.id,
-        at: now + 1400 + lines * 2600 + Math.random() * 2000,
+        at: now + 1400 + lines * 2600 + R() * 2000,
         kind: 'pass'
       });
     }
   }
 
   jobs.sort((a, b) => a.at - b.at);
-  return { key: game.phase + ':' + game.day + ':' + (game.speaker || ''), jobs: jobs };
+  return { key: game.phase + ':' + game.day + ':' + (game.speaker || '') +
+    ':' + (game.lastWordId || ''), jobs: jobs };
 }
 
 /**
@@ -448,6 +503,16 @@ function tick(room, now) {
   if (!game || game.finished) return false;
   now = now || Date.now();
 
+  /* Случайность берём у партии: при том же семени стол ведёт себя так же,
+     и симулятор баланса перестаёт шуметь от прогона к прогону.
+
+     Порядок здесь важен. Раньше эта строка стояла ПОСЛЕ раздачи характеров,
+     и характер выбирался ещё через Math.random. Характер решает, сколько бот
+     говорит и насколько резко голосует, — то есть от него зависит исход
+     партии. Симулятор это и поймал: один и тот же сид давал то победу
+     города, то победу мафии. Семя обязано быть первым. */
+  RNG = game.rng || null;
+
   /* Характер держим на игроке движка: он живёт ровно столько, сколько партия. */
   game.players.forEach(p => {
     if (isBotId(p.id) && !p._trait) {
@@ -456,11 +521,8 @@ function tick(room, now) {
     }
   });
 
-  /* Случайность берём у партии: при том же семени стол ведёт себя так же,
-     и симулятор баланса перестаёт шуметь от прогона к прогону. */
-  RNG = game.rng || null;
-
-  const key = game.phase + ':' + game.day + ':' + (game.speaker || '');
+  const key = game.phase + ':' + game.day + ':' + (game.speaker || '') +
+    ':' + (game.lastWordId || '');
   if (!room.botPlan || room.botPlan.key !== key) room.botPlan = planFor(room, game, now);
 
   let changed = false;
@@ -469,7 +531,11 @@ function tick(room, now) {
   room.botPlan.jobs.forEach(job => {
     if (job.at > now) { rest.push(job); return; }
     const me = game.p(job.id);
-    if (!me || !me.alive) return;
+    if (!me) return;
+    /* Мёртвый бот молчит — кроме своего последнего слова: в этом весь его
+       смысл. Проверка «только живые» отменяла бы механику целиком. */
+    const lastWordMine = game.phase === 'lastword' && game.lastWordId === me.id;
+    if (!me.alive && !lastWordMine) return;
     try {
       if (job.kind === 'night') {
         const a = nightAction(game, me, sus);
@@ -511,6 +577,34 @@ function tick(room, now) {
             const r = game.say(me.id, line.text, 'town');
             if (!r.error) changed = true;
           }
+        }
+      } else if (job.kind === 'lastword') {
+        if (game.phase === 'lastword' && game.lastWordId === me.id) {
+          /* Лучший ход: три самых подозрительных для города. Бот-мафия
+             называет своих последними — то есть подставляет мирных, и это
+             честная игра за свою команду, а не поддавки. */
+          if (game.bestMoveOpen) {
+            const mine = game.isMafia(me.id);
+            const cand = game.alive().filter(p => p.id !== me.id);
+            cand.sort((a, b) => {
+              const ka = (mine ? (game.isMafia(a.id) ? -3 : 1) : 0) + (sus[a.id] || 0);
+              const kb = (mine ? (game.isMafia(b.id) ? -3 : 1) : 0) + (sus[b.id] || 0);
+              return kb - ka;
+            });
+            const picks = cand.slice(0, 3).map(p => p.id);
+            if (picks.length === 3) game.action(me.id, 'bestmove', picks.join(','));
+          }
+          const bank = game.isMafia(me.id) ? LINES.lastWordMafia : LINES.lastWordTown;
+          const target = game.alive().filter(p => p.id !== me.id)
+            .sort((a, b) => (sus[b.id] || 0) - (sus[a.id] || 0))[0];
+          const text = pickFresh(bank, game).replace(/\{T\}/g, target ? target.name : 'того, кто громче всех');
+          const r = game.say(me.id, text, 'town');
+          if (!r.error) changed = true;
+        }
+      } else if (job.kind === 'lastpass') {
+        if (game.phase === 'lastword' && game.lastWordId === me.id) {
+          game.action(me.id, 'pass', null);
+          changed = true;
         }
       } else if (job.kind === 'pass') {
         if (game.phase === 'speech' && game.speaker === me.id) {

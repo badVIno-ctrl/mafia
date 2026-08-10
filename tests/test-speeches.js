@@ -41,7 +41,10 @@ function toSpeech(g) {
     if (t) g.action(s.id, 'check', t.id);
   });
   g.deadline = 0; g.tick();                     // ночь → утро
-  g.deadline = 0; g.tick();                     // утро → круг
+  g.deadline = 0; g.tick();                     // утро → последнее слово или круг
+  /* Если ночь кого-то забрала, между утром и кругом стоит последнее слово
+     выбывшего: пропускаем его, тест здесь не про него. */
+  if (g.phase === 'lastword') { g.deadline = 0; g.tick(); }
   return g;
 }
 

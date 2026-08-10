@@ -185,20 +185,77 @@
     return SCENARIOS.find(s => s.id === id) || null;
   }
 
-  /** Длительность фаз (сек). Растёт вместе со столом. */
-  function timing(n) {
+  /* ----------------------------------------------------------------------
+     ПРЕСЕТЫ СКОРОСТИ
+
+     Одна длительность фаз на все столы не работает. Считать легко: круг
+     речей по 45 секунд на двадцать человек — это пятнадцать минут, за
+     которые компания в перерыве успевает разойтись. И наоборот: клубный
+     стол на десять человек за 45 секунд не успевает сказать ничего, кроме
+     «я мирный, слушаю дальше».
+
+     Отсюда три пресета. Меняется в них не всё подряд, а именно то, что
+     упирается в число людей: речь, ночь и голосование. День считается от
+     размера стола и упирается в потолок — у «Клуба» он выше, потому что
+     двадцать человек за четыре минуты не договорятся.
+     ---------------------------------------------------------------------- */
+  const SPEED = {
+    blitz: {
+      id: 'blitz', ru: 'Блиц', hint: 'партия за десять минут',
+      night: 30, speech: 30, voteBase: 24, voteStep: 1.6, voteCap: 70,
+      dayBase: 45, dayStep: 4, dayCap: 150, afterCircle: [25, 2.2, 95],
+      reveal: 8, lastWord: 15
+    },
+    normal: {
+      id: 'normal', ru: 'Стандарт', hint: 'как за обычным столом',
+      night: 40, speech: 45, voteBase: 30, voteStep: 2, voteCap: 90,
+      dayBase: 60, dayStep: 6, dayCap: 240, afterCircle: [30, 3, 120],
+      reveal: 10, lastWord: 20
+    },
+    club: {
+      id: 'club', ru: 'Клуб', hint: 'длинная партия, полные речи',
+      night: 50, speech: 60, voteBase: 36, voteStep: 2.4, voteCap: 110,
+      /* Шаг девять секунд на человека, а не шесть: стол на двадцать человек
+         получает больше четырёх минут на день. Прежний потолок 240 секунд
+         был рассчитан на десять человек, и на двадцати превращался в
+         двенадцать секунд на брата — то есть в невозможность договориться. */
+      dayBase: 80, dayStep: 9, dayCap: 330, afterCircle: [40, 3.6, 165],
+      reveal: 12, lastWord: 30
+    }
+  };
+  const SPEED_LIST = [SPEED.blitz, SPEED.normal, SPEED.club];
+
+  function speedById(id) { return SPEED[id] || SPEED.normal; }
+
+  /**
+   * Длительность фаз (сек). Растёт вместе со столом.
+   * @param {number} n игроков
+   * @param {string} [speedId] 'blitz' | 'normal' | 'club'
+   */
+  function timing(n, speedId) {
+    const s = speedById(speedId);
     return {
-      night: 40,
-      day: Math.min(240, 60 + n * 6),   // общее обсуждение
-      speech: 45,                        // реплика одного игрока по кругу
-      vote: Math.min(90, 30 + n * 2),
-      reveal: 10
+      speed: s.id,
+      night: s.night,
+      day: Math.min(s.dayCap, s.dayBase + n * s.dayStep),   // общее обсуждение
+      speech: s.speech,                                      // реплика одного по кругу
+      vote: Math.min(s.voteCap, s.voteBase + Math.round(n * s.voteStep)),
+      reveal: s.reveal,
+      /* Последнее слово выбывшего. Классика живых столов: человек, которого
+         только что вывели, получает право высказаться перед уходом. Это и
+         драма, и информация — по последнему слову город часто и понимает,
+         кого он вывел. */
+      lastWord: s.lastWord,
+      /* Короткое обсуждение после круга речей: иначе день на двадцать
+         человек растягивается на двадцать пять минут. */
+      afterCircle: Math.min(s.afterCircle[2], s.afterCircle[0] + Math.round(n * s.afterCircle[1]))
     };
   }
 
   return {
     MIN_PLAYERS, MAX_PLAYERS, ROLE, ROLE_INFO,
     composition, rolePool, compositionLabel, plural,
-    SCENARIOS, scenariosFor, scenarioById, timing
+    SCENARIOS, scenariosFor, scenarioById, timing,
+    SPEED, SPEED_LIST, speedById
   };
 });

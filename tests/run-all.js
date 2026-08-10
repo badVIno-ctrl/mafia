@@ -18,7 +18,13 @@ const suites = [
   ['Тест 12 · доступ к столу и возвращение в партию', 'test-access.js'],
   ['Тест 13 · слово по кругу', 'test-speeches.js'],
   ['Тест 14 · семя партии и устойчивость ботов', 'test-seed.js'],
-  ['Тест 15 · режим «Следствие»', 'test-inquest.js']
+  ['Тест 15 · режим «Следствие»', 'test-inquest.js'],
+  ['Тест 16 · последнее слово, лучший ход и темп', 'test-lastword.js'],
+  /* Симулятор идёт последним и с малым числом партий: полный прогон на
+     сотни партий запускают руками (node tests/test-balance-sim.js 2000),
+     а в общем тесте он проверяет, что баланс не свалился совсем и что
+     один сид по-прежнему даёт одну партию. */
+  ['Тест 17 · симулятор баланса', 'test-balance-sim.js']
 ];
 
 let bad = 0;
@@ -45,7 +51,9 @@ const must = [
   'tests/test-signal.js', 'tests/test-assets.js', 'tests/test-bots.js',
   'tests/test-lobby.js', 'tests/test-access.js', 'tests/test-speeches.js',
   'tests/test-seed.js', 'tests/test-inquest.js', 'tests/shot.js', 'tests/lab-shots.js',
-  'public/figure-lab.html'
+  'tests/test-lastword.js', 'tests/test-balance-sim.js', 'tests/ab-compare.js',
+  'public/figure-lab.html', 'public/compare.html',
+  'public/js/render-pipeline.js', 'public/js/notes.js'
 ];
 let miss = 0;
 must.forEach(f => {

@@ -156,6 +156,9 @@ function roomView(room, forUserId) {
        'invite' — прежнее поведение: одна ссылка, одна дверь. */
     visibility: room.visibility || 'invite',
     mode: room.mode || 'classic',
+    speed: C.speedById(room.speed).id,
+    speedList: C.SPEED_LIST.map(x => ({ id: x.id, ru: x.ru, hint: x.hint, speech: x.speech })),
+    lastWord: room.lastWord !== false,
     /* Видят ли выбывшие ночной шёпот мафии. По умолчанию нет. */
     deadSeeAll: !!room.deadSeeAll,
     members: room.members.map(id => {
@@ -366,7 +369,10 @@ function startGame(room) {
   const fits = sc && members.length >= sc.min && members.length <= sc.max;
   room.game = new Game(members, fits ? room.scenarioId : null, {
     deadSeeAll: !!room.deadSeeAll,
-    mode: room.mode
+    mode: room.mode,
+    speed: room.speed,
+    lastWord: room.lastWord !== false,
+    bestMove: room.lastWord !== false
   });
   room.chat.push({
     system: true,
@@ -809,6 +815,12 @@ const server = http.createServer(async (req, res) => {
       if (body.visibility !== undefined) room.visibility = body.visibility === 'invite' ? 'invite' : 'public';
       if (body.deadSeeAll !== undefined) room.deadSeeAll = !!body.deadSeeAll;
       if (body.mode !== undefined) room.mode = body.mode === 'inquest' ? 'inquest' : 'classic';
+      /* Темп стола. Три пресета вместо одной длительности на все случаи:
+         круг речей по 45 секунд на двадцать человек — это пятнадцать минут. */
+      if (body.speed !== undefined) room.speed = C.speedById(body.speed).id;
+      /* Последнее слово выбывшего и лучший ход. По умолчанию включены —
+         это классика живых столов, а не добавка. */
+      if (body.lastWord !== undefined) room.lastWord = !!body.lastWord;
       if (body.title !== undefined) room.title = String(body.title).slice(0, 40);
       pushAll(room);
       return send(res, 200, { room: roomView(room, me.id) });
