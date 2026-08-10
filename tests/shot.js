@@ -88,7 +88,14 @@ async function botsScene(browser, size) {
   const errs = [];
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   watch(page, errs);
+  /* Чистый лист. Страница с ботами хранит партию в localStorage и при
+     открытии продолжает её с того места, где бросили. Браузер у всех сцен
+     стенда общий, поэтому доигранная партия из предыдущей сцены всплывала
+     здесь готовым «Финалом»: проверка «партия идёт сама» видела одно
+     изменение фазы и падала — хотя игра была совершенно здорова. */
   await page.goto(BASE + '/bots.html', { waitUntil: 'load' });
+  await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+  await page.reload({ waitUntil: 'load' });
   await sleep(1800);
   await page.click('#paceRow .pc[data-v="0.7"]').catch(() => {});
   await page.click('#sizeRow .opt[data-v="' + size + '"]').catch(() => {});
@@ -170,7 +177,24 @@ async function onlineScene(browser) {
 
   /* час за столом в ускоренном виде: ждём, что фаза меняется сама */
   const first = await page.textContent('#gPhase');
-  await sleep(12000);
+
+  /* Ждём не «двенадцать секунд», а саму говорящую фазу.
+
+     Боты молчат ночью — так и должно быть, город спит. Пролог держит стол
+     двенадцать секунд, ночь ещё сорок: до утра от старта проходит около
+     минуты. Проверка же спала фиксированные 12 секунд и смотрела в чат,
+     то есть её исход зависел от того, насколько быстрая машина под стендом.
+     Теперь она ждёт, пока стол начнёт говорить, и только потом судит. */
+  let talkPhase = '';
+  for (let i = 0; i < 90; i++) {
+    talkPhase = (await page.textContent('#gPhase').catch(() => '')) || '';
+    if (/Утро|День|Голосование|Последнее слово|окончена/.test(talkPhase)) break;
+    await sleep(1000);
+  }
+  ok(/Утро|День|Голосование|Последнее слово|окончена/.test(talkPhase),
+    'стол сам дошёл до говорящей фазы («' + talkPhase + '»)');
+  /* Дальше боты берут слово по кругу — дадим им несколько ходов. */
+  await sleep(9000);
   const chat = await page.evaluate(() => document.querySelectorAll('#gFeed .msg').length);
   ok(chat > 0, 'соседи-боты говорят в чате сетевой партии (' + chat + ' реплик)');
   await shot(page, 'online-chat');
