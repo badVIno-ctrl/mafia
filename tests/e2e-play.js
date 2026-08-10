@@ -105,10 +105,31 @@ const PROBE = (isMobile) => {
       const fs = parseFloat(cs.fontSize);
       if(fs && fs < 10.5) out.tiny.push({ el: name(el), fs: +fs.toFixed(1), text: (el.textContent || '').trim().slice(0, 30) });
     }
-    /* зона нажатия */
-    if(isMobile && (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button')){
-      if(r.height < 32 || r.width < 32){
-        out.smallTap.push({ el: name(el), w: Math.round(r.width), h: Math.round(r.height) });
+    /* Зона нажатия.
+
+       Проверка была и раньше, но пропускала ровно то, ради чего её писали.
+       Во-первых, порог стоял 32 px вместо 44 — а 44 это правило, записанное в
+       css/app.css. Между 32 и 44 живут почти все настоящие промахи: кнопка в
+       38 px выглядит нормально и не нажимается на ходу. Во-вторых, смотрели
+       только на BUTTON и role=button, то есть ссылка-кнопка <a class="btn">,
+       флажок, ползунок и карточка выбора .opt под проверку не попадали.
+
+       Размер берём по раскладке: анимация «scale(.96) → 1» на 420 мс делает
+       честные 44 px измеренными 42-мя. Для проверок переполнения выше, наоборот,
+       нужен живой прямоугольник — там важно, где элемент виден.
+
+       Подписи мест исключены: на дуге телефона двадцать мест не разложить по
+       44 px, и за них отвечает отдельная проверка в e2e-modes.js. */
+    const TAP = 'button,a.btn,[role=button],.opt,.tgt,.pc,.pdBtn,.tbtn,.mItem,input,select,textarea';
+    /* Ссылка внутри фразы под правило не попадает — см. пояснение в
+       tests/e2e-modes.js. */
+    const inProse = el.tagName === 'A' && !el.classList.contains('btn') && !!el.closest('p, li, .note, .lede');
+    if(isMobile && el.matches(TAP) && !el.classList.contains('mark') && !inProse &&
+       cs.display !== 'inline' && !el.disabled){
+      const tw = el.offsetWidth || r.width, th = el.offsetHeight || r.height;
+      if(th < 43.5 || tw < 43.5){
+        out.smallTap.push({ el: name(el), w: Math.round(tw), h: Math.round(th),
+          text: (el.textContent || '').trim().slice(0, 20) });
       }
     }
   });
@@ -222,10 +243,15 @@ async function runViewport(browser, vp){
 
 (async () => {
   const srv = await startServer();
-  const browser = await chromium.launch({
-    executablePath: process.env.CHROME_BIN || '/usr/local/bin/chromium',
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=swiftshader']
-  });
+  /* Браузер берём тот, который есть. Раньше здесь стоял жёсткий путь
+     /usr/local/bin/chromium, и на любой машине без этого файла прогон падал
+     на первой строке — то есть не запускался нигде, кроме одного стенда.
+     Тест, который не запускается, хуже отсутствующего: он создаёт впечатление
+     покрытия. Есть CHROME_BIN — берём его, нет — пусть playwright возьмёт
+     свой; так уже сделано в tests/shot.js. */
+  const launchOpts = { args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=swiftshader'] };
+  if (process.env.CHROME_BIN) launchOpts.executablePath = process.env.CHROME_BIN;
+  const browser = await chromium.launch(launchOpts);
 
   let failures = 0;
   try {

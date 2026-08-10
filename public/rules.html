@@ -87,6 +87,10 @@
     border:1px solid var(--line);border-radius:999px;padding:7px 14px;min-height:34px;
     display:inline-flex;align-items:center}
   .toc a:hover{border-color:var(--gold-soft);color:var(--paper)}
+  /* Оглавление — не текст, а ряд кнопок-переходов, и стоит оно отдельной
+     строкой. Значит на сенсорном экране под него действует общее правило:
+     не мельче 44 px по короткой стороне. Базовые 34 px оставляем мыши. */
+  @media (pointer:coarse){ .toc a{min-height:44px} }
   /* «Главная» в хлебных крошках — полноценная кнопка возврата,
      а не тонкая строчка текста: на телефоне в неё надо попасть пальцем. */
   .crumbs{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2)}
