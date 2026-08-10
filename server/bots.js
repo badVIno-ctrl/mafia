@@ -135,11 +135,37 @@ const LINES = {
     'Голосую и не жалею.',
     'Пусть будет так. Ошибусь — признаю.',
     'Решено. Дальше посмотрим, кто останется.'
+  ],
+  /* Оборотень знает про себя главное: шериф на нём ошибётся. Играть ему
+     приходится на опережение — заранее объяснять столу, что проверка может
+     врать. Обычный мирный так не говорит никогда, и это единственная
+     подсказка, которую роль даёт столу. */
+  werewolf: [
+    'Если меня кто-то «проверит» и объявит чёрным — подумайте дважды. Я мирный(ая).',
+    'Меня легко назначить виноватым: я весь вечер ничего не сделал(а).',
+    'Заранее говорю: любая проверка на мне — ошибка. Дальше как хотите.'
+  ],
+  /* Журналист говорит связями, а не именами: «эти двое вместе» — самая
+     сильная фраза, которую он может сказать, и самая непроверяемая. */
+  press: [
+    'Скажу так: {A} и {B} — из одной компании. Проверьте это сами.',
+    '{A} и {B} стоят по разные стороны. Одно из двух имён — не то, чем кажется.',
+    'У меня есть связь, а не имя: {A} и {B} играют вместе.'
+  ],
+  /* Третья сила молчит о себе и говорит о других: маньяку выгоден любой
+     день, в который стол выводит не его. */
+  maniac: [
+    'Считайте чёрных, считайте. Только сходится ли у вас арифметика?',
+    'Двое за ночь — это не мафия торопится. Это кто-то ещё.',
+    'Я бы на вашем месте перестал(а) верить в две команды.'
   ]
 };
 
 function fill(tpl, vars) {
-  return String(tpl).replace(/\{T\}/g, vars.T || 'ты');
+  return String(tpl)
+    .replace(/\{T\}/g, vars.T || 'ты')
+    .replace(/\{A\}/g, vars.A || 'один')
+    .replace(/\{B\}/g, vars.B || 'другой');
 }
 
 /* =========================================================================
@@ -325,7 +351,101 @@ function nightAction(game, me, sus) {
     if (!cands.length) return null;
     return { type: 'check', target: mostSuspected(cands, personalSus(game, me, sus)) };
   }
+
+  /* ---------------- расширенный набор ----------------
+     Общее правило для всех пяти: бот знает ровно то, что знает человек с
+     этой картой, и ходит по той же логике, по которой ходил бы человек.
+     Никаких подглядываний в чужие роли — иначе играть с ним бессмысленно. */
+
+  /* Маньяк. Шериф ему не опасен (проверка честно скажет «не мафия»), опасен
+     стол — поэтому он убирает того, кто давит на него самого. Это ровно то,
+     что делает живой маньяк, и заодно объясняет, почему он часто выбивает
+     активных мирных: они и есть те, кто говорит громче всех. */
+  if (me.role === ROLE.MANIAC) {
+    const cands = alive.filter(p => p.id !== me.id).map(p => p.id);
+    if (!cands.length) return null;
+    const mine = personalSus(game, me, sus);
+    const t = chance(0.75) ? mostSuspected(cands, mine) : pick(cands);
+    return { type: 'slay', target: t };
+  }
+
+  /* Любовница. Блокирует самого подозрительного: если она угадала чёрного,
+     ночь у мафии пропала целиком. Своего заявившегося шерифа не трогает
+     никогда — заблокировать шерифа значит подарить мафии ход. */
+  if (me.role === ROLE.LOVER) {
+    const claimed = claimedSheriff(game, []);
+    const blocked = game.lastBlocked[me.id] || null;
+    const cands = alive.map(p => p.id)
+      .filter(id => id !== me.id && id !== blocked && id !== claimed);
+    if (!cands.length) return null;
+    return { type: 'block', target: mostSuspected(cands, personalSus(game, me, sus)) };
+  }
+
+  /* Адвокат. Прикрывает того, кого стол уже приговорил: право сработает
+     только если стол выведет именно его, поэтому шансы надо ставить на
+     самого громко обсуждаемого. Раскрывшегося шерифа прикрываем в первую
+     очередь — его выводят чаще всех и почти всегда зря. */
+  if (me.role === ROLE.LAWYER) {
+    const claimed = claimedSheriff(game, []);
+    const cands = alive.map(p => p.id);
+    if (!cands.length) return null;
+    const t = (claimed && cands.indexOf(claimed) >= 0)
+      ? claimed
+      : mostSuspected(cands.filter(id => id !== me.id), sus);
+    return { type: 'shield', target: t || me.id };
+  }
+
+  /* Журналист. Сравнивает двух самых обсуждаемых: связь между двумя точками,
+     на которые и так смотрит весь стол, — единственный факт, который на
+     следующий день можно во что-то превратить. Пары не повторяет. */
+  if (me.role === ROLE.JOURNALIST) {
+    const done = (game.pressResults[me.id] || []).map(r => [r.aId, r.bId].sort().join('|'));
+    const mine = personalSus(game, me, sus);
+    const cands = alive.filter(p => p.id !== me.id).map(p => p.id)
+      .sort((a, b) => (mine[b] || 0) - (mine[a] || 0));
+    for (let i = 0; i < cands.length; i++) {
+      for (let j = i + 1; j < cands.length; j++) {
+        const key = [cands[i], cands[j]].sort().join('|');
+        if (done.indexOf(key) >= 0) continue;
+        return { type: 'press', target: cands[i] + ',' + cands[j] };
+      }
+    }
+    return null;
+  }
+
+  /* Оборотень ночью не делает ничего — как мирный. Вся его игра днём. */
   return null;
+}
+
+/* Что журналист-бот вынес из своих сравнений.
+   Одна честная выкладка: если про пару сказано «вместе», а один из двоих уже
+   раскрыт как чёрный — второй тоже чёрный. Обратное тоже верно: «вместе» с
+   открытым мирным снимает подозрение с обоих. Дальше этого бот не идёт, и
+   правильно: остальные выводы требуют держать в голове весь стол, а бот,
+   который «вычислил всё», играть с собой не позволяет. */
+function pressHints(game, me) {
+  const out = {};
+  (game.pressResults[me.id] || []).forEach(r => {
+    const a = game.p(r.aId), b = game.p(r.bId);
+    if (!a || !b) return;
+    const known = id => {
+      const p = game.p(id);
+      if (!p || p.alive) return null;              // карта открывается только с выбытием
+      return game.isMafia(id) ? 'mafia' : 'town';
+    };
+    const ka = known(r.aId), kb = known(r.bId);
+    const mark = (id, black) => { out[id] = (out[id] || 0) + (black ? 3.4 : -3.4); };
+    if (r.sameTeam) {
+      if (ka === 'mafia') mark(r.bId, true);
+      if (kb === 'mafia') mark(r.aId, true);
+      if (ka === 'town') mark(r.bId, false);
+      if (kb === 'town') mark(r.aId, false);
+    } else {
+      if (ka === 'mafia') mark(r.bId, false);
+      if (kb === 'mafia') mark(r.aId, false);
+    }
+  });
+  return out;
 }
 
 /* Кто вслух назвал шерифом себя — по общему чату, тем же строгим правилом,
@@ -355,6 +475,24 @@ function invert(sus, ids) {
 
 function voteChoice(game, me, sus) {
   const alive = game.alive();
+
+  /* Голосование стола при ничьей: не имя, а «да» или «нет». Логика простая и
+     та же, что у живого игрока: чёрный за то, чтобы поднять всех, если среди
+     кандидатов нет своих (три мирных за раз — подарок), и против, если есть.
+     Город смотрит на арифметику: поднимать всех выгодно, пока после этого
+     мирных всё ещё больше, чем чёрных. */
+  if (game.phase === 'tievote') {
+    const cands = game.tieOf || [];
+    if (!cands.length) return 'no';
+    if (game.isMafia(me.id)) {
+      const mates = cands.filter(id => game.isMafia(id));
+      return mates.length ? 'no' : 'yes';
+    }
+    if (cands.indexOf(me.id) >= 0) return 'no';        // за свою жизнь голосуют против
+    const left = alive.length - cands.length;
+    return left >= 3 && chance(0.7) ? 'yes' : 'no';
+  }
+
   let pool = alive.filter(p => p.id !== me.id).map(p => p.id);
   if (game.runoffOf && game.runoffOf.length) pool = game.runoffOf.filter(id => pool.indexOf(id) >= 0);
   if (!pool.length) return 'skip';
@@ -369,6 +507,19 @@ function voteChoice(game, me, sus) {
     const black = (game.checkResults[me.id] || []).filter(c => c.isMafia).map(c => c.targetId);
     const known = pool.filter(id => black.indexOf(id) >= 0);
     if (known.length) return known[0];
+  }
+  /* Маньяк голосует за того, кто давит на него: день для него — второй нож,
+     и пользуется он им так же, как первым. */
+  if (me.role === ROLE.MANIAC) {
+    return mostSuspected(pool, personalSus(game, me, sus));
+  }
+  /* Журналист складывает свои связи с общим счётом стола. Своя выкладка
+     весит больше крика: в ней есть хотя бы один проверенный факт. */
+  if (me.role === ROLE.JOURNALIST) {
+    const mine = personalSus(game, me, sus);
+    const hints = pressHints(game, me);
+    Object.keys(hints).forEach(id => { mine[id] = (mine[id] || 0) + hints[id]; });
+    return mostSuspected(pool, mine);
   }
   /* Мирный голосует не за самого громкого, а за самого подозрительного по
      своему счёту: кто давил на него самого и кто травил уже раскрывшихся
@@ -417,6 +568,35 @@ function dayLineInner(game, me, sus, said) {
       return { text: fill(pickFresh(LINES.claimSheriff, game), { T: game.nameOf(black[0].targetId) }) };
     }
   }
+  /* Оборотень предупреждает стол заранее — один раз за партию, и только
+     когда за столом уже кто-то объявил себя шерифом: раньше это выглядело бы
+     как оправдание без обвинения, то есть как заявка на себя. */
+  if (me.role === ROLE.WEREWOLF && !me._wolfSaid && claimedSheriff(game, [me.id]) && chance(0.6)) {
+    me._wolfSaid = true;
+    return { text: pickFresh(LINES.werewolf, game) };
+  }
+  /* Журналист выкладывает связь: единственная его карта, которую можно
+     положить на стол. Каждую связь — один раз. */
+  if (me.role === ROLE.JOURNALIST) {
+    me._pressSaid = me._pressSaid || [];
+    const fresh = (game.pressResults[me.id] || []).filter(r => {
+      const key = [r.aId, r.bId].sort().join('|');
+      return me._pressSaid.indexOf(key) < 0 &&
+        game.p(r.aId) && game.p(r.bId) && (game.p(r.aId).alive || game.p(r.bId).alive);
+    });
+    if (fresh.length && chance(0.55)) {
+      const r = fresh[0];
+      me._pressSaid.push([r.aId, r.bId].sort().join('|'));
+      const bank = r.sameTeam ? [LINES.press[0], LINES.press[2]] : [LINES.press[1]];
+      return { text: fill(pickFresh(bank, game), { A: r.aName, B: r.bName }) };
+    }
+  }
+  /* Маньяк подбрасывает столу мысль о третьей силе — но только после того,
+     как стол сам увидел двойную ночь: до этого фраза выдала бы его. */
+  if (me.role === ROLE.MANIAC && game.day > 1 && chance(0.2)) {
+    return { text: pickFresh(LINES.maniac, game) };
+  }
+
   const mine = personalSus(game, me, sus);
   const target = others.length ? mostSuspected(others.map(p => p.id), mine) : pick(alive).id;
   const name = game.nameOf(target);
@@ -453,7 +633,7 @@ function planFor(room, game, now) {
          человек. День всё равно не закроется, пока не готовы все живые, так
          что раннее «готов» у ботов не отбирает у игрока ни секунды. */
       jobs.push({ id: b.id, at: now + Math.min(phaseMs * 0.6, 17000 + R() * 9000), kind: 'ready' });
-    } else if (game.phase === 'vote' || game.phase === 'runoff') {
+    } else if (game.phase === 'vote' || game.phase === 'runoff' || game.phase === 'tievote') {
       jobs.push({ id: b.id, at: now + 1500 + R() * Math.min(8000, phaseMs * 0.6), kind: 'vote' });
     } else if (game.phase === 'morning') {
       if (chance(0.5)) jobs.push({ id: b.id, at: now + 1200 + R() * 3000, kind: 'mourn' });
@@ -540,6 +720,13 @@ function tick(room, now) {
       if (job.kind === 'night') {
         const a = nightAction(game, me, sus);
         if (a && a.target) { game.action(me.id, a.type, a.target); changed = true; }
+        /* Ночная доска мафии: свой выбор бот отмечает на общем холсте. Без
+           этого доска у стола с ботами оставалась бы пустой, а живой мафии
+           не с кем было бы договариваться — то есть механики не было бы
+           ровно там, где она нужнее всего. */
+        if (a && a.type === 'kill' && a.target && !game.mafiaBoard[a.target]) {
+          game.action(me.id, 'mark', a.target + ':target');
+        }
         /* «Следствие»: способ выбирает мафия, и бот выбирает его как игрок —
            обычно тихо, но если город уже поджимает, идёт грубо и быстро,
            чтобы врач не успел. Без этого выбора ночь всегда была бы «тихой»
@@ -627,6 +814,9 @@ function tick(room, now) {
 /* Внутренности, открытые тестам. В игре они не нужны: наружу бот показывает
    только ходы и реплики. Но проверить, что фразой «шериф проверил такого-то»
    больше нельзя заказать человека, можно только заглянув в эти функции. */
-const __test = { sheriffClaims, claimants, personalSus, suspicionMap, dayLine, claimedSheriff, pickFresh };
+const __test = {
+  sheriffClaims, claimants, personalSus, suspicionMap, dayLine, claimedSheriff, pickFresh,
+  nightAction, voteChoice, pressHints, LINES
+};
 
 module.exports = { isBotId, makeBot, tick, NAMES, PREFIX, __test };

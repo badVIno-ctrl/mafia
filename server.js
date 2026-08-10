@@ -159,6 +159,20 @@ function roomView(room, forUserId) {
     speed: C.speedById(room.speed).id,
     speedList: C.SPEED_LIST.map(x => ({ id: x.id, ru: x.ru, hint: x.hint, speech: x.speech })),
     lastWord: room.lastWord !== false,
+    /* ---- правила стола ----
+       Пресет ролей, вид голосования, поведение при ничьей и фолы. Всё это
+       видно каждому за столом, а не только хозяину: игрок должен понимать,
+       во что он сел играть, до раздачи карт. */
+    rolePreset: room.rolePreset || 'classic',
+    presetList: C.PRESETS.map(x => ({
+      id: x.id, ru: x.ru, short: x.short, hint: x.hint, min: x.min, max: x.max,
+      fits: room.size >= x.min && room.size <= x.max
+    })),
+    voteOpen: room.voteOpen !== false,
+    onTie: room.onTie === 'table' ? 'table' : 'none',
+    /* Фолы по умолчанию включаются сами на столе от пятнадцати человек:
+       именно там круг речей без них перестаёт работать. */
+    fouls: room.fouls === undefined ? (room.size >= 15) : !!room.fouls,
     /* Видят ли выбывшие ночной шёпот мафии. По умолчанию нет. */
     deadSeeAll: !!room.deadSeeAll,
     members: room.members.map(id => {
@@ -177,8 +191,14 @@ function roomView(room, forUserId) {
     freeSeats: Math.max(0, room.size - room.members.length),
     scenarios: C.scenariosFor(Math.max(C.MIN_PLAYERS, room.members.length))
       .map(s => ({ id: s.id, title: s.title, place: s.place, min: s.min, max: s.max, prologue: s.prologue })),
-    composition: C.composition(Math.max(C.MIN_PLAYERS, room.members.length)),
-    compositionLabel: C.compositionLabel(Math.max(C.MIN_PLAYERS, room.members.length)),
+    /* Состав считаем на тот стол, который соберётся, а не на тот, что сидит
+       сейчас. Раньше здесь стояло число уже пришедших, и хозяин, открывший
+       комнату на восемь, читал состав на шесть — а начиналась партия всё
+       равно на восьми. С пресетами это стало прямым противоречием: пресет
+       проверяется по размеру стола, а состав печатался по числу пришедших,
+       и «С маньяком» на восьмерых показывал расклад на шестерых. */
+    composition: C.composition(Math.max(C.MIN_PLAYERS, room.size), room.rolePreset),
+    compositionLabel: C.compositionLabel(Math.max(C.MIN_PLAYERS, room.size), room.rolePreset),
     chat: room.chat.slice(-60),
     game: g ? g.viewFor(forUserId) : null
   };
@@ -367,17 +387,27 @@ function startGame(room) {
   if (members.length > C.MAX_PLAYERS) return { error: 'Максимум ' + C.MAX_PLAYERS + ' игроков' };
   const sc = C.scenarioById(room.scenarioId);
   const fits = sc && members.length >= sc.min && members.length <= sc.max;
+  /* Пресет «Спортивная» приносит с собой свои правила: полные речи, фолы,
+     решение стола при ничьей. Настройки хозяина при этом важнее — если он
+     что-то поменял руками, пресет это не перебивает. */
+  const preset = C.presetById(room.rolePreset);
+  const pd = preset.defaults || {};
   room.game = new Game(members, fits ? room.scenarioId : null, {
     deadSeeAll: !!room.deadSeeAll,
     mode: room.mode,
-    speed: room.speed,
+    speed: room.speed || pd.speed,
     lastWord: room.lastWord !== false,
-    bestMove: room.lastWord !== false
+    bestMove: room.lastWord !== false,
+    rolePreset: room.rolePreset,
+    voteOpen: room.voteOpen === undefined ? (pd.voteOpen !== false) : !!room.voteOpen,
+    onTie: room.onTie === undefined ? (pd.onTie || 'none') : room.onTie,
+    fouls: room.fouls === undefined ? (pd.fouls || members.length >= 15) : !!room.fouls
   });
   room.chat.push({
     system: true,
     text: 'Партия началась: «' + room.game.scenario.title + '»' +
-      (room.mode === 'inquest' ? ' · режим «Следствие»' : '') + '.',
+      (room.mode === 'inquest' ? ' · режим «Следствие»' : '') +
+      (room.game.preset !== 'classic' ? ' · пресет «' + C.presetById(room.game.preset).ru + '»' : '') + '.',
     ts: Date.now()
   });
   pushAll(room);
@@ -647,6 +677,12 @@ const server = http.createServer(async (req, res) => {
         deadSeeAll: body.deadSeeAll === true,
         /* Режим стола: обычная «Мафия» или «Следствие» с приметами и уликами. */
         mode: body.mode === 'inquest' ? 'inquest' : 'classic',
+        /* Пресет ролей. Классика по умолчанию и всегда: человек, впервые
+           открывший сайт, должен сесть за стол, правила которого он знает. */
+        rolePreset: (function () {
+          const pr = C.presetById(body.rolePreset);
+          return (size >= pr.min && size <= pr.max) ? pr.id : 'classic';
+        })(),
         autoStart: body.autoStart !== false,
         scenarioId: body.scenarioId || (C.scenariosFor(size)[0] || C.SCENARIOS[0]).id,
         chat: [],
@@ -810,7 +846,21 @@ const server = http.createServer(async (req, res) => {
       if (!room || room.hostId !== me.id) return send(res, 403, { error: 'Только хозяин комнаты' });
       if (room.game) return send(res, 409, { error: 'Партия уже идёт' });
       if (body.scenarioId !== undefined) room.scenarioId = body.scenarioId;
-      if (body.size !== undefined) room.size = Math.max(C.MIN_PLAYERS, Math.min(C.MAX_PLAYERS, Number(body.size) || 8));
+      if (body.size !== undefined) {
+        room.size = Math.max(C.MIN_PLAYERS, Math.min(C.MAX_PLAYERS, Number(body.size) || 8));
+        /* Стол сжали — и выбранный пресет мог перестать на него садиться.
+           Молча раздать другой состав нельзя, промолчать тоже: возвращаем
+           классику и говорим об этом в общем чате комнаты. */
+        const pr = C.presetById(room.rolePreset);
+        if (room.size < pr.min || room.size > pr.max) {
+          room.rolePreset = 'classic';
+          room.chat.push({
+            system: true, ts: Date.now(),
+            text: 'Пресет «' + pr.ru + '» не садится на ' + room.size +
+              ' человек — стол вернулся к классике.'
+          });
+        }
+      }
       if (body.autoStart !== undefined) room.autoStart = !!body.autoStart;
       if (body.visibility !== undefined) room.visibility = body.visibility === 'invite' ? 'invite' : 'public';
       if (body.deadSeeAll !== undefined) room.deadSeeAll = !!body.deadSeeAll;
@@ -821,6 +871,30 @@ const server = http.createServer(async (req, res) => {
       /* Последнее слово выбывшего и лучший ход. По умолчанию включены —
          это классика живых столов, а не добавка. */
       if (body.lastWord !== undefined) room.lastWord = !!body.lastWord;
+      /* Пресет ролей. Тот, что не садится на текущий стол (полный набор
+         требует двенадцати человек), не принимаем: иначе хозяин выбрал бы
+         состав, которого игроки не получат, и узнал бы об этом из протокола. */
+      if (body.rolePreset !== undefined) {
+        const pr = C.presetById(body.rolePreset);
+        if (room.size < pr.min || room.size > pr.max) {
+          return send(res, 400, {
+            error: 'Пресет «' + pr.ru + '» рассчитан на ' +
+              (pr.min === pr.max ? (pr.min + ' человек') : (pr.min + '–' + pr.max + ' человек')) +
+              ', а за столом ждём ' + room.size + '.'
+          });
+        }
+        room.rolePreset = pr.id;
+        /* Пресет со своими правилами ставит их сразу: спортивный стол — это
+           не только состав, но и полные речи с фолами. */
+        const pd = pr.defaults || {};
+        if (pd.speed) room.speed = C.speedById(pd.speed).id;
+        if (pd.fouls !== undefined) room.fouls = pd.fouls;
+        if (pd.onTie !== undefined) room.onTie = pd.onTie;
+        if (pd.voteOpen !== undefined) room.voteOpen = pd.voteOpen;
+      }
+      if (body.voteOpen !== undefined) room.voteOpen = !!body.voteOpen;
+      if (body.onTie !== undefined) room.onTie = body.onTie === 'table' ? 'table' : 'none';
+      if (body.fouls !== undefined) room.fouls = !!body.fouls;
       if (body.title !== undefined) room.title = String(body.title).slice(0, 40);
       pushAll(room);
       return send(res, 200, { room: roomView(room, me.id) });

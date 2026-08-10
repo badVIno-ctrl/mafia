@@ -128,6 +128,7 @@
 .mark.pickable:hover{border-color:var(--tallow);background:rgba(38,28,20,.9)}
 .mark.picked{border-color:var(--tallow);background:linear-gradient(180deg,rgba(226,180,120,.22),rgba(226,180,120,.06))}
 .mark.mafia{border-color:rgba(196,86,58,.6)}
+.mark.maniac{border-color:rgba(201,166,214,.6)}
 /* Говорящий. Ореол вокруг плашки заменён на то, как это выглядело бы в
    комнате со свечой: светлая кромка сверху, где падает свет, тень снизу и
    медный кант. Цветное свечение без смещения — самая узнаваемая примета
@@ -180,7 +181,18 @@
   position:absolute;left:var(--s4);top:78px;z-index:3;width:250px;
   padding:var(--s4);border-radius:var(--r-lg);
   background:rgba(10,8,9,.74);border:1px solid var(--hair);backdrop-filter:blur(8px);
+  /* Карта роли растёт вместе с тем, что игрок про себя знает: у шерифа к
+     пятому дню четыре проверки, у журналиста три связи, у адвоката строка
+     про право, у оборотня предупреждение. Без потолка панель доезжала до
+     середины сцены и накрывала подписи мест — то есть мешала играть тем
+     самым знанием, которое показывает. Потолок и прокрутка внутри. */
+  max-height:min(58vh, calc(100% - 210px));overflow:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;
 }
+/* Полоса прокрутки внутри стеклянной панели: тонкая и тёплая, чтобы не
+   читалась как элемент интерфейса браузера поверх сцены. */
+.rolepane::-webkit-scrollbar{width:6px}
+.rolepane::-webkit-scrollbar-thumb{background:rgba(226,180,120,.3);border-radius:3px}
 .rolepane .role{display:flex;align-items:center;gap:var(--s2);color:var(--tallow)}
 .rolepane h3{font-size:var(--t-lg);color:var(--bone)}
 .rolepane p{font-size:var(--t-2xs);color:var(--plaster-dim);margin:var(--s2) 0 0}
@@ -244,6 +256,9 @@
 .log .l.vote{border-color:rgba(226,180,120,.6)}
 .log .l.story{border-color:rgba(123,162,149,.5);font-family:var(--display);font-style:italic;color:var(--plaster)}
 .log .l.end{border-color:var(--tallow);color:var(--bone)}
+/* Фол — не событие сюжета, а замечание ведущего: тот же вес, что у голосования,
+   но отдельный цвет, чтобы строка находилась в протоколе глазами. */
+.log .l.foul{border-color:rgba(196,86,58,.45);color:var(--plaster-dim);font-style:italic}
 
 /* Плоский стол: и запасной вариант без WebGL, и панель выбора на телефоне */
 .seats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:var(--s2)}
@@ -271,6 +286,9 @@
 .finale .win{font-family:var(--display);font-size:clamp(28px,6vw,46px);color:var(--bone)}
 .finale .win.mafia{color:var(--ember-soft)}
 .finale .win.town{color:var(--verdigris)}
+/* Третья сторона получает свой цвет, а не оттенок мафии: маньяк не мафия,
+   и на экране итога это должно быть видно за полсекунды. */
+.finale .win.maniac{color:#c9a6d6}
 /* Выиграл ли именно этот игрок — главный вопрос после партии. */
 .finale .youres{display:inline-block;margin-top:var(--s3);padding:6px 14px 7px;
   border:1px solid var(--line);border-radius:999px;font-size:13px;letter-spacing:.02em;
@@ -300,6 +318,7 @@
 .finale .seats{margin-top:var(--s6)}
 .finale .seat.mafia .sub{color:var(--ember-soft)}
 .finale .seat.town .sub{color:var(--verdigris)}
+.finale .seat.maniac .sub{color:#c9a6d6}
 
 body.playing #toast{bottom:96px}
 
@@ -491,6 +510,26 @@ body.playing #toast{bottom:96px}
           <div class="row tight" id="speedPick" style="margin-top:var(--s2);flex-wrap:wrap"></div>
           <p class="note" style="margin-top:var(--s2)">Круг речей по сорок пять секунд на двадцать
             человек — это пятнадцать минут. «Блиц» для перерыва, «Клуб» — для полных речей.</p>
+
+          <span class="label" style="display:block;margin-top:var(--s4)">Набор ролей</span>
+          <div class="row tight" id="presetPick" style="margin-top:var(--s2);flex-wrap:wrap"></div>
+          <p class="note" id="presetNote" style="margin-top:var(--s2)"></p>
+
+          <span class="label" style="display:block;margin-top:var(--s4)">Как голосуем</span>
+          <label class="check" style="margin-top:var(--s2)">
+            <input type="checkbox" id="voteOpenOn" checked> Открытое голосование: видно, кто за кого
+          </label>
+          <p class="note" style="margin-top:var(--s2)">Снимете галочку — видно только «проголосовал»,
+            а расклад не откроется никогда. Это две разные игры на одном столе.</p>
+          <label class="check" style="margin-top:var(--s3)">
+            <input type="checkbox" id="onTieTable"> При ничьей стол решает: поднять всех или оставить всех
+          </label>
+          <p class="note" style="margin-top:var(--s2)">Иначе при второй ничьей день просто теряется.</p>
+          <label class="check" style="margin-top:var(--s3)">
+            <input type="checkbox" id="foulsOn"> Фолы за перебивание чужой речи
+          </label>
+          <p class="note" style="margin-top:var(--s2)">Два фола — предупреждение, четыре — пропуск речи.
+            На столе от пятнадцати человек включается само.</p>
 
           <label class="check" style="margin-top:var(--s4)">
             <input type="checkbox" id="lastWordOn" checked> Последнее слово выбывшего и лучший ход

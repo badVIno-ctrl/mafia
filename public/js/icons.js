@@ -106,12 +106,19 @@
     },
     /* Роль → знак. Один источник правды для всех экранов. */
     role: function (role) {
-      return { mafia: 'hat', don: 'spade', doctor: 'cross', sheriff: 'star', civilian: 'roof' }[role] || 'person';
+      return {
+        mafia: 'hat', don: 'spade', doctor: 'cross', sheriff: 'star', civilian: 'roof',
+        /* Расширенный набор. Роли должны различаться не только цветом, но и
+           формой: для дальтоника цвет команды не существует вовсе. */
+        maniac: 'skull', lover: 'candle', lawyer: 'scroll',
+        journalist: 'envelope', werewolf: 'moon'
+      }[role] || 'person';
     },
     phase: function (phase) {
       return {
         prologue: 'scroll', night: 'moon', morning: 'sunrise', day: 'people',
-        speech: 'chat', lastword: 'mask', vote: 'gavel', runoff: 'gavel', over: 'mask'
+        speech: 'chat', lastword: 'mask', vote: 'gavel', runoff: 'gavel',
+        tievote: 'gavel', over: 'mask'
       }[phase] || 'hourglass';
     }
   };

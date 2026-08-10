@@ -23,6 +23,11 @@ function shuffle(a) {
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
 const now = () => Date.now();
 
+/* Метки на ночной доске мафии. Их ровно три, и это осознанно: доска нужна,
+   чтобы за полминуты договориться, а не чтобы вести протокол. */
+const MAFIA_TAGS = ['target', 'watch', 'skip'];
+const MAFIA_TAG_RU = { target: 'бьём', watch: 'присмотреть', skip: 'не трогать' };
+
 class Game {
   /**
    * @param {Array<{id:string,name:string}>} members
@@ -51,9 +56,18 @@ class Game {
     this.speed = C.speedById(opts.speed).id;
     this.timing = C.timing(n, this.speed);
     this.scenario = C.scenarioById(scenarioId) || this.rng.pick(C.scenariosFor(n)) || C.SCENARIOS[0];
-    this.composition = C.composition(n);
 
-    const roles = this.rng.shuffle(C.rolePool(n));
+    /* Пресет ролей. Классика — по умолчанию и всегда: человек, впервые
+       открывший сайт, должен сесть за стол, правила которого он уже знает.
+       Расширенный набор выбирается осознанно при создании комнаты, и если
+       выбранный пресет на этот стол не садится (полный набор требует
+       двенадцати человек), молча падаем в классику вместо того, чтобы
+       раздать состав, которого никто не просил. */
+    const wanted = C.presetById(opts.rolePreset);
+    this.preset = (n >= wanted.min && n <= wanted.max) ? wanted.id : 'classic';
+    this.composition = C.composition(n, this.preset);
+
+    const roles = this.rng.shuffle(C.rolePool(n, this.preset));
     this.players = members.map((m, i) => ({
       id: m.id,
       name: m.name,
@@ -112,11 +126,44 @@ class Game {
     this.bestMoveOn = opts.bestMove !== false;
     this.lastWordId = null;        // кто говорит последнее слово
     this.lastWordNext = null;      // куда идём после него: 'speech' | 'night'
+    /* Очередь на последнее слово. Раньше здесь стоял один игрок, и этого
+       хватало: за ночь погибал максимум один. С маньяком за ночь погибают
+       двое, а стол решением «поднять всех» выводит и трёх сразу — говорить
+       им надо по очереди, иначе стол не услышит никого. */
+    this.lastWordQueue = [];
     this.bestMoveOpen = false;     // ждём ли трёх имён от него
     this.bestMove = null;          // { by, byName, picks:[{id,name,seat}], hits }
 
+    /* ------------------------------------------------------------------
+       ПРАВИЛА СТОЛА
+
+       Три настройки, каждая из которых делает из одного движка другую игру.
+
+       voteOpen — открытое или закрытое голосование. При открытом стол видит
+       в реальном времени, кто куда поднял руку, и это меняет всё: голос
+       становится высказыванием, за которым следят, а поздний голос — самым
+       ценным. При закрытом видно только «проголосовал», а расклад
+       открывается вместе с итогом. Фактически это две разные игры на одном
+       движке, поэтому и настройка, а не жёсткое правило.
+
+       onTie — что делать при ничьей в переголосовке. 'none' — прежнее
+       поведение: никого не выводим. 'table' — стол решает сам, поднимать
+       всех или оставить всех. Второе и есть классика живых столов: случайный
+       тай-брейк — самая частая причина фразы «да ну, ерунда какая-то».
+
+       fouls — дисциплина. За перебивание чужой речи предупреждение, за
+       четыре — пропуск своей речи. На столе от пятнадцати человек без этого
+       круг речей превращается в общий крик, ради отмены которого он и нужен.
+       ------------------------------------------------------------------ */
+    this.voteOpen = opts.voteOpen !== false;
+    this.onTie = opts.onTie === 'table' ? 'table' : 'none';
+    this.foulsOn = opts.fouls === undefined ? (n >= 15) : !!opts.fouls;
+    this.fouls = {};                // playerId -> сколько раз перебил
+    this.foulSkip = {};             // playerId -> пропускает следующую речь
+    this.tieOf = null;              // кого поднимаем на голосовании стола
+
     this.day = 0;
-    this.phase = 'prologue';        // prologue | night | morning | lastword | speech | day | vote | runoff | over
+    this.phase = 'prologue';        // prologue | night | morning | lastword | speech | day | vote | runoff | tievote | over
     this.deadline = now() + 12000;
     this.finished = false;
     this.winner = null;
@@ -127,6 +174,30 @@ class Game {
     this.checkResults = {};         // sheriffId -> [{targetId, name, isMafia, day}]
     this.votes = {};                // voterId -> targetId | 'skip'
     this.runoffOf = null;           // список id для переголосовки
+
+    /* ------------------------------------------------------------------
+       РАСШИРЕННЫЙ НАБОР РОЛЕЙ
+
+       Пять карт — пять исключений из общих правил, и каждое хранит своё.
+       Заводим всё всегда, а не только когда роль на столе: проверка
+       «а есть ли у нас журналист» в двадцати местах кода дороже пяти
+       пустых объектов.
+       ------------------------------------------------------------------ */
+    this.nightActions.slay = {};    // маньяк -> кого
+    this.nightActions.block = {};   // любовница -> кого
+    this.nightActions.shield = {};  // адвокат -> кого прикрывает от изгнания
+    this.nightActions.press = {};   // журналист -> 'idA,idB'
+    this.lastBlocked = {};          // любовница -> кого блокировала прошлой ночью
+    this.blockedLast = [];          // кого заблокировали этой ночью (для протокола)
+    this.pressResults = {};         // журналист -> [{aId,bId,aName,bName,sameTeam,day}]
+    this.lawyerSpent = {};          // адвокат -> право уже сработало
+    this.shieldSkip = {};           // адвокат -> «этой ночью берегу право»
+    this.lawyerSaved = [];          // кого адвокат уже вытащил — это публично
+    /* Ночная доска мафии. Общий приватный холст: метка на месте, которую
+       видят и ставят все свои. До этого ночь мафии была одним кликом — и
+       на большом столе трое чёрных не могли даже договориться, кого
+       обсуждать днём, не выдав себя в общем чате. */
+    this.mafiaBoard = {};           // targetId -> { tag, byName, ts }
     this.omenStep = 0;
     /* Кто сейчас без связи. Такие игроки не должны держать фазу: раньше
        один закрытый ноутбук растягивал ночь на полный таймаут, и это
@@ -143,7 +214,28 @@ class Game {
     if (this.speeches) this.timing.day = this.timing.afterCircle;
 
     this.pushLog('story', this.scenario.prologue);
-    this.pushLog('sys', 'Состав стола: ' + C.compositionLabel(n) + '.');
+    this.pushLog('sys', 'Состав стола: ' + C.compositionLabel(n, this.preset) + '.');
+    /* Про третью силу стол узнаёт до раздачи, а не в финале. Иначе город
+       весь вечер считает чёрных по головам и не понимает, почему счёт не
+       сходится: это не загадка, а поломанная арифметика. */
+    if (this.composition.sides === 3) {
+      this.pushLog('sys', 'За столом три силы, а не две: кроме мафии есть маньяк. ' +
+        'Он ходит ночью один и побеждает один.');
+    }
+    if (this.preset !== 'classic') {
+      this.pushLog('sys', 'Пресет стола: «' + C.presetById(this.preset).ru + '». ' +
+        C.presetById(this.preset).hint + '.');
+    }
+    if (!this.voteOpen) {
+      this.pushLog('sys', 'Голосование закрытое: видно, кто уже проголосовал, но не за кого.');
+    }
+    if (this.onTie === 'table') {
+      this.pushLog('sys', 'При ничьей стол решает сам: поднять всех или оставить всех.');
+    }
+    if (this.foulsOn) {
+      this.pushLog('sys', 'Фолы включены: перебил чужое слово — предупреждение, ' +
+        'четыре предупреждения — пропуск своей речи.');
+    }
     if (this.mode === 'inquest') {
       this.pushLog('sys', 'Следствие. У каждого за столом три приметы — свои вы знаете, чужие нет. ' +
         'Каждое утро город получает улики: улика всегда говорит правду о том, кто убивал. ' +
@@ -169,8 +261,25 @@ class Game {
   p(id) { return this.players.find(x => x.id === id) || null; }
   alive() { return this.players.filter(x => x.alive); }
   aliveMafia() { return this.alive().filter(x => this.isMafia(x.id)); }
+  /* «Город» — это все, кто не мафия. Осторожно: маньяк тоже сюда попадает,
+     и потому эта функция больше не годится для условия победы (см. checkWin).
+     Оставлена там, где смысл именно «не мафия»: право говорить, право быть
+     целью, счёт живых для игрока. */
   aliveTown() { return this.alive().filter(x => !this.isMafia(x.id)); }
   isMafia(id) { const p = this.p(id); return !!p && (p.role === ROLE.MAFIA || p.role === ROLE.DON); }
+  isManiac(id) { const p = this.p(id); return !!p && p.role === ROLE.MANIAC; }
+  /** Команда игрока: 'mafia' | 'town' | 'maniac'. Команд три, а не две. */
+  teamOf(id) { const p = this.p(id); return p ? C.teamOf(p.role) : 'town'; }
+  /** Есть ли на столе хоть одна карта этой роли (жива или нет). */
+  hasRole(role) { return this.players.some(p => p.role === role); }
+  /** Живые с этой ролью. */
+  aliveWith(role) { return this.alive().filter(p => p.role === role); }
+  /** Счёт по командам среди живых: { mafia, town, maniac }. */
+  headcount() {
+    const out = { mafia: 0, town: 0, maniac: 0 };
+    this.alive().forEach(p => { out[C.teamOf(p.role)]++; });
+    return out;
+  }
   nameOf(id) { const p = this.p(id); return p ? p.name : '?'; }
   secondsLeft() { return Math.max(0, Math.ceil((this.deadline - now()) / 1000)); }
 
@@ -220,13 +329,19 @@ class Game {
          Раньше «речь по кругу» была невозможна в принципе — стол писал в
          общий чат всегда, и на двадцати человеках высказывались трое. */
       if (this.speaker !== userId) {
-        return { error: 'Слово у ' + this.nameOf(this.speaker) + ' — дождитесь своей очереди' };
+        return Object.assign(
+          { error: 'Слово у ' + this.nameOf(this.speaker) + ' — дождитесь своей очереди' },
+          this.foul(userId, t));
       }
     }
     else if (ch === 'town' && this.phase === 'lastword') {
-      if (this.lastWordId !== userId) return { error: 'Последнее слово у ' + this.nameOf(this.lastWordId) };
+      if (this.lastWordId !== userId) {
+        return Object.assign(
+          { error: 'Последнее слово у ' + this.nameOf(this.lastWordId) },
+          this.foul(userId, t));
+      }
     }
-    else if (ch === 'town' && !(this.phase === 'prologue' || this.phase === 'day' || this.phase === 'vote' || this.phase === 'runoff' || this.phase === 'morning' || this.phase === 'over')) {
+    else if (ch === 'town' && !(this.phase === 'prologue' || this.phase === 'day' || this.phase === 'vote' || this.phase === 'runoff' || this.phase === 'tievote' || this.phase === 'morning' || this.phase === 'over')) {
       return { error: 'Город спит — говорить нельзя' };
     }
 
@@ -253,6 +368,38 @@ class Game {
       this.pushLog('talk', p.name + ' обращается к: ' + mentions.map(m => m.name).join(', '));
     }
     return { ok: true, mentions: mentions.map(m => m.id) };
+  }
+
+  /* ------------------------------ фолы ------------------------------
+     Перебил чужое слово — фол. Механика скучная и совершенно необходимая:
+     на столе от пятнадцати человек круг речей без неё превращается в общий
+     крик, ради отмены которого он и заведён.
+
+     Считаем попытки говорить не в свою очередь, а не сами слова: сказанного
+     всё равно никто не увидит — движок реплику отклоняет. Два фола —
+     предупреждение вслух, четыре — пропуск своей речи в следующем круге.
+     Дальше счётчик не растёт: смысл наказания в том, чтобы человек услышал
+     себя, а не в том, чтобы выкинуть его из партии.
+
+     Одна попытка в две секунды: двойной клик по «Отправить» — это один
+     перебив, а не два. */
+  foul(userId, t) {
+    if (!this.foulsOn) return {};
+    const p = this.p(userId);
+    if (!p || !p.alive) return {};
+    if (p.lastFoulAt && t - p.lastFoulAt < 2000) return {};
+    p.lastFoulAt = t;
+    const n = this.fouls[userId] = (this.fouls[userId] || 0) + 1;
+    if (n % 4 === 0) {
+      this.foulSkip[userId] = true;
+      this.pushLog('foul', 'Фол ' + n + ': ' + p.name + ' пропускает свою следующую речь.');
+      return { foul: n, skip: true };
+    }
+    if (n % 2 === 0) {
+      this.pushLog('foul', 'Фол ' + n + ': ' + p.name + ' перебивает. Ещё два — и речь пропускается.');
+      return { foul: n, warned: true };
+    }
+    return { foul: n };
   }
 
   /* ------------------------------ действия ------------------------------ */
@@ -310,7 +457,92 @@ class Game {
       this.nightActions.check[userId] = targetId;
       return { ok: true };
     }
+
+    /* ---------------- расширенный набор: ночные дела ---------------- */
+
+    /* Маньяк. Отдельный тип действия, а не 'kill': у мафии ход общий и
+       считается голосованием, у маньяка он свой и ни с кем не складывается.
+       Своих у него нет, поэтому и запрета «не бей своего» тоже нет. */
+    if (type === 'slay') {
+      if (this.phase !== 'night' || me.role !== ROLE.MANIAC) return { error: 'Не сейчас' };
+      if (!t || !t.alive || targetId === userId) return { error: 'Неверная цель' };
+      this.nightActions.slay[userId] = targetId;
+      return { ok: true };
+    }
+    /* Любовница. Ограничение «не два раза подряд» ровно то же, что у врача,
+       и по той же причине: иначе один игрок оказывается вычеркнут из ночи
+       на всю партию, а это не игра, а приговор. */
+    if (type === 'block') {
+      if (this.phase !== 'night' || me.role !== ROLE.LOVER) return { error: 'Не сейчас' };
+      if (!t || !t.alive || targetId === userId) return { error: 'Неверная цель' };
+      if (this.lastBlocked[userId] === targetId) return { error: 'Этого же человека две ночи подряд нельзя' };
+      this.nightActions.block[userId] = targetId;
+      return { ok: true };
+    }
+    /* Адвокат. Право одно на партию, но тратится только когда сработало:
+       иначе роль сводилась бы к угадыванию, кого выведут завтра, — то есть
+       к одному шансу из десяти быть полезным за весь вечер.
+
+       Пустая цель — это «берегу право», и это полноценный ход, а не отказ
+       отвечать. Без него получалась дыра, которую видно только в живой
+       партии: ночь не ждёт адвоката (иначе он был бы обязан прикрывать
+       кого-то каждую ночь), а закрывается она, как только отходили все
+       прочие. На столе с ботами это происходит за десять секунд — и адвокат
+       физически не успевал нажать ни на что. Решение простое: ночь ждёт от
+       него решения, а «не тратить» и есть решение. */
+    if (type === 'shield') {
+      if (this.phase !== 'night' || me.role !== ROLE.LAWYER) return { error: 'Не сейчас' };
+      if (this.lawyerSpent[userId]) return { error: 'Право защиты уже сработало' };
+      if (!targetId) {
+        this.shieldSkip[userId] = true;
+        delete this.nightActions.shield[userId];
+        return { ok: true, kept: true };
+      }
+      if (!t || !t.alive) return { error: 'Неверная цель' };
+      delete this.shieldSkip[userId];
+      this.nightActions.shield[userId] = targetId;
+      return { ok: true };
+    }
+    /* Журналист. Пара подаётся одной строкой «id,id»: два отдельных
+       нажатия дали бы половину факта, а половина этого факта бессмысленна. */
+    if (type === 'press') {
+      if (this.phase !== 'night' || me.role !== ROLE.JOURNALIST) return { error: 'Не сейчас' };
+      const ids = String(targetId || '').split(',').map(x => x.trim()).filter(Boolean);
+      const pair = [];
+      for (const id of ids) {
+        const q = this.p(id);
+        if (!q || !q.alive || q.id === userId) continue;
+        if (pair.indexOf(q.id) >= 0) continue;
+        pair.push(q.id);
+      }
+      if (pair.length !== 2) return { error: 'Нужно назвать двух разных живых игроков' };
+      this.nightActions.press[userId] = pair.join(',');
+      return { ok: true };
+    }
+    /* Ночная доска мафии. Метка на месте, общая для своих: до этого ночь
+       мафии была одним кликом, и договориться, кого топить днём, было
+       негде — кроме общего чата, то есть при всём городе. */
+    if (type === 'mark') {
+      if (!this.isMafia(userId)) return { error: 'Доска только для своих' };
+      if (this.phase !== 'night') return { error: 'Доска открыта ночью' };
+      const parts = String(targetId || '').split(':');
+      const who = this.p(parts[0]);
+      const tag = parts[1] || '';
+      if (!who) return { error: 'Неверная цель' };
+      if (!tag) delete this.mafiaBoard[who.id];
+      else if (MAFIA_TAGS.indexOf(tag) < 0) return { error: 'Неизвестная метка' };
+      else this.mafiaBoard[who.id] = { tag, byName: me.name, ts: now() };
+      return { ok: true };
+    }
+
     if (type === 'vote') {
+      /* Голосование стола при ничьей: «поднять всех» или «оставить всех».
+         Здесь голос — да или нет, а не имя, поэтому и цели у него две. */
+      if (this.phase === 'tievote') {
+        if (targetId !== 'yes' && targetId !== 'no') return { error: 'Только «поднять всех» или «оставить всех»' };
+        this.votes[userId] = targetId;
+        return { ok: true };
+      }
       if (this.phase !== 'vote' && this.phase !== 'runoff') return { error: 'Голосование ещё не идёт' };
       if (targetId !== 'skip') {
         if (!t || !t.alive) return { error: 'Неверная цель' };
@@ -398,7 +630,7 @@ class Game {
       const ready = this.ready || {};
       const allReady = waiting.length > 0 && waiting.every(p => ready[p.id]);
       if (expired || allReady) { this.startVote(); changed = true; }
-    } else if (this.phase === 'vote' || this.phase === 'runoff') {
+    } else if (this.phase === 'vote' || this.phase === 'runoff' || this.phase === 'tievote') {
       const waiting = this.waiting();
       const allVoted = waiting.length > 0 && waiting.every(p => this.votes[p.id] !== undefined);
       if (expired || allVoted) { this.resolveVote(); changed = true; }
@@ -452,32 +684,90 @@ class Game {
 
   allNightActionsIn() {
     const on = p => !this.offline.has(p.id);
+    const with_ = role => this.alive().filter(p => p.role === role && on(p));
     const mafiaAlive = this.aliveMafia().filter(on);
-    const docs = this.alive().filter(p => p.role === ROLE.DOCTOR && on(p));
-    const shs = this.alive().filter(p => p.role === ROLE.SHERIFF && on(p));
+    const docs = with_(ROLE.DOCTOR);
+    const shs = with_(ROLE.SHERIFF);
+    const mans = with_(ROLE.MANIAC);
+    const lovers = with_(ROLE.LOVER);
+    const press = with_(ROLE.JOURNALIST);
+    /* Адвокат ждётся не по цели, а по решению: «берегу право» — такой же ход,
+       как и «прикрываю такого-то». Пока его здесь не было, ночь закрывалась,
+       как только отходили все прочие, и на столе с ботами это происходило за
+       десять секунд — адвокат не успевал нажать ни на что. */
+    const laws = with_(ROLE.LAWYER).filter(p => !this.lawyerSpent[p.id]);
+    const actors = mafiaAlive.length + docs.length + shs.length +
+      mans.length + lovers.length + press.length + laws.length;
     /* Если у стола вообще никого нет на связи, ночь всё равно закроется
        по таймауту — здесь мы только не даём ей закрыться раньше времени. */
-    if (!mafiaAlive.length && !docs.length && !shs.length) return false;
+    if (!actors) return false;
     return mafiaAlive.every(p => this.nightActions.kill[p.id])
       && docs.every(p => this.nightActions.heal[p.id])
-      && shs.every(p => this.nightActions.check[p.id]);
+      && shs.every(p => this.nightActions.check[p.id])
+      && mans.every(p => this.nightActions.slay[p.id])
+      && lovers.every(p => this.nightActions.block[p.id])
+      && press.every(p => this.nightActions.press[p.id])
+      && laws.every(p => this.nightActions.shield[p.id] || this.shieldSkip[p.id]);
   }
 
   /* ------------------------------ фазы ------------------------------ */
   startNight() {
     this.day += 1;
     this.phase = 'night';
-    this.nightActions = { kill: {}, heal: {}, check: {} };
+    this.nightActions = { kill: {}, heal: {}, check: {}, slay: {}, block: {}, shield: {}, press: {} };
+    this.shieldSkip = {};
+    this.blockedLast = [];
+    this.mafiaBoard = {};
     this.ready = {};
     if (this.mode === 'inquest') { this.nightMethod = null; this.killerId = null; }
     this.deadline = now() + this.timing.night * 1000;
     this.pushLog('night', 'Ночь ' + this.day + '. ' + this.scenario.nightFlavor);
   }
 
+  /* ------------------------------------------------------------------------
+     РАЗБОР НОЧИ
+
+     Порядок здесь и есть правила игры, поэтому он выписан явно, а не
+     складывается из того, в каком месте кода что оказалось:
+
+       0. Любовница. Блокировка решается ПЕРВОЙ, потому что она отменяет
+          чужие ходы: если считать её после мафии, заблокированный уже
+          успел ударить.
+       1. Мафия. Голоса заблокированных не считаются вовсе; при ничьей
+          решает дон, если он сам не заблокирован.
+       2. Маньяк. Его нож ни с чьим не складывается: две жертвы за ночь —
+          это две жертвы, а не спор о цели.
+       3. Врач. Спасает от любого ночного ножа — и от мафии, и от маньяка:
+          для врача это одинаковая рана.
+       4. Шериф. Проверка отвечает на вопрос «состоит ли в мафии». Оборотень
+          отвечает «да», хотя он мирный: в этом весь смысл его карты.
+       5. Журналист. Сравнивает команды, а не роли.
+       6. Адвокат. Прикрытие от дневного изгнания, а не от ножа: работает
+          днём и записывается на день вперёд.
+     ------------------------------------------------------------------------ */
   resolveNight() {
+    // 0. любовница: чьи ночные дела этой ночью не состоятся
+    const blocked = new Set();
+    Object.entries(this.nightActions.block).forEach(([lid, tid]) => {
+      const lover = this.p(lid);
+      const target = this.p(tid);
+      if (!lover || !lover.alive || !target || !target.alive) return;
+      /* Заблокировать саму любовницу другой любовницей можно, и тогда её
+         блокировка не действует. Считаем по исходному списку, а не по
+         накопленному: иначе исход зависел бы от порядка перебора. */
+      blocked.add(tid);
+    });
+    /* Если любовницу заблокировали, её собственная блокировка отменяется. */
+    Object.entries(this.nightActions.block).forEach(([lid, tid]) => {
+      if (blocked.has(lid)) blocked.delete(tid);
+    });
+    this.lastBlocked = Object.assign({}, this.nightActions.block);
+    this.blockedLast = [...blocked];
+
     // 1. жертва мафии: большинство голосов, при ничье решает голос дона
     const tally = {};
     Object.entries(this.nightActions.kill).forEach(([mid, tid]) => {
+      if (blocked.has(mid)) return;         // заблокированный не бьёт и не голосует
       if (this.p(tid) && this.p(tid).alive) tally[tid] = (tally[tid] || 0) + 1;
     });
     let victim = null;
@@ -491,53 +781,124 @@ class Game {
         const donPick = don ? this.nightActions.kill[don.id] : null;
         victim = (donPick && top.indexOf(donPick) >= 0) ? donPick : this.rng.pick(top);
       }
-    } else if (this.aliveMafia().length) {
+    } else if (this.aliveMafia().filter(p => !blocked.has(p.id)).length) {
       const targets = this.alive().filter(p => !this.isMafia(p.id));
       if (targets.length) victim = this.rng.pick(targets).id;   // мафия промолчала — удар вслепую
     }
+
+    /* 2. маньяк. Отдельный нож, отдельная жертва. Промолчавший маньяк не
+       бьёт вслепую — в отличие от мафии: у мафии молчание означает «мы не
+       договорились», а у маньяка оно означает «он не пришёл». */
+    let slain = null;
+    Object.entries(this.nightActions.slay).forEach(([mid, tid]) => {
+      const man = this.p(mid);
+      if (!man || !man.alive || blocked.has(mid)) return;
+      const t2 = this.p(tid);
+      if (t2 && t2.alive) slain = tid;
+    });
 
     /* Кто держал нож. В «Следствии» это важно: улики говорят о его
        приметах. Убийцей считаем того из мафии, чей голос совпал с итогом, —
        иначе дона, иначе любого живого мафиози. */
     if (this.mode === 'inquest' && victim) {
-      const voted = Object.entries(this.nightActions.kill).find(([, tid]) => tid === victim);
+      const voted = Object.entries(this.nightActions.kill)
+        .find(([mid, tid]) => tid === victim && !blocked.has(mid));
       const don = this.aliveMafia().find(p => p.role === ROLE.DON);
       this.killerId = (voted && voted[0]) || (don && don.id) ||
         (this.aliveMafia()[0] && this.aliveMafia()[0].id) || null;
     }
 
-    // 2. лечение
+    // 3. лечение
     const method = this.mode === 'inquest'
       ? (Inquest.METHOD_BY_ID[this.nightMethod] || Inquest.METHOD_BY_ID[Inquest.DEFAULT_METHOD])
       : null;
     /* «Грубо и быстро»: врач не успевает. Это и есть плата за две улики. */
-    const healed = (method && method.noHeal) ? new Set() : new Set(Object.values(this.nightActions.heal));
+    const healed = (method && method.noHeal) ? new Set()
+      : new Set(Object.entries(this.nightActions.heal)
+        .filter(([did]) => !blocked.has(did))       // заблокированный врач не лечит
+        .map(([, tid]) => tid));
     this.lastHealed = Object.assign({}, this.nightActions.heal);
 
-    // 3. проверки шерифа
+    // 4. проверки шерифа
     Object.entries(this.nightActions.check).forEach(([sid, tid]) => {
+      if (blocked.has(sid)) return;                 // заблокированный шериф не узнаёт ничего
       const t = this.p(tid);
       if (!t) return;
       (this.checkResults[sid] = this.checkResults[sid] || []).push({
-        targetId: tid, name: t.name, seat: t.seat, isMafia: this.isMafia(tid), day: this.day
+        /* Ответ на вопрос «состоит ли в мафии», а не «какая у него карта».
+           Оборотень отвечает «да»: он мирный, но проверка на нём ошибается —
+           в этом вся его роль и весь риск города, слепо верящего шерифу. */
+        targetId: tid, name: t.name, seat: t.seat, day: this.day,
+        isMafia: this.isMafia(tid) || t.role === ROLE.WEREWOLF
       });
     });
 
-    // 4. итог
+    // 5. журналист: в одной команде или в разных
+    Object.entries(this.nightActions.press).forEach(([jid, pairStr]) => {
+      if (blocked.has(jid)) return;
+      const [aId, bId] = String(pairStr).split(',');
+      const a = this.p(aId), b = this.p(bId);
+      if (!a || !b) return;
+      (this.pressResults[jid] = this.pressResults[jid] || []).push({
+        aId, bId, aName: a.name, bName: b.name, aSeat: a.seat, bSeat: b.seat,
+        /* Сравниваем команды, а не роли: «вместе» про дона и мафию — правда,
+           про доктора и мирного — тоже правда. Маньяк не вместе ни с кем. */
+        sameTeam: this.teamOf(aId) === this.teamOf(bId) && this.teamOf(aId) !== 'maniac',
+        day: this.day
+      });
+    });
+
+    // 6. адвокат: кого он прикрывает от сегодняшнего изгнания
+    this.shieldToday = {};
+    Object.entries(this.nightActions.shield).forEach(([lid, tid]) => {
+      const lw = this.p(lid);
+      if (!lw || !lw.alive || blocked.has(lid) || this.lawyerSpent[lid]) return;
+      if (this.p(tid)) this.shieldToday[tid] = lid;
+    });
+
+    // 7. итог
     this.phase = 'morning';
     this.deadline = now() + this.timing.reveal * 1000;
     this.votes = {};
     this.runoffOf = null;
+    this.tieOf = null;
 
-    if (victim && healed.has(victim)) {
-      this.pushLog('morning', 'Утро ' + this.day + '. Этой ночью все выжили — врач успел вовремя.');
-    } else if (victim) {
-      this.kill(victim, 'night');
-      this.pendingLastWord = victim;
-      this.pushLog('morning', 'Утро ' + this.day + '. ' + this.nameOf(victim) + ' не дожил' + '(а) до рассвета. Роль: ' +
-        C.ROLE_INFO[this.p(victim).role].ru + '. ' + this.scenario.deathFlavor);
-    } else {
+    /* Двое ножей — до двух погибших, и врач спасает от любого из них.
+       Если мафия и маньяк выбрали одного, ночь всё равно уносит одного:
+       умереть дважды нельзя. */
+    const fallen = [];
+    [victim, slain].forEach(id => {
+      if (!id || healed.has(id)) return;
+      if (fallen.indexOf(id) < 0) fallen.push(id);
+    });
+    const saved = [victim, slain].filter(id => id && healed.has(id));
+
+    if (!victim && !slain) {
       this.pushLog('morning', 'Утро ' + this.day + '. Ночь прошла тихо.');
+    } else if (!fallen.length) {
+      this.pushLog('morning', 'Утро ' + this.day + '. Этой ночью все выжили — врач успел вовремя.');
+    } else {
+      fallen.forEach(id => this.kill(id, 'night'));
+      /* Последнее слово получают оба, по очереди. Очередь важнее, чем
+         кажется: одновременно говорящих выбывших стол не слышит вовсе. */
+      this.lastWordQueue = this.lastWordQueue.concat(fallen);
+      const who = fallen.map(id => this.nameOf(id) + ' (' + C.ROLE_INFO[this.p(id).role].ru + ')').join(' и ');
+      this.pushLog('morning', 'Утро ' + this.day + '. ' +
+        (fallen.length > 1 ? 'До рассвета не дожили двое: ' : 'Не дожил(а) до рассвета: ') + who + '. ' +
+        this.scenario.deathFlavor);
+      if (fallen.length > 1) {
+        this.pushLog('sys', 'Две смерти за одну ночь — значит, за столом не одна сила, а две.');
+      }
+      if (saved.length) this.pushLog('sys', 'Ещё одного этой ночью успел вытащить врач.');
+    }
+    /* Про сработавшую блокировку стол знает только то, что она была: имени
+       любовницы не видно, иначе роль сгорала бы в первое же утро. */
+    if (this.blockedLast.length) {
+      const stopped = this.blockedLast.filter(id =>
+        this.nightActions.kill[id] || this.nightActions.heal[id] ||
+        this.nightActions.check[id] || this.nightActions.slay[id] ||
+        this.nightActions.press[id] || this.nightActions.shield[id]);
+      if (stopped.length) this.pushLog('sys', 'Кому-то этой ночью было не до дела: ход не состоялся.');
     }
 
     /* Улики оставляет само покушение, а не его исход: если врач успел, следы
@@ -629,15 +990,21 @@ class Game {
     this.bestMoveOpen = false;
     this.speaker = null;
     if (this.checkWin()) return;
+    /* В очереди может стоять второй выбывший: за ночь с маньяком погибают
+       двое, а стол решением «поднять всех» выводит и трёх. Слово переходит
+       к следующему, и только когда очередь пуста — идём дальше по фазам. */
+    while (this.lastWordQueue.length) {
+      const id = this.lastWordQueue.shift();
+      if (this.startLastWord(id, next)) return;
+    }
     if (next === 'night') return this.startNight();
     return this.startSpeech();
   }
 
   /** После утра: либо последнее слово убитого, либо сразу круг речей. */
   afterMorning() {
-    if (this.pendingLastWord) {
-      const id = this.pendingLastWord;
-      this.pendingLastWord = null;
+    while (this.lastWordQueue.length) {
+      const id = this.lastWordQueue.shift();
       if (this.startLastWord(id, 'speech')) return true;
     }
     return this.startSpeech();
@@ -675,8 +1042,18 @@ class Game {
     while (this.speechQueue.length) {
       const id = this.speechQueue.shift();
       const p = this.p(id);
-      if (p && p.alive && !this.offline.has(id) && !this.left.has(id)) { next = id; break; }
-      if (p) this.spoke[id] = true;
+      if (!p) continue;
+      /* Пропуск за фолы. Наказание срабатывает один раз: пропустив речь,
+         игрок возвращается в круг с чистого листа — иначе один вспыльчивый
+         вечер вычёркивал бы человека из партии до занавеса. */
+      if (this.foulSkip[id]) {
+        delete this.foulSkip[id];
+        this.spoke[id] = true;
+        this.pushLog('foul', p.name + ' пропускает речь за фолы.');
+        continue;
+      }
+      if (p.alive && !this.offline.has(id) && !this.left.has(id)) { next = id; break; }
+      this.spoke[id] = true;
     }
     if (!next) {
       this.speaker = null;
@@ -721,6 +1098,10 @@ class Game {
   }
 
   resolveVote() {
+    /* Голосование стола при ничьей — отдельный разбор: там голоса «да» и
+       «нет», а не имена. */
+    if (this.phase === 'tievote') return this.resolveTieVote();
+
     const tally = {};
     Object.entries(this.votes).forEach(([voter, target]) => {
       const v = this.p(voter);
@@ -739,27 +1120,111 @@ class Game {
 
     this.pushLog('vote', 'Итог голосования: ' +
       entries.sort((a, b) => b[1] - a[1]).map(e => this.nameOf(e[0]) + ' — ' + e[1]).join(', ') + '.');
+    /* Кто за кого — только на открытом голосовании. При закрытом расклад
+       остаётся тайной навсегда: иначе «закрытое» означало бы всего лишь
+       «объявим на минуту позже», и второй игры из настройки не получилось бы. */
+    if (this.voteOpen) {
+      const byTarget = {};
+      Object.entries(this.votes).forEach(([voter, target]) => {
+        const v = this.p(voter);
+        if (!v || !v.alive || target === 'skip') return;
+        (byTarget[target] = byTarget[target] || []).push(v.name);
+      });
+      Object.keys(byTarget).forEach(tid => {
+        this.pushLog('vote', 'За ' + this.nameOf(tid) + ': ' + byTarget[tid].join(', ') + '.');
+      });
+    }
 
     if (top.length > 1) {
       if (wasRunoff) {
+        /* Ничья второй раз. Прежде здесь партия просто теряла день, и это
+           самая частая причина фразы «да ну, ерунда какая-то»: стол дважды
+           договорился до одного и того же и остался ни с чем. Теперь стол
+           может решить сам — но только если хозяин включил это правило. */
+        if (this.onTie === 'table' && this.alive().length > top.length + 1) {
+          return this.startTieVote(top);
+        }
         this.pushLog('vote', 'Снова ничья. Сегодня никого не казнят.');
         return this.afterVote();
       }
       return this.startVote(top);
     }
 
-    const idx = top[0];
-    this.kill(idx, 'vote');
-    this.pushLog('execution', 'Город казнил ' + this.nameOf(idx) + '. Роль: ' + C.ROLE_INFO[this.p(idx).role].ru + '.');
-    this.pendingLastWord = idx;
+    return this.execute([top[0]]);
+  }
+
+  /* --------------------------- «поднять всех» ---------------------------
+     Второй тур кончился ничьей. Стол голосует не за человека, а за правило:
+     вывести всех, кто набрал равное число голосов, или не выводить никого.
+     Тай-брейк броском монеты убирается ровно этим — решение остаётся за
+     столом, и проигравшая сторона знает, кто его принял. */
+  startTieVote(candidates) {
+    this.phase = 'tievote';
+    this.tieOf = candidates;
+    this.votes = {};
+    /* Вдвое короче обычного голосования: вопрос здесь один и он закрытый. */
+    this.deadline = now() + Math.max(12, Math.round(this.timing.vote / 2)) * 1000;
+    this.pushLog('vote', 'Снова ничья: ' + candidates.map(id => this.nameOf(id)).join(', ') +
+      '. Стол решает: поднять всех или оставить всех.');
+  }
+
+  resolveTieVote() {
+    const cands = this.tieOf || [];
+    let yes = 0, no = 0;
+    Object.entries(this.votes).forEach(([voter, v]) => {
+      const p = this.p(voter);
+      if (!p || !p.alive) return;
+      /* Свой голос кандидаты подают наравне со всеми: они ещё за столом. */
+      if (v === 'yes') yes++; else if (v === 'no') no++;
+    });
+    this.tieOf = null;
+    /* Равенство здесь трактуется в пользу жизни: чтобы вывести трёх сразу,
+       нужно большинство, а не отсутствие возражений. */
+    if (yes > no) {
+      this.pushLog('vote', 'Стол решил поднять всех: ' + yes + ' за, ' + no + ' против.');
+      return this.execute(cands);
+    }
+    this.pushLog('vote', 'Стол решил оставить всех: ' + yes + ' за, ' + no + ' против. ' +
+      'Сегодня город никого не выводит.');
+    return this.afterVote();
+  }
+
+  /* ------------------------------ изгнание ------------------------------
+     Одно место, через которое проходят все дневные казни — и одиночная, и
+     «поднять всех». Здесь же живёт адвокат: его право отменяет изгнание, но
+     не отменяет самого голосования, и стол видит результат, не видя автора. */
+  execute(ids) {
+    const shield = this.shieldToday || {};
+    const kept = [];
+    const gone = [];
+    ids.forEach(id => {
+      const lid = shield[id];
+      if (lid && !this.lawyerSpent[lid]) {
+        this.lawyerSpent[lid] = true;
+        this.lawyerSaved.push({ day: this.day, id, name: this.nameOf(id) });
+        kept.push(id);
+        return;
+      }
+      gone.push(id);
+    });
+
+    kept.forEach(id => {
+      this.pushLog('execution', 'Изгнание отменено: за ' + this.nameOf(id) +
+        ' вступился адвокат. Кто именно — стол не узнает.');
+    });
+    gone.forEach(id => {
+      this.kill(id, 'vote');
+      this.pushLog('execution', 'Город казнил ' + this.nameOf(id) +
+        '. Роль: ' + C.ROLE_INFO[this.p(id).role].ru + '.');
+    });
+    this.lastWordQueue = this.lastWordQueue.concat(gone);
     this.afterVote();
   }
 
   afterVote() {
     if (this.checkWin()) return;
-    if (this.pendingLastWord) {
-      const id = this.pendingLastWord;
-      this.pendingLastWord = null;
+    while (this.lastWordQueue.length) {
+      const id = this.lastWordQueue.shift();
       if (this.startLastWord(id, 'night')) return;
     }
     this.startNight();
@@ -780,11 +1245,31 @@ class Game {
     }
   }
 
+  /* ------------------------------ конец партии ------------------------------
+     С появлением маньяка условие победы перестаёт быть арифметикой из двух
+     чисел. Раньше было так: мафии ноль — победил город; мафии столько же,
+     сколько мирных, — победила мафия. Теперь сил три, и правила читаются
+     в таком порядке:
+
+       1. Мафии нет и маньяка нет — победил город. Это единственный случай,
+          когда город побеждает: пока за столом ходит кто-то с ножом, партия
+          не кончена, даже если чёрных больше не осталось.
+       2. Мафии столько же, сколько всех остальных вместе, — победила мафия.
+          «Все остальные» здесь включает маньяка: он мафии не союзник, но и
+          переголосовать её в одиночку не может.
+       3. Мафии нет, а из мирных остался один — победил маньяк. Добивать его
+          ночью не нужно: исход уже определён, и растягивать партию на
+          формальную ночь незачем.
+
+     Порядок важен. При «мафия 1, маньяк 1, мирных 0» срабатывает второе
+     правило: двое с ножами друг против друга — это тот же случай, что и
+     «мафия против последнего мирного», и решается он так же.
+     ------------------------------------------------------------------------ */
   checkWin() {
-    const m = this.aliveMafia().length;
-    const t = this.aliveTown().length;
-    if (m === 0) return this.finish('town');
-    if (m >= t) return this.finish('mafia');
+    const h = this.headcount();
+    if (h.mafia === 0 && h.maniac === 0) return this.finish('town');
+    if (h.mafia > 0 && h.mafia >= h.town + h.maniac) return this.finish('mafia');
+    if (h.maniac > 0 && h.mafia === 0 && h.town <= 1) return this.finish('maniac');
     return false;
   }
 
@@ -795,13 +1280,19 @@ class Game {
     this.deadline = now();
     /* В протокол пишем причину числами: игрок должен понять, почему
        партия закончилась именно сейчас, а не разгадывать метафору. */
-    const mafiaAlive = this.alive().filter(p => this.isMafia(p.id)).length;
-    const townAlive = this.alive().length - mafiaAlive;
+    const h = this.headcount();
     const mafiaTotal = this.players.filter(p => this.isMafia(p.id)).length;
-    this.pushLog('end', winner === 'town'
-      ? 'Город победил: вся мафия (' + mafiaTotal + ') выбыла из игры.'
-      : 'Мафия победила: её осталось ' + mafiaAlive + ', мирных — ' + townAlive +
-        '. Город больше не может её переголосовать.');
+    const maniac = this.players.find(p => p.role === ROLE.MANIAC);
+    if (winner === 'town') {
+      this.pushLog('end', 'Город победил: вся мафия (' + mafiaTotal + ') выбыла из игры' +
+        (maniac ? ', и маньяк вместе с ней' : '') + '.');
+    } else if (winner === 'maniac') {
+      this.pushLog('end', 'Маньяк победил: мафии больше нет, а из мирных остался один — ' +
+        'до утра он не дожил бы всё равно. Это был ' + maniac.name + ' (место ' + maniac.seat + ').');
+    } else {
+      this.pushLog('end', 'Мафия победила: её осталось ' + h.mafia + ', остальных — ' +
+        (h.town + h.maniac) + '. Город больше не может её переголосовать.');
+    }
     if (this.bestMove) {
       this.pushLog('bestmove', 'Лучший ход ' + this.bestMove.byName + ': угадано ' +
         this.bestMove.hits + ' из 3.');
@@ -892,6 +1383,7 @@ class Game {
     const revealAll = this.finished;
     const iAmMafia = me ? this.isMafia(userId) : false;
 
+    const voting = this.phase === 'vote' || this.phase === 'runoff' || this.phase === 'tievote';
     const players = this.players.map(p => {
       const showRole = revealAll || !p.alive || (iAmMafia && this.isMafia(p.id)) || (me && p.id === me.id);
       return {
@@ -900,9 +1392,21 @@ class Game {
         role: showRole ? p.role : null,
         roleRu: showRole ? C.ROLE_INFO[p.role].ru : null,
         roleGlyph: showRole ? C.ROLE_INFO[p.role].glyph : null,
-        voted: (this.phase === 'vote' || this.phase === 'runoff') && this.votes[p.id] !== undefined,
+        /* Команда приезжает вместе с картой, а не считается на клиенте:
+           с третьей силой «мафия или город» больше не выводится из имени
+           роли, и два места, где это считалось бы, разошлись бы в первый же
+           вечер. */
+        team: showRole ? C.teamOf(p.role) : null,
+        voted: voting && this.votes[p.id] !== undefined,
+        /* За кого поднял руку — только на открытом голосовании и только пока
+           оно идёт: в этом и вся разница между двумя правилами. */
+        voteFor: (this.voteOpen && this.phase !== 'tievote' && voting) ? (this.votes[p.id] || null) : null,
         ready: this.phase === 'day' && !!(this.ready && this.ready[p.id]),
         spoke: this.phase === 'speech' && !!this.spoke[p.id],
+        /* Фолы публичны: наказание, о котором знает только наказанный, не
+           работает как дисциплина. */
+        fouls: this.foulsOn ? (this.fouls[p.id] || 0) : 0,
+        foulSkip: !!this.foulSkip[p.id],
         offline: this.offline.has(p.id),
         left: this.left.has(p.id)
       };
@@ -944,7 +1448,15 @@ class Game {
         finaleMafia: revealAll ? this.scenario.finaleMafia : null
       },
       composition: this.composition,
-      compositionLabel: C.compositionLabel(this.players.length),
+      compositionLabel: C.compositionLabel(this.players.length, this.preset),
+      /* Правила стола едут к клиенту целиком: игрок должен видеть, во что
+         он играет, не спрашивая хозяина комнаты. */
+      preset: this.preset,
+      presetRu: C.presetById(this.preset).ru,
+      sides: this.composition.sides,
+      voteOpen: this.voteOpen,
+      onTie: this.onTie,
+      foulsOn: this.foulsOn,
       /* Семя отдаём только после занавеса: до него по нему можно было бы
          пересчитать раздачу и узнать все роли. */
       seed: revealAll ? this.seed : null,
@@ -972,12 +1484,36 @@ class Game {
         myVote: this.votes[me.id] !== undefined ? this.votes[me.id] : null,
         ready: !!(this.ready && this.ready[me.id]),
         canAct: this.canAct(me),
-        voice: this.voiceFor(userId)
+        voice: this.voiceFor(userId),
+        /* ---- расширенный набор: своё и только своё ---- */
+        mySlay: this.nightActions.slay[me.id] || null,
+        myBlock: this.nightActions.block[me.id] || null,
+        myShield: this.nightActions.shield[me.id] || null,
+        myPress: this.nightActions.press[me.id] || null,
+        blockBlocked: this.lastBlocked[me.id] || null,
+        press: me.role === ROLE.JOURNALIST ? (this.pressResults[me.id] || []) : [],
+        shieldSpent: me.role === ROLE.LAWYER ? !!this.lawyerSpent[me.id] : false,
+        shieldKept: me.role === ROLE.LAWYER ? !!this.shieldSkip[me.id] : false,
+        fouls: this.foulsOn ? (this.fouls[me.id] || 0) : 0,
+        foulSkip: !!this.foulSkip[me.id]
       };
       if (this.phase === 'night' && iAmMafia) {
         view.mafiaVotes = Object.entries(this.nightActions.kill)
           .map(([mid, tid]) => ({ from: this.nameOf(mid), to: this.nameOf(tid) }));
+        /* Ночная доска. Уезжает только своим и только ночью — это и есть
+           весь её смысл: договориться, не выходя в общий чат. */
+        view.mafiaBoard = Object.entries(this.mafiaBoard).map(([id, m]) => ({
+          id, tag: m.tag, tagRu: MAFIA_TAG_RU[m.tag], byName: m.byName
+        }));
+        view.mafiaTags = MAFIA_TAGS.map(t => ({ id: t, ru: MAFIA_TAG_RU[t] }));
       }
+    }
+    /* Отменённые изгнания публичны, автор — нет. Стол должен понимать, почему
+       казнь не состоялась, но не должен знать, кого за это благодарить. */
+    if (this.lawyerSaved.length) view.lawyerSaved = this.lawyerSaved.slice();
+    if (this.phase === 'tievote') {
+      view.tieOf = this.tieOf || [];
+      view.tieNames = (this.tieOf || []).map(id => this.nameOf(id));
     }
     /* Доска следствия. Публичного здесь только то, что публично: улики,
        результаты экспертиз и приметы выбывших. Свои приметы человек видит
@@ -1044,6 +1580,7 @@ class Game {
     if (this.phase === 'night') return this.timing.night;
     if (this.phase === 'day') return this.timing.day;
     if (this.phase === 'vote' || this.phase === 'runoff') return this.timing.vote;
+    if (this.phase === 'tievote') return Math.max(12, Math.round(this.timing.vote / 2));
     if (this.phase === 'morning') return this.timing.reveal;
     return 12;
   }
@@ -1059,8 +1596,15 @@ class Game {
       if (this.isMafia(me.id)) return 'kill';
       if (me.role === ROLE.DOCTOR) return 'heal';
       if (me.role === ROLE.SHERIFF) return 'check';
+      if (me.role === ROLE.MANIAC) return 'slay';
+      if (me.role === ROLE.LOVER) return 'block';
+      if (me.role === ROLE.JOURNALIST) return 'press';
+      /* Адвокат с потраченным правом ночью ничего не делает: показывать ему
+         живую кнопку, которая ничего не даст, — хуже, чем не показывать. */
+      if (me.role === ROLE.LAWYER) return this.lawyerSpent[me.id] ? null : 'shield';
       return null;
     }
+    if (this.phase === 'tievote') return 'tievote';
     if (this.phase === 'vote' || this.phase === 'runoff') return 'vote';
     if (this.phase === 'speech') return this.speaker === me.id ? 'speak' : 'listen';
     if (this.phase === 'day') return 'talk';

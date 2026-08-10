@@ -8,6 +8,13 @@
   else root.MafiaConfig = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
 
+  /* Расширенный набор ролей живёт отдельным файлом: это не «ещё пять карт»,
+     а пять исключений из общих правил, и каждое из них надо было объяснить
+     в одном месте. Здесь мы их только подмешиваем к общему множеству. */
+  const Roles = (typeof require === 'function')
+    ? require('./roles.js')
+    : ((typeof globalThis !== 'undefined' ? globalThis : this).MafiaRoles);
+
   const MIN_PLAYERS = 6;
   const MAX_PLAYERS = 20;
 
@@ -16,16 +23,27 @@
     DON: 'don',
     DOCTOR: 'doctor',
     SHERIFF: 'sheriff',
-    CIVILIAN: 'civilian'
+    CIVILIAN: 'civilian',
+    MANIAC: Roles.ROLE.MANIAC,
+    LOVER: Roles.ROLE.LOVER,
+    LAWYER: Roles.ROLE.LAWYER,
+    JOURNALIST: Roles.ROLE.JOURNALIST,
+    WEREWOLF: Roles.ROLE.WEREWOLF
   };
 
-  const ROLE_INFO = {
+  const ROLE_INFO = Object.assign({
     mafia:    { ru: 'Мафия',    glyph: '🎩', team: 'mafia', desc: 'Ночью вместе с сообщниками выбирает жертву. Знает своих.' },
     don:      { ru: 'Дон',      glyph: '♠',  team: 'mafia', desc: 'Глава мафии. Его голос решает при ничьей в ночном выборе. Проверка шерифа показывает его как мафию.' },
     doctor:   { ru: 'Доктор',   glyph: '✚',  team: 'town',  desc: 'Ночью лечит одного игрока. Можно себя, но не одного и того же две ночи подряд.' },
     sheriff:  { ru: 'Шериф',    glyph: '★',  team: 'town',  desc: 'Ночью проверяет одного игрока и узнаёт, мафия он или нет.' },
     civilian: { ru: 'Мирный',   glyph: '⌂',  team: 'town',  desc: 'Особых умений нет — только голос, логика и умение читать людей.' }
-  };
+  }, Roles.ROLE_INFO);
+
+  /** Команда роли: 'mafia', 'town' или 'maniac'. Команд теперь три. */
+  function teamOf(role) {
+    const info = ROLE_INFO[role];
+    return info ? info.team : 'town';
+  }
 
   /* ----------------------------------------------------------------------
      Баланс состава. Правила:
@@ -39,38 +57,73 @@
        • «сильных» ролей города (доктор+шериф) не больше трети города;
        • сумма ролей равна числу игроков.
      ---------------------------------------------------------------------- */
-  function composition(n) {
+  function composition(n, presetId) {
     n = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.round(n)));
-    const mafiaTotal = Math.max(1, Math.floor((n + 1) / 4));
-    const dons = mafiaTotal >= 3 ? 1 : 0;
+    const preset = Roles.presetById(presetId);
+    const force = preset.force || {};
+
+    /* delta — поправка пресета к базовому составу. Нужна там, где новая
+       карта меняет не количество карт, а количество ножей: маньяк добавляет
+       к столу вторую руку, и без второго врача ночь начинает уносить двоих
+       при одном спасении. Это не «усиление города», а восстановление
+       прежнего соотношения ножей и спасений. */
+    const delta = preset.delta || {};
+    const mafiaTotal = force.mafiaTotal !== undefined
+      ? force.mafiaTotal
+      : Math.max(1, Math.floor((n + 1) / 4) + (delta.mafiaTotal || 0));
+    const dons = force.dons !== undefined
+      ? force.dons : (mafiaTotal >= 3 ? 1 : 0);
     const mafia = mafiaTotal - dons;
-    const doctors = n >= 14 ? 2 : 1;
-    const sheriffs = n >= 16 ? 2 : 1;
-    const civilians = n - mafiaTotal - doctors - sheriffs;
-    return { players: n, mafiaTotal, mafia, dons, doctors, sheriffs, civilians };
+    const doctors = force.doctors !== undefined
+      ? force.doctors : Math.max(0, (n >= 14 ? 2 : 1) + (delta.doctors || 0));
+    const sheriffs = force.sheriffs !== undefined
+      ? force.sheriffs : Math.max(0, (n >= 16 ? 2 : 1) + (delta.sheriffs || 0));
+
+    /* Новые карты забираются у мирных, а не добавляются сверху: иначе стол на
+       двенадцать человек с полным набором превратился бы в стол на
+       семнадцать, и «сколько нас» перестало бы значить «сколько за столом». */
+    const plainBefore = n - mafiaTotal - doctors - sheriffs;
+    const extra = Roles.fitExtra(plainBefore, preset.extra);
+    const extraTotal = Object.keys(extra).reduce((s, k) => s + extra[k], 0);
+    const civilians = plainBefore - extraTotal;
+
+    return {
+      players: n, preset: preset.id, presetRu: preset.ru,
+      mafiaTotal, mafia, dons, doctors, sheriffs, civilians, extra,
+      /* Сколько всего сил за столом. Две — классика; три — когда есть маньяк,
+         и об этом игрок должен узнать до раздачи, а не в финале. */
+      sides: extra.maniac ? 3 : 2
+    };
   }
 
   /** Плоский список ролей на n игроков (без перемешивания). */
-  function rolePool(n) {
-    const c = composition(n);
+  function rolePool(n, presetId) {
+    const c = composition(n, presetId);
     const pool = [];
     for (let i = 0; i < c.dons; i++) pool.push(ROLE.DON);
     for (let i = 0; i < c.mafia; i++) pool.push(ROLE.MAFIA);
     for (let i = 0; i < c.doctors; i++) pool.push(ROLE.DOCTOR);
     for (let i = 0; i < c.sheriffs; i++) pool.push(ROLE.SHERIFF);
+    Object.keys(c.extra).forEach(role => {
+      for (let i = 0; i < c.extra[role]; i++) pool.push(role);
+    });
     for (let i = 0; i < c.civilians; i++) pool.push(ROLE.CIVILIAN);
     return pool;
   }
 
   /** Человекочитаемое описание состава: «3 мафии · дон · доктор · шериф · 7 мирных». */
-  function compositionLabel(n) {
-    const c = composition(n);
+  function compositionLabel(n, presetId) {
+    const c = composition(n, presetId);
     const parts = [];
     if (c.dons) parts.push('дон');
     if (c.mafia) parts.push(c.mafia + ' ' + plural(c.mafia, 'мафия', 'мафии', 'мафий'));
-    parts.push(c.doctors === 1 ? 'доктор' : c.doctors + ' доктора');
-    parts.push(c.sheriffs === 1 ? 'шериф' : c.sheriffs + ' шерифа');
-    parts.push(c.civilians + ' ' + plural(c.civilians, 'мирный', 'мирных', 'мирных'));
+    if (c.doctors) parts.push(c.doctors === 1 ? 'доктор' : c.doctors + ' доктора');
+    if (c.sheriffs) parts.push(c.sheriffs === 1 ? 'шериф' : c.sheriffs + ' шерифа');
+    Object.keys(c.extra).forEach(role => {
+      const ru = (ROLE_INFO[role] || {}).ru || role;
+      parts.push(c.extra[role] > 1 ? c.extra[role] + ' × ' + ru.toLowerCase() : ru.toLowerCase());
+    });
+    if (c.civilians) parts.push(c.civilians + ' ' + plural(c.civilians, 'мирный', 'мирных', 'мирных'));
     return parts.join(' · ');
   }
 
@@ -253,9 +306,12 @@
   }
 
   return {
-    MIN_PLAYERS, MAX_PLAYERS, ROLE, ROLE_INFO,
+    MIN_PLAYERS, MAX_PLAYERS, ROLE, ROLE_INFO, teamOf,
     composition, rolePool, compositionLabel, plural,
     SCENARIOS, scenariosFor, scenarioById, timing,
-    SPEED, SPEED_LIST, speedById
+    SPEED, SPEED_LIST, speedById,
+    /* Пресеты ролей: наружу отдаём и сам список, и способ найти один. */
+    TEAM: Roles.TEAM, PRESETS: Roles.PRESETS,
+    presetById: Roles.presetById, presetsFor: Roles.presetsFor
   };
 });

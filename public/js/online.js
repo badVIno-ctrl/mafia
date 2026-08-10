@@ -27,14 +27,21 @@
     prologue: 'Знакомство', night: 'Ночь', morning: 'Утро',
     lastword: 'Последнее слово',
     speech: 'День — слово по кругу',
-    day: 'День — обсуждение', vote: 'Голосование', runoff: 'Повторное голосование', over: 'Игра окончена'
+    day: 'День — обсуждение', vote: 'Голосование', runoff: 'Повторное голосование',
+    tievote: 'Решение стола', over: 'Игра окончена'
   };
   var CH_RU = { town: 'Общий чат', mafia: 'Чат мафии', ghost: 'Выбывшие' };
   var ACT_RU = {
     kill: 'Выберите жертву', heal: 'Кого спасаете этой ночью',
     check: 'Кого проверяете', vote: 'За кого голосуете',
     speak: 'Слово у вас', listen: 'Слушайте',
-    lastword: 'Последнее слово ваше', bestmove: 'Назовите трёх подозреваемых'
+    lastword: 'Последнее слово ваше', bestmove: 'Назовите трёх подозреваемых',
+    /* Расширенный набор. Формулировка здесь — это единственное, что игрок
+       читает в момент хода, поэтому она говорит не «примените способность», а
+       что именно случится. */
+    slay: 'Кого вы заберёте этой ночью', block: 'Кому этой ночью будет не до дела',
+    shield: 'Кого прикрываете от изгнания', press: 'Выберите двоих — узнаете, вместе они или врозь',
+    tievote: 'Поднять всех или оставить всех'
   };
   /* Что ведущий говорит вслух при смене фазы. */
   var NARRATE = {
@@ -45,6 +52,7 @@
     day: 'День. Обсуждайте, кто вам кажется подозрительным.',
     vote: 'Голосуем.',
     runoff: 'Повторное голосование.',
+    tievote: 'Снова ничья. Стол решает: поднять всех или оставить всех.',
     over: 'Игра окончена.'
   };
 
@@ -52,6 +60,9 @@
     lobby: null, room: null, game: null,
     tab: 'town', friendsOpen: false,
     lastPhase: null, lastMentionTs: null,
+    /* Первый из пары журналиста. Живёт только на клиенте: сервер получает
+       пару целиком, потому что половина этого факта бессмысленна. */
+    pressA: null,
     stage: null, stageBroken: false, seatsKey: '',
     marks: new Map(), chatSeen: new Set(), chatPrimed: false,
     actionsKey: '', roleKey: '',
@@ -283,6 +294,29 @@
             API.esc(sp.ru) + ' <span class="muted">' + sp.speech + ' с</span></button>';
         }).join(''));
       }
+      /* Набор ролей. Пресет, а не пять галочек: восемнадцать сочетаний, из
+         которых половина не сходится по составу, — это не выбор, а ловушка.
+         Пресет, который на текущий стол не садится, показываем погашенным и
+         подписываем, сколько человек ему нужно: иначе хозяин жмёт кнопку и
+         получает отказ без объяснения. */
+      if ($('presetPick')) {
+        setHTML($('presetPick'), (room.presetList || []).map(function (pr) {
+          var need = pr.min === pr.max ? ('ровно ' + pr.min) : (pr.min + '–' + pr.max);
+          return '<button class="btn sm' + (room.rolePreset === pr.id ? ' on' : '') +
+            (pr.fits ? '' : ' off') + '" data-preset="' + pr.id + '"' +
+            (pr.fits ? '' : ' disabled') +
+            ' title="' + API.esc(pr.hint) + '">' + API.esc(pr.ru) +
+            (pr.fits ? '' : ' <span class="muted">' + need + '</span>') + '</button>';
+        }).join(''));
+        var cur = (room.presetList || []).filter(function (x) { return x.id === room.rolePreset; })[0];
+        /* Сначала зачем, потом что: «Маньяк убивает сам за себя. Состав:
+           классика плюс третья сила.» Обратный порядок читался как обрывок
+           фразы с маленькой буквы посередине. */
+        setText($('presetNote'), cur ? (cur.hint + '. Состав: ' + cur.short + '.') : '');
+      }
+      if ($('voteOpenOn')) $('voteOpenOn').checked = room.voteOpen !== false;
+      if ($('onTieTable')) $('onTieTable').checked = room.onTie === 'table';
+      if ($('foulsOn')) $('foulsOn').checked = !!room.fouls;
       $('btnStart').disabled = !room.canStart;
       setText($('btnStart'), room.canStart ? 'Начать партию (' + room.members.length + ')' : 'Нужно хотя бы шесть человек');
       /* Добор ботами: сколько мест осталось — столько и предлагаем занять. */
@@ -353,6 +387,10 @@
     if (state.lastPhase && state.lastPhase !== g.phase) {
       API.toast(PHASE_RU[g.phase] + (g.day ? ' · день ' + g.day : ''));
       if (NARRATE[g.phase]) Voice.say(NARRATE[g.phase] + ' ' + hintFor(g, you), { narrator: true, urgent: true });
+      /* Недобранная пара журналиста не должна пережить ночь: утром первый
+         выбранный уже ничего не значит, а кнопка «выберите второго» осталась
+         бы висеть до конца партии. */
+      state.pressA = null;
     }
     state.lastPhase = g.phase;
 
@@ -512,7 +550,7 @@
           (!p.alive ? ' dead' : '') +
           (pickable ? ' pickable' : '') +
           (picked ? ' picked' : '') +
-          ((p.role === 'mafia' || p.role === 'don') ? ' mafia' : '') +
+          (p.team === 'mafia' ? ' mafia' : '') + (p.team === 'maniac' ? ' maniac' : '') +
           (state.speaker === p.id ? ' talking' : '');
         el.dataset.target = pickable ? p.id : '';
         el.disabled = !pickable;
@@ -562,15 +600,30 @@
     if (p.left) return 'вышел из-за стола';
     if (p.offline) return 'нет связи';
     if (p.role) return p.roleRu;
+    /* Открытое голосование: за кого поднял руку — прямо на месте. Ради этого
+       правило и включают: голос становится высказыванием, за которым следят. */
+    if (p.voteFor) {
+      if (p.voteFor === 'skip') return 'воздержался';
+      var to = g.players.filter(function (x) { return x.id === p.voteFor; })[0];
+      return to ? ('голос → ' + to.name) : 'голос подан';
+    }
+    if (g.phase === 'tievote' && p.voted) return 'решение принял';
     if ((g.phase === 'vote' || g.phase === 'runoff') && p.voted) return 'голос подан';
     if (g.phase === 'day' && p.ready) return 'готов голосовать';
+    if (p.foulSkip) return 'пропускает речь за фолы';
+    if (p.fouls >= 2) return p.fouls + ' фола';
     return 'за столом';
   }
 
   function isPicked(you, p) {
     var act = you.canAct;
+    /* Выбранное место должно быть видно на самом месте, а не только в доке:
+       иначе после клика игрок не уверен, что ход подан. */
+    var pressed = (you.myPress || '').split(',').indexOf(p.id) >= 0 || state.pressA === p.id;
     return (act === 'kill' && you.myKill === p.id) || (act === 'heal' && you.myHeal === p.id) ||
-      (act === 'check' && you.myCheck === p.id) || (act === 'vote' && you.myVote === p.id);
+      (act === 'check' && you.myCheck === p.id) || (act === 'vote' && you.myVote === p.id) ||
+      (act === 'slay' && you.mySlay === p.id) || (act === 'block' && you.myBlock === p.id) ||
+      (act === 'shield' && you.myShield === p.id) || (act === 'press' && pressed);
   }
 
   /* ---------------------------- запасной стол ---------------------------- */
@@ -622,7 +675,24 @@
     var p = g.players.filter(function (x) { return x.id === id; })[0];
     if (!p) return;
     var cur = Notes.get(id);
-    var h = '<div class="expert"><h3>Блокнот · место ' + p.seat + '</h3>' +
+    var h = '<div class="expert">';
+    /* Ночью у мафии тот же жест открывает ещё и общую доску: метка на месте,
+       которую видят свои. Отдельного жеста заводить нельзя — второй способ
+       трогать место игрок просто не найдёт. */
+    var you = g.you || {};
+    if (g.phase === 'night' && you.canAct === 'kill' && g.mafiaTags) {
+      var mine = (g.mafiaBoard || []).filter(function (m) { return m.id === id; })[0];
+      h += '<h3>Доска мафии · место ' + p.seat + '</h3>' +
+        '<p class="note">Эту метку видят только свои — она для того, чтобы договориться ' +
+        'ночью, а не в общем чате при всём городе.</p><div class="grid2">' +
+        g.mafiaTags.map(function (t) {
+          return '<button class="btn sm btag ' + t.id + (mine && mine.tag === t.id ? ' on' : '') +
+            '" data-mark="' + id + ':' + t.id + '">' + API.esc(t.ru) + '</button>';
+        }).join('') + '</div>' +
+        (mine ? '<button class="btn ghost sm" data-mark="' + id + ':">Снять метку мафии</button>' : '') +
+        '<hr class="rule">';
+    }
+    h += '<h3>Блокнот · место ' + p.seat + '</h3>' +
       '<p class="note">Пометка видна только вам и остаётся на этом устройстве. ' +
       'Ни сервер, ни другие игроки её не получают.</p><div class="grid2">';
     Notes.tags().forEach(function (t) {
@@ -642,6 +712,7 @@
   function renderRole(g, you) {
     var iq = g.inquest || null;
     var key = JSON.stringify([you.role, you.alive, (you.partners || []).length, (you.checks || []).length,
+      (you.press || []).length, you.shieldSpent, you.myShield, you.fouls,
       iq ? (iq.myTraitsRu || []).join(',') : '']);
     if (state.roleKey === key) return;
     state.roleKey = key;
@@ -671,6 +742,33 @@
         iq.myTraitsRu.map(function (t) { return API.esc(t); }).join(', ') +
         '<span class="muted"> — их знаете только вы. Улики называют приметы того, кто убивал.</span></div>';
     }
+    /* Журналист. Его знание — это связи, а не имена, и держать их надо
+       списком: «вместе» про пару, один из которой уже раскрыт, стоит целой
+       проверки шерифа, но заметить это можно только глядя на все связи разом. */
+    if (you.press && you.press.length) {
+      h += '<div class="known"><b>Ваши сравнения:</b> ' + you.press.map(function (r) {
+        return API.esc(r.aName) + ' и ' + API.esc(r.bName) + ' — <b style="color:' +
+          (r.sameTeam ? 'var(--ember-soft)' : 'var(--verdigris)') + '">' +
+          (r.sameTeam ? 'вместе' : 'врозь') + '</b>';
+      }).join('; ') + '<span class="muted"> — это про сторону, а не про роль.</span></div>';
+    }
+    /* Адвокат. Одно право на партию — и он обязан видеть, цело ли оно. */
+    if (you.role === 'lawyer') {
+      h += '<div class="known">' + (you.shieldSpent
+        ? 'Право защиты <b>потрачено</b>: изгнание вы уже отменили один раз.'
+        : 'Право защиты <b>при вас</b>. Тратится только когда сработает — ' +
+          'прикрывать можно каждую ночь.') + '</div>';
+    }
+    /* Оборотень. Главное про свою карту он должен читать со своей карты, а не
+       узнавать в тот день, когда шериф объявит его чёрным. */
+    if (you.role === 'werewolf') {
+      h += '<div class="known">Проверка шерифа покажет вас <b>мафией</b>. Это не ошибка движка — ' +
+        'это ваша роль. Побеждаете вы вместе с городом.</div>';
+    }
+    if (you.fouls) {
+      h += '<div class="known">Фолы: <b>' + you.fouls + '</b>' +
+        (you.foulSkip ? ' — следующую речь вы пропускаете' : ' из 4') + '.</div>';
+    }
     if (you.alive === false && !g.finished) h += '<div class="known muted">Вы выбыли, но видите всё.</div>';
     setHTML($('rolePane'), h);
   }
@@ -680,7 +778,9 @@
     var act = you.canAct;
     var iq = g.inquest || null;
     var key = [g.finished, act, you.ready, you.myVote, you.healBlocked, you.alive, g.speakerId,
-      g.lastWordId, g.bestMoveOpen,
+      g.lastWordId, g.bestMoveOpen, you.myPress, state.pressA, you.shieldSpent,
+      (g.mafiaBoard || []).map(function (m) { return m.id + m.tag; }).join(','),
+      (g.tieNames || []).join(','),
       iq ? [iq.method, iq.expertDone, iq.expertVotes, iq.clues.length].join(',') : ''].join('|');
     if (state.actionsKey === key) return;
     state.actionsKey = key;
@@ -691,6 +791,34 @@
       a += '<a class="btn ghost sm" href="/">На главную</a>';
     } else if (act === 'vote') {
       a = '<button class="btn sm" data-target="skip">Воздержаться</button>';
+    } else if (act === 'tievote') {
+      /* Голос за правило, а не за человека. Имена кандидатов стоят прямо в
+         подписи кнопки: «поднять всех» без списка — это голосование вслепую. */
+      var who = (g.tieNames || []).join(', ');
+      a = '<button class="btn danger sm' + (you.myVote === 'yes' ? ' on' : '') +
+        '" data-tie="yes">Поднять всех' + (who ? ' (' + API.esc(who) + ')' : '') + '</button>' +
+        '<button class="btn sm' + (you.myVote === 'no' ? ' on' : '') +
+        '" data-tie="no">Оставить всех</button>';
+    } else if (act === 'press') {
+      /* Журналисту нужны двое, и подавать их надо парой: половина факта
+         бесполезна. Первый выбранный держится на клиенте и виден в доке. */
+      if (you.myPress) {
+        a = '<span class="pill">Пара названа — ждём утра</span>';
+      } else if (state.pressA) {
+        var pa = g.players.filter(function (x) { return x.id === state.pressA; })[0];
+        a = '<span class="pill">Первый: ' + API.esc(pa ? pa.name : '—') +
+          '</span><span class="sep"></span>Выберите второго' +
+          '<button class="btn ghost sm" id="btnPressReset">Сбросить</button>';
+      } else {
+        a = '<span class="pill">Выберите двоих: узнаете, в одной они команде или в разных</span>';
+      }
+    } else if (act === 'shield') {
+      /* «Берегу право» — полноценный ход, а не отсутствие хода: ночь ждёт от
+         адвоката решения, и без этой кнопки решение подать было бы нечем. */
+      a = you.shieldKept
+        ? '<span class="pill">Решение подано: этой ночью вы не вмешиваетесь</span>'
+        : '<span class="pill">Право одно на партию — тратится только когда сработает</span>' +
+          '<button class="btn sm" id="btnKeepShield">Берегу право</button>';
     } else if (act === 'speak') {
       a = '<button class="btn primary sm" id="btnPass">Передать слово</button>';
     } else if (act === 'lastword') {
@@ -704,6 +832,22 @@
     } else if (act === 'talk') {
       a = '<button class="btn sm ' + (you.ready ? 'on' : '') + '" id="btnReady">' +
         (you.ready ? 'Готов' : 'Я высказался') + '</button>';
+    }
+
+    /* Ночная доска мафии. До неё ночь мафии была одним кликом: трое чёрных
+       не могли даже договориться, кого топить днём, — кроме общего чата, то
+       есть при всём городе. Метки видят и ставят только свои. */
+    if (act === 'kill' && g.mafiaBoard) {
+      var board = g.mafiaBoard.filter(function (m) { return m.tag; });
+      a += '<span class="sep"></span><span class="pill">Доска:</span>';
+      a += board.length
+        ? board.map(function (m) {
+          var pp = g.players.filter(function (x) { return x.id === m.id; })[0];
+          return '<button class="btn sm btag ' + m.tag + '" data-mark="' + m.id + ':"' +
+            ' title="Снять метку · поставил ' + API.esc(m.byName) + '">' +
+            API.esc(pp ? pp.name : '—') + ' — ' + API.esc(m.tagRu) + '</button>';
+        }).join('')
+        : '<span class="muted">пусто — долгое нажатие или правая кнопка на месте</span>';
     }
 
     /* Способ убийства: решение мафии, и оно стоит рядом с выбором жертвы. */
@@ -792,7 +936,7 @@
        ничем не отличается от общего крика, ради отмены которого он и нужен. */
     var mySpeech = g.phase === 'speech' && g.speakerId === you.id;
     var canSay = (state.tab === 'town' && you.alive &&
-        (['prologue', 'day', 'vote', 'runoff', 'morning', 'over'].indexOf(g.phase) >= 0 || mySpeech)) ||
+        (['prologue', 'day', 'vote', 'runoff', 'tievote', 'morning', 'over'].indexOf(g.phase) >= 0 || mySpeech)) ||
       (state.tab === 'mafia' && g.phase === 'night' && you.alive) ||
       (state.tab === 'ghost' && you.alive === false);
     $('gMsg').disabled = !canSay;
@@ -823,6 +967,11 @@
      сначала счёт и причина обычными словами, а атмосферная фраза сюжета
      остаётся, но явно помечена как концовка истории. */
   function isMafiaRole(r) { return r === 'mafia' || r === 'don'; }
+  /* Команда приезжает с сервера вместе с картой: с третьей силой её больше
+     нельзя вывести из имени роли, а два места, где это считалось бы,
+     разошлись бы в первый же вечер. */
+  function teamOf(p) { return p.team || (isMafiaRole(p.role) ? 'mafia' : 'town'); }
+  var WIN_RU = { town: 'Победил город', mafia: 'Победила мафия', maniac: 'Победил маньяк' };
 
   /* Склонение числительных. Локально: shared/game-config.js к этой странице
      не подключён, и обращение к MafiaConfig отсюда упало бы. */
@@ -835,20 +984,30 @@
 
   /** Почему партия закончилась — в числах, а не в метафорах. */
   function winReason(g) {
-    var mafiaAlive = 0, townAlive = 0, mafiaTotal = 0;
+    var mafiaAlive = 0, townAlive = 0, mafiaTotal = 0, maniacAlive = 0, maniac = null;
     g.players.forEach(function (p) {
-      if (isMafiaRole(p.role)) { mafiaTotal++; if (p.alive) mafiaAlive++; }
+      var t = teamOf(p);
+      if (t === 'mafia') { mafiaTotal++; if (p.alive) mafiaAlive++; }
+      else if (t === 'maniac') { maniac = p; if (p.alive) maniacAlive++; }
       else if (p.alive) townAlive++;
     });
+    if (g.winner === 'maniac') {
+      return 'Маньяк выиграл: мафии больше нет, а из мирных остался один — ' +
+        'до утра он всё равно не дожил бы. Третья сила побеждает в одиночку, ' +
+        'и считать её вместе с мафией было нельзя с самого начала.';
+    }
     if (g.winner === 'town') {
       return 'Город выиграл: ' + plural(mafiaTotal,
         'единственный игрок из мафии выбыл',
         'все ' + mafiaTotal + ' игрока из мафии выбыли',
         'все ' + mafiaTotal + ' игроков из мафии выбыли') +
-        ' из игры. В живых остались только мирные жители.';
+        ' из игры' + (maniac ? ', и маньяк вместе с ней' : '') +
+        '. В живых остались только мирные жители.';
     }
-    return 'Мафия выиграла: её осталось ' + mafiaAlive + ', а мирных — ' + townAlive +
-      '. Когда мафии становится столько же, сколько мирных, город больше не может её переголосовать.';
+    return 'Мафия выиграла: её осталось ' + mafiaAlive + ', а остальных — ' +
+      (townAlive + maniacAlive) +
+      '. Когда мафии становится столько же, сколько всех прочих вместе, ' +
+      'переголосовать её больше нельзя.';
   }
 
   function renderFinale(g) {
@@ -859,13 +1018,20 @@
     $('finale')._k = key;
 
     var you = g.you || {};
-    var youWon = you.role ? (isMafiaRole(you.role) ? g.winner === 'mafia' : g.winner === 'town') : null;
-    var story = g.winner === 'town' ? g.scenario.finaleTown : g.scenario.finaleMafia;
+    /* «Ваша сторона выиграла» с третьей силой считается по команде, а не по
+       «мафия или не мафия»: маньяк не выигрывает вместе с городом, даже когда
+       мафия проиграла. */
+    var youWon = null;
+    if (you.role) {
+      var myTeam = you.team || (isMafiaRole(you.role) ? 'mafia' : 'town');
+      youWon = g.winner === myTeam;
+    }
+    var story = g.winner === 'mafia' ? g.scenario.finaleMafia : g.scenario.finaleTown;
 
     $('finale').innerHTML =
       '<div class="box">' +
       '<span class="label">Итог партии</span>' +
-      '<div class="win ' + g.winner + '">' + (g.winner === 'town' ? 'Победил город' : 'Победила мафия') + '</div>' +
+      '<div class="win ' + g.winner + '">' + (WIN_RU[g.winner] || 'Занавес') + '</div>' +
       (youWon === null ? '' :
         '<div class="youres ' + (youWon ? 'won' : 'lost') + '">' +
         (youWon ? 'Вы в числе победителей' : 'В этот раз не ваша партия') +
@@ -873,7 +1039,7 @@
       '<p class="why">' + API.esc(winReason(g)) + '</p>' +
       (story ? '<p class="epilogue"><span>Концовка истории</span>' + API.esc(story) + '</p>' : '') +
       '<div class="seats">' + g.players.map(function (p) {
-        var team = isMafiaRole(p.role) ? 'mafia' : 'town';
+        var team = teamOf(p);
         return '<div class="seat ' + (p.alive ? '' : 'dead') + ' ' + team + '">' +
           '<span class="no">№' + p.seat + '</span>' +
           '<span class="avatar' + (p.alive ? '' : ' dead') + '">' + API.esc(API.initial(p.name)) + '</span>' +
@@ -889,8 +1055,8 @@
         '</code> — по нему этот стол собирается заново</p>' : '') +
       '</div>';
 
-    Voice.say('Игра окончена. ' + (g.winner === 'town' ? 'Победил город.' : 'Победила мафия.') +
-      ' ' + winReason(g), { narrator: true, urgent: true });
+    Voice.say('Игра окончена. ' + (WIN_RU[g.winner] || 'Занавес') + '. ' + winReason(g),
+      { narrator: true, urgent: true });
   }
 
   /* =======================================================================
@@ -899,7 +1065,13 @@
   function hintFor(g, you) {
     if (g.finished) return 'Партия окончена — роли раскрыты.';
     if (g.phase === 'prologue') return g.scenario.prologue;
-    if (g.phase === 'night') return 'Город засыпает. ' + (you.canAct ? ACT_RU[you.canAct] + '.' : 'Ждите утра.');
+    if (g.phase === 'night') {
+      var extra = '';
+      if (you.canAct === 'block' && you.blockBlocked) extra = ' Того же, что прошлой ночью, выбрать нельзя.';
+      if (you.canAct === 'shield') extra = ' Право одно на партию и тратится только когда сработает.';
+      if (you.canAct === 'slay') extra = ' Своих у вас нет — вы играете один.';
+      return 'Город засыпает. ' + (you.canAct ? ACT_RU[you.canAct] + '.' : 'Ждите утра.') + extra;
+    }
     if (g.phase === 'morning') return 'Утро. Город считает потери.';
     if (g.phase === 'lastword') {
       if (you.canAct === 'bestmove') {
@@ -917,8 +1089,19 @@
           (g.speechLeft ? ' — в очереди ещё ' + g.speechLeft : '') + '.';
     }
     if (g.phase === 'day') return 'День: спорьте, оправдывайтесь, сопоставляйте. ' + g.scenario.rule;
-    if (g.phase === 'vote') return 'Голосование: выберите того, кого город выводит.';
-    if (g.phase === 'runoff') return 'Переголосовка между лидерами — при новой ничьей не выйдет никто.';
+    if (g.phase === 'vote') {
+      return 'Голосование: выберите того, кого город выводит.' +
+        (g.voteOpen === false ? ' Голосование закрытое: расклад не откроется.' : '');
+    }
+    if (g.phase === 'runoff') {
+      return 'Переголосовка между лидерами — при новой ничьей ' +
+        (g.onTie === 'table' ? 'решать будет стол.' : 'не выйдет никто.');
+    }
+    if (g.phase === 'tievote') {
+      return 'Снова ничья: ' + API.esc((g.tieNames || []).join(', ')) +
+        '. Стол решает одним голосом — поднять всех сразу или не выводить никого. ' +
+        'Большинство «за» выводит всех.';
+    }
     return '';
   }
 
@@ -931,6 +1114,15 @@
     if (act === 'check') return p.id !== you.id;
     if (act === 'heal') return p.id !== you.healBlocked;
     if (act === 'vote') return !g.runoffOf || g.runoffOf.indexOf(p.id) >= 0;
+    /* Маньяк своих не имеет — ограничение одно: не себя. */
+    if (act === 'slay') return p.id !== you.id;
+    /* Любовница: не себя и не того же, что прошлой ночью. */
+    if (act === 'block') return p.id !== you.id && p.id !== you.blockBlocked;
+    /* Адвокат прикрывает кого угодно, включая себя: право одно, и распорядиться
+       им он должен сам. */
+    if (act === 'shield') return !you.shieldSpent;
+    /* Журналисту нужны двое, и второй не может быть первым. */
+    if (act === 'press') return !you.myPress && p.id !== you.id && p.id !== state.pressA;
     return false;
   }
 
@@ -952,6 +1144,23 @@
     if (!g || !g.you || !g.you.canAct) return;
     var p = g.players.find(function (x) { return x.id === id; });
     if (!p || !canTarget(g, g.you, p)) return;
+    /* Пара журналиста собирается на клиенте и уезжает одним действием: два
+       отдельных хода дали бы половину факта, а половина этого факта — ничто. */
+    if (g.you.canAct === 'press') {
+      if (!state.pressA) {
+        state.pressA = id;
+        state.actionsKey = null;
+        renderActions(g, g.you, state.room);
+        renderMarks(g, g.you);
+        renderFlatSeats(g, g.you);
+        API.toast('Первый выбран: ' + p.name + '. Теперь второй.');
+        return;
+      }
+      var pair = state.pressA + ',' + id;
+      state.pressA = null;
+      act('press', pair);
+      return;
+    }
     act(g.you.canAct, id);
     if (stg()) stg().shake(0.03);
     /* Выбрали в списке — показываем результат на сцене. */
@@ -960,7 +1169,8 @@
 
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-join],[data-sit],[data-invite],[data-kick],[data-scen],[data-target],' +
-      '[data-tab],[data-say],[data-panel],[data-method],[data-expert],[data-note-set],[data-speed]');
+      '[data-tab],[data-say],[data-panel],[data-method],[data-expert],[data-note-set],[data-speed],' +
+      '[data-preset],[data-mark],[data-tie]');
     if (el) {
       if (el.dataset.join) return call('/api/rooms/join', { roomId: el.dataset.join });
       /* Сесть за открытый стол — без ссылки и без приглашения. */
@@ -976,6 +1186,14 @@
       if (el.dataset.kick) return call('/api/rooms/kick', { userId: el.dataset.kick });
       if (el.dataset.scen) return call('/api/rooms/config', { scenarioId: el.dataset.scen });
       if (el.dataset.speed) return call('/api/rooms/config', { speed: el.dataset.speed });
+      if (el.dataset.preset) return call('/api/rooms/config', { rolePreset: el.dataset.preset });
+      /* Ночная доска мафии: метка на месте, которую видят все свои. */
+      if (el.dataset.mark) {
+        $('expertBox').hidden = true;
+        return act('mark', el.dataset.mark);
+      }
+      /* Голосование стола при ничьей: «да» или «нет», а не имя. */
+      if (el.dataset.tie) return act('vote', el.dataset.tie);
       if (el.dataset.tab) { state.tab = el.dataset.tab; if (state.game) renderChat(state.game, state.game.you || {}); return; }
       if (el.dataset.say) {
         var box = el.closest('.msg');
@@ -996,6 +1214,21 @@
     /* Экспертиза заказывается парой «кого» и «по какой примете»: город
        складывается, и один факт становится общим. Спрашиваем в два шага,
        чтобы не строить отдельного окна. */
+    /* «Берегу право» — это ход, а не отказ от хода: ночь ждёт от адвоката
+       решения, и подать его иначе было бы нечем. Ночь после этого обычно
+       закрывается сразу, поэтому кнопки «передумать» здесь нет: она обещала
+       бы возможность, которой уже не будет. */
+    if (e.target.closest('#btnKeepShield')) return act('shield', '');
+    if (e.target.closest('#btnPressReset')) {
+      state.pressA = null;
+      state.actionsKey = null;
+      if (state.game) {
+        renderActions(state.game, state.game.you || {}, state.room);
+        renderMarks(state.game, state.game.you || {});
+        renderFlatSeats(state.game, state.game.you || {});
+      }
+      return;
+    }
     if (e.target.closest('#btnExpert')) return askExpert();
     if (e.target.closest('#btnBestMove')) return askBestMove();
     if (e.target.closest('#btnReady')) return act('ready', null);
@@ -1219,6 +1452,26 @@
   if ($('lastWordOn')) {
     $('lastWordOn').addEventListener('change', function () {
       call('/api/rooms/config', { lastWord: this.checked });
+    });
+  }
+  /* Правила стола: три переключателя, каждый из которых меняет игру, а не
+     оформление. Подтверждение всплывашкой обязательно — иначе хозяин не
+     уверен, доехала ли настройка до сервера. */
+  if ($('voteOpenOn')) {
+    $('voteOpenOn').addEventListener('change', function () {
+      var on = this.checked;
+      call('/api/rooms/config', { voteOpen: on })
+        .then(function () { API.toast(on ? 'Голосование открытое' : 'Голосование закрытое'); });
+    });
+  }
+  if ($('onTieTable')) {
+    $('onTieTable').addEventListener('change', function () {
+      call('/api/rooms/config', { onTie: this.checked ? 'table' : 'none' });
+    });
+  }
+  if ($('foulsOn')) {
+    $('foulsOn').addEventListener('change', function () {
+      call('/api/rooms/config', { fouls: this.checked });
     });
   }
   $('openTable').addEventListener('change', function () {

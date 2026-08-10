@@ -20,6 +20,7 @@ const suites = [
   ['Тест 14 · семя партии и устойчивость ботов', 'test-seed.js'],
   ['Тест 15 · режим «Следствие»', 'test-inquest.js'],
   ['Тест 16 · последнее слово, лучший ход и темп', 'test-lastword.js'],
+  ['Тест 18 · расширенный набор ролей и правила стола', 'test-roles.js'],
   /* Симулятор идёт последним и с малым числом партий: полный прогон на
      сотни партий запускают руками (node tests/test-balance-sim.js 2000),
      а в общем тесте он проверяет, что баланс не свалился совсем и что
@@ -38,7 +39,8 @@ suites.forEach(([title, file]) => {
 console.log('\n─── Тест 6 · состав пакета ───');
 const must = [
   'server.js', 'package.json', 'README.md',
-  'shared/game-config.js', 'shared/inquest.js', 'server/game.js', 'server/bots.js',
+  'shared/game-config.js', 'shared/inquest.js', 'shared/roles.js', 'shared/rng.js',
+  'server/game.js', 'server/bots.js',
   'public/index.html', 'public/online.html', 'public/bots.html',
   'public/rules.html', 'public/404.html', 'public/manifest.webmanifest',
   'public/img/og-image.png', 'public/img/icon-192.png', 'public/img/icon-512.png',
@@ -52,7 +54,7 @@ const must = [
   'tests/test-signal.js', 'tests/test-assets.js', 'tests/test-bots.js',
   'tests/test-lobby.js', 'tests/test-access.js', 'tests/test-speeches.js',
   'tests/test-seed.js', 'tests/test-inquest.js', 'tests/shot.js', 'tests/lab-shots.js',
-  'tests/test-lastword.js', 'tests/test-balance-sim.js',
+  'tests/test-lastword.js', 'tests/test-balance-sim.js', 'tests/test-roles.js',
   'tests/ab-compare.js', 'tests/ab-figures.js',
   'public/figure-lab.html', 'public/compare.html',
   'public/js/render-pipeline.js', 'public/js/notes.js'

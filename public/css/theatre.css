@@ -256,6 +256,18 @@ h1 em,h2 em{
 .btn.wide{width:100%}
 .btn.on{border-color:var(--line-warm);color:var(--tallow);background:linear-gradient(180deg,rgba(226,180,120,.18),rgba(226,180,120,.06))}
 .btn[disabled],.btn[aria-disabled=true]{opacity:.42;pointer-events:none}
+/* Кнопка, которая есть, но сейчас не подходит: пресет ролей, не садящийся на
+   текущий стол. Прятать её нельзя — тогда хозяин не узнает, что такой набор
+   вообще существует, и не поймёт, сколько людей на него нужно. Отсюда
+   отдельное состояние между «доступно» и «нет вовсе». */
+.btn.off{opacity:.5;border-style:dashed}
+.btn.off .muted{font-variant-numeric:tabular-nums}
+/* Метка на ночной доске мафии. Три метки — три смысла, и различаются они не
+   только словом: у дальтоника цвет метки не существует. */
+.btn.btag{border-left-width:3px}
+.btn.btag.target{border-left-color:var(--ember-soft);color:var(--ember-soft)}
+.btn.btag.watch{border-left-color:var(--tallow);color:var(--tallow)}
+.btn.btag.skip{border-left-color:var(--verdigris);color:var(--verdigris)}
 .btn .ico{flex:none}
 
 /* Кнопка-иконка: всегда с aria-label, площадь нажатия не меньше 44px. */
