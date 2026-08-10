@@ -86,6 +86,13 @@ function expectedNoise(t) {
    -------------------------------------------------------------------------- */
 const PROBE = () => {
   const out = { overflow: [], tiny: [], smallTap: [], glyphs: 0, hScroll: false, vw: window.innerWidth };
+  /* Порог зависит от того, чем в экран показывают. Пальцу нужны 44 пикселя —
+     столько требуют и правило в css/app.css, и руководства Apple и Google.
+     Мыши хватает меньшего, и требовать от настольного вида 44 значило бы
+     ругаться на аккуратную вёрстку. Раньше порог был один и низкий — 30 на
+     22, — и в эту щель провалилось целое семейство поломок. */
+  const coarse = window.matchMedia('(pointer:coarse)').matches;
+  const FLOOR = coarse ? 43.5 : 26;
   const vw = window.innerWidth;
   const name = el => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') +
     (typeof el.className === 'string' && el.className.trim()
@@ -123,14 +130,37 @@ const PROBE = () => {
     }
     /* Галочка размером 20×20 — не поломка, если она лежит внутри подписи, а
        вся подпись нажимается: палец попадает в строку, а не в квадратик.
-       Мерить надо ту область, которая реагирует на касание. */
+       Мерить надо ту область, которая реагирует на касание.
+
+       Порог — 44 пикселя, то есть ровно тот, который записан правилом в
+       css/app.css и требуется руководствами Apple и Google. Стоял он раньше
+       на 30 и 22, и в эту щель провалилось целое семейство поломок: 38 px у
+       всех главных кнопок партии, 30 по ширине у крестика панели, 40–42 у
+       знаков в шапке, 34 у фильтров протокола. Все они выглядели нормально и
+       не нажимались на ходу.
+
+       Размер берём по раскладке (offsetWidth/offsetHeight), а не по
+       преобразованному прямоугольнику: карточки и подсказки приезжают
+       анимацией «scale(.96) → 1», и честная кнопка в 44 px посреди этих 420 мс
+       измеряется как 42. Это кнопка в движении, а не мелкая кнопка.
+
+       Подписи мест (.mark) исключены сознательно: на дуге телефона двадцать
+       мест не разложить по 44 px — соседние центры расходятся на 24. Для них
+       правильный ответ не «увеличить», а «дать список», и он проверяется
+       отдельно — см. «выбор человека можно подать пальцем». */
     const tappable = el.matches('button, a, input, select, [role=button]');
-    if (tappable && !el.disabled) {
+    /* Ссылка внутри фразы под правило не попадает: она течёт по строке вместе
+       с текстом, и растянуть её до квадрата 44 px значит раздвинуть абзац.
+       Тот же вывод у WCAG 2.5.8 — inline-ссылки в предложении исключены. Под
+       правилом всё, что стоит само по себе: кнопки, ссылки-кнопки, ячейки
+       оглавления, поля. */
+    const inProse = el.tagName === 'A' && !el.classList.contains('btn') &&
+      !!el.closest('p, li, .note, .lede, .funnel-note');
+    if (tappable && !el.disabled && !el.classList.contains('mark') && !inProse) {
       const host = el.closest('label') || el;
-      const hr = host.getBoundingClientRect();
-      const h = Math.max(r.height, host === el ? 0 : hr.height);
-      const w = Math.max(r.width, host === el ? 0 : hr.width);
-      if (h < 30 || w < 22) out.smallTap.push({ tag: name(el), w: Math.round(w), h: Math.round(h) });
+      const h = Math.max(el.offsetHeight || r.height, host === el ? 0 : host.offsetHeight);
+      const w = Math.max(el.offsetWidth || r.width, host === el ? 0 : host.offsetWidth);
+      if (h < FLOOR || w < FLOOR) out.smallTap.push({ tag: name(el), w: Math.round(w), h: Math.round(h) });
     }
   });
   out.glyphs = ((document.body.innerText || '').match(/\uFFFD/g) || []).length;
@@ -196,7 +226,8 @@ function reportBag(name, bag, opts) {
   ok(bag.tiny.length === 0, name + ': нет текста меньше 11.5px', JSON.stringify(bag.tiny.slice(0, 3)));
   ok(bag.blank.length === 0, name + ': нет кнопок без знака и подписи', JSON.stringify(bag.blank.slice(0, 3)));
   if (!opts.skipTap) {
-    ok(bag.smallTap.length === 0, name + ': зоны нажатия не меньше 30px', JSON.stringify(bag.smallTap.slice(0, 3)));
+    ok(bag.smallTap.length === 0, name + ': зоны нажатия по размеру указателя (палец — 44px)',
+      JSON.stringify(bag.smallTap.slice(0, 3)));
   }
 }
 
@@ -438,6 +469,7 @@ async function playThrough(browser, opts) {
   const { ctx, page } = await newPlayer(browser, opts.vp || MOBILE, bag);
   const seenPhases = new Set();
   const mute = [];   // фазы, где не видно ни одного действия
+  const nopick = []; // фазы, где выбор человека нечем подать пальцем
   try {
     await register(page, nm(opts.name));
     await page.goto(BASE + opts.url, { waitUntil: 'domcontentloaded' });
@@ -459,6 +491,21 @@ async function playThrough(browser, opts) {
           finaleText: ((g('finale') || {}).innerText || '').trim().slice(0, 120),
           actions: acts.map(b => (b.innerText || '').trim() || b.id || b.dataset.target || '?'),
           pickable: document.querySelectorAll('#seats .seat.pickable, .mark.pickable').length,
+          /* Чем именно можно подать выбор человека. Считать «выбор есть, если
+             есть выбираемое место» недостаточно: на узком экране подпись места
+             сжимается в жетон 30 px с одним номером, и пальцем в него не
+             попасть. На широком та же подпись — табличка с именем, и она сама
+             и есть нормальная цель.
+
+             Поэтому считаем цели по их настоящему размеру: годится и подпись
+             на сцене, и строка списка «Стол», если в неё можно попасть. А если
+             ни одна не годится — в доке обязана стоять кнопка, открывающая
+             список. */
+          needsPick: document.querySelectorAll('.mark.pickable, #seats .seat.pickable').length > 0,
+          bigPick: [...document.querySelectorAll('.mark.pickable, #seats .seat.pickable')]
+            .filter(el => el.offsetWidth >= 43.5 && el.offsetHeight >= 43.5 &&
+              el.getBoundingClientRect().height > 0).length,
+          listBtn: !!document.getElementById('btnPickList'),
           role: ((g('rolePane') || {}).innerText || '').trim().slice(0, 60),
           alive: ((g('gAlive') || {}).textContent || '').trim()
         };
@@ -479,6 +526,15 @@ async function playThrough(browser, opts) {
           const demands = /выберите|назовите|передайте|скажите|голосуйте|решите/i.test(st.hint);
           if (!canDo && demands) mute.push(key + ' | ' + st.hint.slice(0, 70));
           if (!st.hint) mute.push(key + ' | БЕЗ ПОДСКАЗКИ');
+          /* Выбор человека должен быть подаваем пальцем, а не только мышью. */
+          if (st.needsPick && !st.bigPick && !st.listBtn) {
+            nopick.push(key + ' | целей крупнее 44px нет и кнопки списка нет');
+          }
+          /* И сказано, куда нажимать: «выберите того, кого город выводит» без
+             указания на место или список — это загадка, а не подсказка. */
+          if (st.needsPick && st.hint && !/нажмите/i.test(st.hint)) {
+            nopick.push(key + ' | подсказка не говорит, куда нажимать');
+          }
         }
       }
 
@@ -499,6 +555,7 @@ async function playThrough(browser, opts) {
     ok(seenPhases.size >= (opts.minPhases || 4),
       label + ': пройдено фаз ' + seenPhases.size + ' (' + [...seenPhases].join(', ') + ')');
     ok(mute.length === 0, label + ': на каждой фазе видно, что делать', JSON.stringify(mute.slice(0, 5)));
+    ok(nopick.length === 0, label + ': выбор человека можно подать пальцем', JSON.stringify(nopick.slice(0, 5)));
     ok(finished, label + ': партия дошла до конца' + (finished ? ' — ' + (bag.finale || '') : ''));
     reportBag(label, bag);
     return finished;
@@ -686,11 +743,15 @@ async function testPhoneHandling(browser) {
   try { require('fs').unlinkSync(DATA); } catch (e) { /* первого файла может и не быть */ }
   console.log('\n=== ТЕСТ 20: прогулка по всем режимам (' + BASE + ') ===');
   const srv = await startServer();
-  const browser = await chromium.launch({
-    executablePath: process.env.CHROME_BIN || '/usr/local/bin/chromium',
+  /* Путь к браузеру: есть CHROME_BIN — берём его, нет — пусть playwright
+     возьмёт свой. Жёсткий путь означал бы, что прогон не запускается нигде,
+     кроме одного стенда. */
+  const launchOpts = {
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=swiftshader',
       '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream']
-  });
+  };
+  if (process.env.CHROME_BIN) launchOpts.executablePath = process.env.CHROME_BIN;
+  const browser = await chromium.launch(launchOpts);
   /* ONLY=play — только партии целиком: они самые долгие, и во время правки
      правил гонять с ними всю прогулку незачем. ONLY=ui — всё остальное. */
   const only = process.env.ONLY || '';

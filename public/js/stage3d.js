@@ -484,6 +484,7 @@ export async function mountStage(container, opts) {
   /* кадр                                                                */
   /* ------------------------------------------------------------------ */
   let raf = 0, last = 0, alive = true;
+  let shakeUntil = 0;
   let fpsAcc = 0, fpsN = 0, degraded = false, lastAdapt = 0;
 
   function frame(now) {
@@ -611,6 +612,19 @@ export async function mountStage(container, opts) {
       }
     }
 
+    /* Дрожь кадра после удара по столу. Считается здесь, в общем кадре, а не
+       собственной цепочкой requestAnimationFrame. Своя цепочка не знала ни
+       про свёрнутую вкладку, ни про разбор сцены: после dispose() она ещё
+       треть секунды двигала уже ненужный объект. А два удара подряд — на
+       столе это обычное дело — запускали две независимые цепочки, и они
+       спорили за одну и ту же позицию, каждая перетирая чужое смещение. */
+    if (shakeUntil > now) {
+      const a = ((shakeUntil - now) / 380) * 0.026;
+      root.position.set((Math.random() - 0.5) * a, (Math.random() - 0.5) * a, 0);
+    } else if (root.position.x || root.position.y) {
+      root.position.set(0, 0, 0);
+    }
+
     if (pipe) pipe.render(dt);
     else renderer.render(scene, camera);
   }
@@ -645,14 +659,7 @@ export async function mountStage(container, opts) {
     /* удар по столу: лампа качнётся, кадр дрогнет */
     shake(k) {
       lamp.nudge(k || 0.06);
-      const until = performance.now() + 380;
-      (function jitter() {
-        const left = until - performance.now();
-        if (left <= 0) { root.position.set(0, 0, 0); return; }
-        const a = (left / 380) * 0.026;
-        root.position.set((Math.random() - 0.5) * a, (Math.random() - 0.5) * a, 0);
-        requestAnimationFrame(jitter);
-      })();
+      shakeUntil = performance.now() + 380;
     },
     seatCount() { return seats.length; },
     /* Ручной выбор качества из настроек: «Кино», «Баланс», «Лёгкий». */

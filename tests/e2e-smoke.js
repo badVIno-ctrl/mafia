@@ -60,10 +60,12 @@ const OVERFLOW_PROBE = () => {
 
 (async () => {
   const srv = await startServer();
-  const browser = await chromium.launch({
-    executablePath: process.env.CHROME_BIN || '/usr/local/bin/chromium',
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=swiftshader']
-  });
+  /* Путь к браузеру: см. пояснение в tests/e2e-play.js. Жёсткий
+     /usr/local/bin/chromium означал, что прогон не запускается нигде, кроме
+     одного стенда. */
+  const launchOpts = { args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=swiftshader'] };
+  if (process.env.CHROME_BIN) launchOpts.executablePath = process.env.CHROME_BIN;
+  const browser = await chromium.launch(launchOpts);
   let failures = 0;
 
   try {

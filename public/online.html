@@ -277,9 +277,30 @@
 .seat .no{position:absolute;top:8px;right:10px;font-family:var(--mono);font-size:var(--t-3xs);color:var(--plaster-faint)}
 .seat.dead{opacity:.45;filter:grayscale(1)}
 .seat.you{border-color:var(--line-warm)}
-.seat.picked{border-color:var(--tallow)}
-.seat.pickable{cursor:pointer}
-.seat.pickable:hover{border-color:var(--line-warm)}
+.seat.picked{border-color:var(--tallow);
+  background:linear-gradient(180deg,rgba(226,180,120,.2),rgba(226,180,120,.05))}
+/* Кого сейчас можно выбрать — видно, а не только по курсору.
+
+   У выбираемого места было ровно два отличия: cursor:pointer и подсветка
+   рамки при наведении. Оба существуют только там, где есть мышь. На телефоне
+   список выглядел одинаково целиком, а невыбираемые места стоят с атрибутом
+   disabled — игрок нажимал, ничего не происходило, и понять, ошибка это или
+   так задумано, было нельзя. Тем обиднее, что именно на этот список теперь
+   указывает подсказка «откройте список».
+
+   Подсветка та же, что у жетона на сцене: тёплая рамка и тонкий контур.
+   Слово «Выбрать» — потому что рамку можно принять за украшение, а прямое
+   предложение нельзя. */
+.seat.pickable{cursor:pointer;border-color:rgba(226,180,120,.55);
+  box-shadow:0 0 0 1px rgba(226,180,120,.22)}
+.seat.pickable::after{
+  content:"Выбрать";position:absolute;right:10px;bottom:10px;
+  font:600 var(--t-3xs)/1 var(--sans);letter-spacing:.06em;color:var(--tallow);
+}
+.seat.picked::after{content:"Выбрано"}
+.seat.pickable:hover{border-color:var(--tallow)}
+/* Место, которое выбрать нельзя, гасим: так видно, что оно не ждёт нажатия. */
+.seat[disabled]:not(.you){opacity:.72}
 /* СЛОИ СЦЕНЫ. Плоский стол лежит НАД декорацией и подписями мест, но ПОД
    планшетом фазы, доком действий, панелью роли и занавесом финала.
 
@@ -338,7 +359,15 @@
 .finale .seat.town .sub{color:var(--verdigris)}
 .finale .seat.maniac .sub{color:#c9a6d6}
 
-body.playing #toast{bottom:96px}
+/* Тост встаёт над доком действий, а не поверх него. Высота дока непостоянна:
+   подсказка на разных фазах занимает от одной строки до четырёх, а кнопок в
+   доке бывает и одна, и три в два ряда. Отступ, подобранный числом, верен для
+   какой-то одной фазы и неверен для остальных — на длинной подсказке плашка
+   садилась прямо на текст. Живую высоту дока измеряет js/online.js и кладёт в
+   --dockH; здесь остаётся прибавить отступ самого дока от низа и зазор.
+   Значение по умолчанию подобрано так, чтобы до первого замера отступ был
+   тем же, что и раньше. */
+body.playing #toast{bottom:calc(34px + var(--dockH, 62px))}
 
 /* нижняя панель вкладок и кнопка чата в шапке — только на телефоне */
 .startbar{margin-top:var(--s3)}
@@ -400,7 +429,8 @@ body.playing #toast{bottom:96px}
   .timer{font-size:var(--t-lg);min-width:54px}
   .actiondock{left:var(--s2);right:var(--s2);bottom:66px;padding:10px}
   /* Тост не должен садиться на панель вкладок и на док действий. */
-  body.playing #toast{bottom:160px}
+  /* Снизу отсчитываем и панель вкладок (56 px), и док действий. */
+  body.playing #toast{bottom:calc(78px + var(--dockH, 82px))}
   .mark{min-width:78px;max-width:132px;padding:5px 7px}
   .flatwrap{padding:70px var(--s3) 130px}
   /* Полоса с главным действием: всегда под рукой, но внутри своей панели —

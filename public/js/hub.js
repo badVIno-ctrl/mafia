@@ -177,11 +177,8 @@
     $('btnGuest').addEventListener('click', function () {
       var b = this;
       b.disabled = true;
-      API.call('/api/register', { name: 'Гость ' + (10 + Math.floor(Math.random() * 89)) })
-        .then(function (r) {
-          API.save(r.user);
-          location.href = '/online.html?solo=1';
-        })
+      API.guest()
+        .then(function () { location.href = '/online.html?solo=1'; })
         .catch(API.fail)
         .then(function () { b.disabled = false; });
     });

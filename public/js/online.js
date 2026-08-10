@@ -484,6 +484,9 @@
     renderMarks(g, you);
     renderFlatSeats(g, you);
     renderActions(g, you, room);
+    /* Зовём после дока и после подсказки: высоту дока задаёт как раз она, а
+       подсказка меняется и без смены кнопок. */
+    measureDock();
     renderChat(g, you);
     renderLog(g);
     renderFinale(g);
@@ -579,13 +582,28 @@
     $('marks').innerHTML = '';
   }
 
+  /* Жетон вместо таблички: только номер места. Иначе на телефоне двадцать
+     подписей перекрывают друг друга и не читается ни одна.
+
+     Важное следствие, из которого растёт всё дальнейшее: в режиме жетонов
+     подпись места — кружок 30 px с одним номером внутри. Замер по живой
+     сцене на телефоне 390 px: центры соседних жетонов расходятся на 61 px при
+     восьми игроках, на 39 при двенадцати и на 24 при двадцати — то есть при
+     полном столе жетоны уже перекрываются. Пальцем в такой жетон попадать
+     нельзя, и увеличение этого не исправит: места на дуге ровно столько,
+     сколько есть, а промах здесь означает проверку не того человека.
+
+     Значит выбирать надо в списке — он давно есть во вкладке «Стол», просто
+     игроку об этом никто не говорил. */
+  function chipMode(g) {
+    return g.players.length > 14 || window.innerWidth < 620;
+  }
+
   /* Подписи мест: создаются один раз, дальше только правятся и двигаются. */
   function renderMarks(g, you) {
     if (!stg()) return;
     var box = $('marks');
-    /* Жетон вместо таблички: только номер места. Иначе на телефоне двадцать
-       подписей перекрывают друг друга и не читается ни одна. */
-    var chip = g.players.length > 14 || window.innerWidth < 620;
+    var chip = chipMode(g);
     setCls(box, 'chips', chip);
     syncKeyed(box, g.players, function (p) { return p.id; },
       function () {
@@ -836,8 +854,12 @@
   function renderActions(g, you, room) {
     var act = you.canAct;
     var iq = g.inquest || null;
+    /* Режим жетонов и открытая панель входят в ключ: от них зависит, нужна ли
+       кнопка «Выбрать в списке». Режим жетонов меняется при повороте
+       телефона, панель — по нажатию на вкладку. */
+    var chip = chipMode(g);
     var key = [g.finished, act, you.ready, you.myVote, you.healBlocked, you.alive, g.speakerId,
-      g.lastWordId, g.bestMoveOpen, you.myPress, state.pressA, you.shieldSpent,
+      g.lastWordId, g.bestMoveOpen, you.myPress, state.pressA, you.shieldSpent, chip, state.panel,
       (g.mafiaBoard || []).map(function (m) { return m.id + m.tag; }).join(','),
       (g.tieNames || []).join(','),
       iq ? [iq.method, iq.expertDone, iq.expertVotes, iq.clues.length].join(',') : ''].join('|');
@@ -926,8 +948,44 @@
         : '<button class="btn sm" id="btnExpert">Заказать экспертизу' +
           (iq.expertVotes ? ' (' + iq.expertVotes + ' из ' + iq.expertNeed + ')' : '') + '</button>');
     }
+    /* Ход, которого не было видно.
+
+       Когда от игрока ждут выбора человека — жертву, проверку, лечение,
+       голос, — выбор подаётся нажатием на место. На широком экране это
+       очевидно: у места есть табличка с именем и её видно. На телефоне
+       остаётся жетон с номером, и весь ход выглядит так: подсказка говорит
+       «за кого голосуете», а нажимать вроде бы некуда. Список с настоящими
+       именами всё это время лежал во вкладке «Стол», но ни одна надпись на
+       него не указывала — узнать о нём можно было только случайно.
+
+       Кнопка не добавляет нового способа играть, она показывает уже
+       существующий: одно нажатие открывает список, где у каждого места имя,
+       номер и высота 92 px. */
+    if (chip && needsPick(g, you) && state.panel !== 'table') {
+      a += '<button class="btn primary sm" id="btnPickList">Выбрать в списке</button>';
+    }
     setHTML($('actions'), a);
   }
+
+  /* Высота дока действий — в переменную, из которой считается отступ тоста.
+     Мерить приходится живьём: подсказка занимает от одной строки до четырёх, а
+     кнопок бывает и одна, и три в два ряда. Одно чтение раскладки после
+     отрисовки дешевле, чем плашка тоста поверх кнопки хода. */
+  function measureDock() {
+    var dock = $('actionDock');
+    if (!dock) return;
+    var h = dock.offsetHeight || 0;
+    if (h) document.documentElement.style.setProperty('--dockH', h + 'px');
+  }
+
+  /* Ждёт ли партия от игрока выбора человека и есть ли кого выбирать. */
+  function needsPick(g, you) {
+    if (!you.canAct || g.finished || you.alive === false) return false;
+    if (PICKLESS[you.canAct]) return false;
+    return g.players.some(function (p) { return canTarget(g, you, p); });
+  }
+  /* Ходы, у которых цель — не человек: они целиком живут в кнопках дока. */
+  var PICKLESS = { talk: 1, speak: 1, listen: 1, lastword: 1, tievote: 1 };
 
   /* ---------------------------- чат ---------------------------- */
   function renderChat(g, you) {
@@ -1121,7 +1179,27 @@
   /* =======================================================================
      подсказки и правила выбора
      ======================================================================= */
+  /* Куда нажимать. Подсказка описывала, что решить, но не говорила, чем это
+     решение подаётся, — а на телефоне не догадаешься: место превращается в
+     жетон с номером, и «выберите того, кого город выводит» повисает в
+     воздухе. Дописываем одно предложение и только когда от игрока
+     действительно ждут выбора человека.
+
+     Предложение держим коротким: название кнопки в нём не повторяем — кнопка
+     стоит рядом и подписана сама, а каждая лишняя строка растит док действий,
+     который на телефоне и без того занимает низ кадра. */
+  function whereToTap(g, you) {
+    if (!needsPick(g, you)) return '';
+    return chipMode(g)
+      ? ' Нажмите на жетон места или откройте список.'
+      : ' Нажмите на имя игрока за столом.';
+  }
+
   function hintFor(g, you) {
+    return baseHint(g, you) + whereToTap(g, you);
+  }
+
+  function baseHint(g, you) {
     if (g.finished) return 'Партия окончена — роли раскрыты.';
     if (g.phase === 'prologue') return g.scenario.prologue;
     /* Выбывший читал те же подсказки, что и живые: «Голосование: выберите
@@ -1309,6 +1387,7 @@
       }
       return;
     }
+    if (e.target.closest('#btnPickList')) return openPanel('table');
     if (e.target.closest('#btnExpert')) return askExpert();
     if (e.target.closest('#btnBestMove')) return askBestMove();
     if (e.target.closest('#btnReady')) return act('ready', null);
@@ -1766,6 +1845,11 @@
     $('marks').hidden = narrow ? which !== 'stage' : which === 'table';
     if (which === 'chat') { state.unread = 0; $('gFeed').scrollTop = $('gFeed').scrollHeight; }
     paintTabs();
+    /* Кнопка «Выбрать в списке» нужна только пока список закрыт — значит при
+       смене панели док надо пересобрать, не дожидаясь сообщения от сервера. */
+    if (state.game && state.room && state.room.started) {
+      renderActions(state.game, state.game.you || {}, state.room);
+    }
   }
   /* Кнопка чата в шапке. Знак ей никто не рисовал: в разметке лежит только
      подпись «Чат», а на телефоне подписи у кнопок-знаков спрятаны — и всю
@@ -1861,6 +1945,28 @@
   syncBarH();
   if (window.ResizeObserver) new ResizeObserver(syncBarH).observe($('topbar'));
   else window.addEventListener('resize', syncBarH);
+
+  /* Поворот телефона меняет ширину, а от ширины зависит и вид подписей
+     (табличка или жетон), и подсказка «куда нажимать», и нужна ли кнопка
+     «Выбрать в списке». Раньше пересчёт случался только со следующим
+     сообщением от сервера, и до него игрок держал в руках интерфейс от
+     прошлой ориентации. Ждать сообщения незачем: перерисовка стоит копейки.
+     Считаем один раз после того, как поворот закончился, — иначе за один
+     жест сюда прилетает несколько десятков событий. */
+  var reflowWait = 0;
+  window.addEventListener('resize', function () {
+    clearTimeout(reflowWait);
+    reflowWait = setTimeout(function () {
+      var g = state.game;
+      if (!g || !state.room || !state.room.started) return;
+      var you = g.you || {};
+      state.actionsKey = null;
+      renderMarks(g, you);
+      renderActions(g, you, state.room);
+      setText($('gHint'), hintFor(g, you));
+      measureDock();
+    }, 160);
+  }, { passive: true });
   /* Шрифты приезжают после первого кадра и меняют высоту строки. */
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncBarH);
 
