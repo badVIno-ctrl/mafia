@@ -25,6 +25,7 @@
      слова, образ — потом. Игрок не должен расшифровывать «занавес». */
   var PHASE_RU = {
     prologue: 'Знакомство', night: 'Ночь', morning: 'Утро',
+    lastword: 'Последнее слово',
     speech: 'День — слово по кругу',
     day: 'День — обсуждение', vote: 'Голосование', runoff: 'Повторное голосование', over: 'Игра окончена'
   };
@@ -32,12 +33,14 @@
   var ACT_RU = {
     kill: 'Выберите жертву', heal: 'Кого спасаете этой ночью',
     check: 'Кого проверяете', vote: 'За кого голосуете',
-    speak: 'Слово у вас', listen: 'Слушайте'
+    speak: 'Слово у вас', listen: 'Слушайте',
+    lastword: 'Последнее слово ваше', bestmove: 'Назовите трёх подозреваемых'
   };
   /* Что ведущий говорит вслух при смене фазы. */
   var NARRATE = {
     night: 'Город засыпает.',
     morning: 'Город просыпается.',
+    lastword: 'Последнее слово выбывшего.',
     speech: 'Слово идёт по кругу.',
     day: 'День. Обсуждайте, кто вам кажется подозрительным.',
     vote: 'Голосуем.',
@@ -269,6 +272,17 @@
       $('autoStart').checked = room.autoStart;
       $('openTable').checked = room.visibility !== 'invite';
       if ($('modeInquest')) $('modeInquest').checked = room.mode === 'inquest';
+      if ($('lastWordOn')) $('lastWordOn').checked = room.lastWord !== false;
+      /* Темп: три кнопки, у каждой видно, сколько секунд даётся на речь.
+         Число здесь важнее названия — именно оно отвечает на вопрос «а это
+         долго?». */
+      if ($('speedPick')) {
+        setHTML($('speedPick'), (room.speedList || []).map(function (sp) {
+          return '<button class="btn sm' + (room.speed === sp.id ? ' on' : '') +
+            '" data-speed="' + sp.id + '" title="' + API.esc(sp.hint) + '">' +
+            API.esc(sp.ru) + ' <span class="muted">' + sp.speech + ' с</span></button>';
+        }).join(''));
+      }
       $('btnStart').disabled = !room.canStart;
       setText($('btnStart'), room.canStart ? 'Начать партию (' + room.members.length + ')' : 'Нужно хотя бы шесть человек');
       /* Добор ботами: сколько мест осталось — столько и предлагаем занять. */
@@ -666,6 +680,7 @@
     var act = you.canAct;
     var iq = g.inquest || null;
     var key = [g.finished, act, you.ready, you.myVote, you.healBlocked, you.alive, g.speakerId,
+      g.lastWordId, g.bestMoveOpen,
       iq ? [iq.method, iq.expertDone, iq.expertVotes, iq.clues.length].join(',') : ''].join('|');
     if (state.actionsKey === key) return;
     state.actionsKey = key;
@@ -678,8 +693,14 @@
       a = '<button class="btn sm" data-target="skip">Воздержаться</button>';
     } else if (act === 'speak') {
       a = '<button class="btn primary sm" id="btnPass">Передать слово</button>';
+    } else if (act === 'lastword') {
+      a = '<button class="btn primary sm" id="btnPass">Я всё сказал</button>';
+    } else if (act === 'bestmove') {
+      a = '<button class="btn primary sm" id="btnBestMove">Назвать трёх</button>' +
+        '<button class="btn sm" id="btnPass">Уйти молча</button>';
     } else if (act === 'listen') {
-      a = '<span class="pill">Слово у ' + API.esc(g.speakerName || '—') + '</span>';
+      a = '<span class="pill">Слово у ' +
+        API.esc(g.phase === 'lastword' ? (g.lastWordName || '—') : (g.speakerName || '—')) + '</span>';
     } else if (act === 'talk') {
       a = '<button class="btn sm ' + (you.ready ? 'on' : '') + '" id="btnReady">' +
         (you.ready ? 'Готов' : 'Я высказался') + '</button>';
@@ -880,6 +901,14 @@
     if (g.phase === 'prologue') return g.scenario.prologue;
     if (g.phase === 'night') return 'Город засыпает. ' + (you.canAct ? ACT_RU[you.canAct] + '.' : 'Ждите утра.');
     if (g.phase === 'morning') return 'Утро. Город считает потери.';
+    if (g.phase === 'lastword') {
+      if (you.canAct === 'bestmove') {
+        return 'Последнее слово ваше. И лучший ход: назовите трёх, на кого показываете. ' +
+          'Город услышит все три имени сразу.';
+      }
+      if (you.canAct === 'lastword') return 'Последнее слово ваше: скажите столу то, что считаете нужным.';
+      return 'Последнее слово у ' + API.esc(g.lastWordName || '—') + '. Слушайте: он уже вне игры и говорит прямо.';
+    }
     if (g.phase === 'speech') {
       var left = g.speechLeft ? ', после вас ещё ' + g.speechLeft : '';
       return you.canAct === 'speak'
@@ -931,7 +960,7 @@
 
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-join],[data-sit],[data-invite],[data-kick],[data-scen],[data-target],' +
-      '[data-tab],[data-say],[data-panel],[data-method],[data-expert],[data-note-set]');
+      '[data-tab],[data-say],[data-panel],[data-method],[data-expert],[data-note-set],[data-speed]');
     if (el) {
       if (el.dataset.join) return call('/api/rooms/join', { roomId: el.dataset.join });
       /* Сесть за открытый стол — без ссылки и без приглашения. */
@@ -946,6 +975,7 @@
         .then(function () { API.toast('Приглашение отправлено'); });
       if (el.dataset.kick) return call('/api/rooms/kick', { userId: el.dataset.kick });
       if (el.dataset.scen) return call('/api/rooms/config', { scenarioId: el.dataset.scen });
+      if (el.dataset.speed) return call('/api/rooms/config', { speed: el.dataset.speed });
       if (el.dataset.tab) { state.tab = el.dataset.tab; if (state.game) renderChat(state.game, state.game.you || {}); return; }
       if (el.dataset.say) {
         var box = el.closest('.msg');
@@ -967,6 +997,7 @@
        складывается, и один факт становится общим. Спрашиваем в два шага,
        чтобы не строить отдельного окна. */
     if (e.target.closest('#btnExpert')) return askExpert();
+    if (e.target.closest('#btnBestMove')) return askBestMove();
     if (e.target.closest('#btnReady')) return act('ready', null);
     if (e.target.closest('#btnPass')) return act('pass', null);
     if (e.target.closest('#btnRestart')) return call('/api/rooms/restart');
@@ -1028,6 +1059,53 @@
       document.addEventListener(ev, function () { clearTimeout(timer); startedOn = null; }, true);
     });
   })();
+
+  /* Лучший ход: три имени от убитого первой ночью.
+
+     Почему одним окном, а не тремя нажатиями по столу. Три имени должны
+     прозвучать одновременно: если город услышит первое имя раньше двух
+     остальных, он начнёт обсуждать его, не дослушав, и весь смысл лучшего
+     хода — «вот моя картина целиком» — пропадёт. */
+  function askBestMove() {
+    var g = state.game;
+    if (!g) return;
+    var picked = [];
+    function draw() {
+      var h = '<div class="expert"><h3>Лучший ход</h3>' +
+        '<p class="note">Вас убили первой ночью — значит вы видели день, которого ' +
+        'остальные ещё не поняли. Назовите трёх, на кого показываете. ' +
+        'Все три имени стол увидит сразу, и они останутся в протоколе.</p>' +
+        '<div class="grid2">';
+      g.players.forEach(function (p) {
+        if (!p.alive || p.id === g.you.id) return;
+        var on = picked.indexOf(p.id) >= 0;
+        h += '<button class="btn sm' + (on ? ' on' : '') + '" data-bm="' + p.id + '">' +
+          '№' + p.seat + ' · ' + API.esc(p.name) + '</button>';
+      });
+      h += '</div><div class="row tight" style="margin-top:var(--s3)">' +
+        '<button class="btn primary sm" id="bmSend"' + (picked.length === 3 ? '' : ' disabled') + '>' +
+        'Назвать (' + picked.length + ' из 3)</button>' +
+        '<button class="btn ghost sm" id="expertClose">Отмена</button></div></div>';
+      setHTML($('expertBox'), h);
+      $('expertBox').hidden = false;
+    }
+    $('expertBox').onclick = function (e) {
+      var b = e.target.closest('[data-bm]');
+      if (b) {
+        var id = b.dataset.bm;
+        var i = picked.indexOf(id);
+        if (i >= 0) picked.splice(i, 1);
+        else if (picked.length < 3) picked.push(id);
+        return draw();
+      }
+      if (e.target.closest('#bmSend')) {
+        act('bestmove', picked.join(','));
+        $('expertBox').hidden = true;
+        $('expertBox').onclick = null;
+      }
+    };
+    draw();
+  }
 
   /* Экспертиза: выбираем, кого и по какой примете проверить. Список примет
      — только те, что уже всплывали в уликах: проверять то, о чём улик не
@@ -1138,6 +1216,11 @@
   $('sizeRange').addEventListener('input', function () { setText($('sizeVal'), this.value); });
   $('sizeRange').addEventListener('change', function () { call('/api/rooms/config', { size: Number(this.value) }); });
   $('autoStart').addEventListener('change', function () { call('/api/rooms/config', { autoStart: this.checked }); });
+  if ($('lastWordOn')) {
+    $('lastWordOn').addEventListener('change', function () {
+      call('/api/rooms/config', { lastWord: this.checked });
+    });
+  }
   $('openTable').addEventListener('change', function () {
     var on = this.checked;
     call('/api/rooms/config', { visibility: on ? 'public' : 'invite' })

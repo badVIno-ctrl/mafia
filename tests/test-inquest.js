@@ -176,7 +176,11 @@ function nightWith(methodId, opts) {
       alive.forEach(p => g.action(p.id, 'vote', alive[0].id === p.id ? 'skip' : alive[0].id));
       g.resolveVote();
     } else if (g.phase === 'morning') {
-      g.startSpeech();
+      g.afterMorning();
+    } else if (g.phase === 'lastword') {
+      /* Последнее слово выбывшего: в этом тесте нас интересуют улики, а не
+         речи, поэтому закрываем его сразу. */
+      g.endLastWord();
     } else break;
   }
   ok(g.finished, 'партия в «Следствии» доигрывается до конца (' + g.winner + ')');

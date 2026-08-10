@@ -111,7 +111,7 @@
     phase: function (phase) {
       return {
         prologue: 'scroll', night: 'moon', morning: 'sunrise', day: 'people',
-        speech: 'chat', vote: 'gavel', runoff: 'gavel', over: 'mask'
+        speech: 'chat', lastword: 'mask', vote: 'gavel', runoff: 'gavel', over: 'mask'
       }[phase] || 'hourglass';
     }
   };

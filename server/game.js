@@ -46,7 +46,10 @@ class Game {
     this.seed = String(opts.seed || Rng.freshSeed());
     this.rng = Rng.createRng(this.seed);
 
-    this.timing = C.timing(n);
+    /* Скорость стола. «Блиц» — партия в перерыве, «Клуб» — полные речи.
+       Пресеты живут в конфигурации, здесь только выбор. */
+    this.speed = C.speedById(opts.speed).id;
+    this.timing = C.timing(n, this.speed);
     this.scenario = C.scenarioById(scenarioId) || this.rng.pick(C.scenariosFor(n)) || C.SCENARIOS[0];
     this.composition = C.composition(n);
 
@@ -88,8 +91,32 @@ class Game {
       this.publicTraits = {};       // приметы выбывших — общее достояние
     }
 
+    /* ------------------------------------------------------------------
+       ПОСЛЕДНЕЕ СЛОВО И ЛУЧШИЙ ХОД
+
+       Две механики живых столов, которых в движке не было, а спрашивают о
+       них чаще всего.
+
+       Последнее слово: того, кого только что вывели, стол выслушивает перед
+       уходом. Это не украшение — это информация. Половина разборов после
+       партии строится на том, что сказал выбывший, и без последнего слова
+       игра теряет самый драматичный свой момент: человек уже знает, что
+       проиграл эту роль, и говорит то, что думает.
+
+       Лучший ход: убитый первой ночью называет трёх подозреваемых. Мафия
+       ходит первой и знает друг друга, город не знает ничего — лучший ход
+       и есть та компенсация, которая даёт городу стартовый капитал. В
+       спортивной мафии это стандарт.
+       ------------------------------------------------------------------ */
+    this.lastWordOn = opts.lastWord !== false;
+    this.bestMoveOn = opts.bestMove !== false;
+    this.lastWordId = null;        // кто говорит последнее слово
+    this.lastWordNext = null;      // куда идём после него: 'speech' | 'night'
+    this.bestMoveOpen = false;     // ждём ли трёх имён от него
+    this.bestMove = null;          // { by, byName, picks:[{id,name,seat}], hits }
+
     this.day = 0;
-    this.phase = 'prologue';        // prologue | night | morning | speech | day | vote | runoff | over
+    this.phase = 'prologue';        // prologue | night | morning | lastword | speech | day | vote | runoff | over
     this.deadline = now() + 12000;
     this.finished = false;
     this.winner = null;
@@ -111,8 +138,9 @@ class Game {
     this.left = new Set();
 
     /* Когда слово идёт по кругу, общее обсуждение после него короче: иначе
-       день на двадцать человек растягивается на двадцать пять минут. */
-    if (this.speeches) this.timing.day = Math.min(120, 30 + n * 3);
+       день на двадцать человек растягивается на двадцать пять минут.
+       Насколько короче — решает пресет скорости. */
+    if (this.speeches) this.timing.day = this.timing.afterCircle;
 
     this.pushLog('story', this.scenario.prologue);
     this.pushLog('sys', 'Состав стола: ' + C.compositionLabel(n) + '.');
@@ -125,6 +153,11 @@ class Game {
     if (this.speeches) {
       this.pushLog('sys', 'Слово идёт по кругу: у каждого ' + this.timing.speech +
         ' секунд, можно передать слово раньше.');
+    }
+    if (this.lastWordOn) {
+      this.pushLog('sys', 'Последнее слово: выбывший получает ' + this.timing.lastWord +
+        ' секунд высказаться перед уходом.' +
+        (this.bestMoveOn ? ' Убитый первой ночью назовёт трёх подозреваемых — это «лучший ход».' : ''));
     }
   }
 
@@ -177,7 +210,10 @@ class Game {
     const t = now();
 
     let ch = channel || 'town';
-    if (!p.alive) ch = 'ghost';
+    /* Последнее слово — единственный случай, когда выбывший говорит со
+       столом. Без этого исключения его реплики уходили бы в чат выбывших,
+       то есть в пустоту: живые их не видят. */
+    if (!p.alive && !(this.phase === 'lastword' && this.lastWordId === userId)) ch = 'ghost';
     else if (ch === 'mafia' && !(this.isMafia(userId) && this.phase === 'night')) return { error: 'Ночной чат сейчас недоступен' };
     else if (ch === 'town' && this.phase === 'speech') {
       /* В этом и весь смысл круга: пока говорит один, остальные слушают.
@@ -187,12 +223,16 @@ class Game {
         return { error: 'Слово у ' + this.nameOf(this.speaker) + ' — дождитесь своей очереди' };
       }
     }
+    else if (ch === 'town' && this.phase === 'lastword') {
+      if (this.lastWordId !== userId) return { error: 'Последнее слово у ' + this.nameOf(this.lastWordId) };
+    }
     else if (ch === 'town' && !(this.phase === 'prologue' || this.phase === 'day' || this.phase === 'vote' || this.phase === 'runoff' || this.phase === 'morning' || this.phase === 'over')) {
       return { error: 'Город спит — говорить нельзя' };
     }
 
-    /* антифлуд общего стола: шёпот мафии и голоса за чертой не ограничены */
-    if (ch === 'town' && this.phase !== 'speech') {
+    /* антифлуд общего стола: шёпот мафии, голоса за чертой и последнее
+       слово не ограничены — там говорит один, и перебить его нельзя */
+    if (ch === 'town' && this.phase !== 'speech' && this.phase !== 'lastword') {
       if (p.lastSayAt && t - p.lastSayAt < 900) return { error: 'Не так быстро — дайте столу вставить слово' };
       if (p.lastSayText === text && t - (p.lastSayTextAt || 0) < 15000) return { error: 'Вы уже это сказали' };
       p.lastSayAt = t;
@@ -218,8 +258,38 @@ class Game {
   /* ------------------------------ действия ------------------------------ */
   action(userId, type, targetId) {
     const me = this.p(userId);
-    if (!me || !me.alive) return { error: 'Действие недоступно' };
+    if (!me) return { error: 'Действие недоступно' };
+    /* Выбывший обычно ничего не делает — кроме последнего слова и лучшего
+       хода: и то и другое он подаёт уже мёртвым, и именно в этом их смысл. */
+    const lastWordMine = this.phase === 'lastword' && this.lastWordId === userId;
+    if (!me.alive && !lastWordMine) return { error: 'Действие недоступно' };
     const t = targetId ? this.p(targetId) : null;
+
+    /* Лучший ход: три имени от убитого первой ночью. Подаётся одной
+       строкой «id,id,id» — стол видит результат целиком, а не по одному
+       имени, иначе первое же названное имя решило бы день. */
+    if (type === 'bestmove') {
+      if (!this.bestMoveOpen || !lastWordMine) return { error: 'Лучший ход сейчас не ваш' };
+      const ids = String(targetId || '').split(',').map(x => x.trim()).filter(Boolean);
+      const picks = [];
+      for (const id of ids) {
+        const q = this.p(id);
+        if (!q || q.id === userId) continue;
+        if (picks.some(x => x.id === q.id)) continue;
+        picks.push({ id: q.id, name: q.name, seat: q.seat });
+      }
+      if (picks.length !== 3) return { error: 'Нужно назвать ровно трёх разных игроков' };
+      this.bestMoveOpen = false;
+      this.bestMove = {
+        by: userId, byName: me.name, bySeat: me.seat, picks,
+        /* Сколько из названных оказались чёрными. Считаем сразу, но
+           показываем только после занавеса: до него это раскрытие ролей. */
+        hits: picks.filter(x => this.isMafia(x.id)).length
+      };
+      this.pushLog('bestmove', 'Лучший ход ' + me.name + ': ' +
+        picks.map(x => x.name + ' (' + x.seat + ')').join(', ') + '.');
+      return { ok: true };
+    }
 
     if (type === 'kill') {
       if (this.phase !== 'night' || !this.isMafia(userId)) return { error: 'Не сейчас' };
@@ -275,6 +345,11 @@ class Game {
       return { ok: true };
     }
     if (type === 'pass') {            // «я всё сказал» — передать слово по кругу
+      if (this.phase === 'lastword') {
+        if (this.lastWordId !== userId) return { error: 'Слово не у вас' };
+        this.endLastWord();
+        return { ok: true };
+      }
       if (this.phase !== 'speech') return { error: 'Слово сейчас не по кругу' };
       if (this.speaker !== userId) return { error: 'Слово не у вас' };
       this.nextSpeaker();
@@ -304,7 +379,13 @@ class Game {
     } else if (this.phase === 'night') {
       if (expired || this.allNightActionsIn()) { this.resolveNight(); changed = true; }
     } else if (this.phase === 'morning') {
-      if (expired) { this.startSpeech(); changed = true; }
+      if (expired) { this.afterMorning(); changed = true; }
+    } else if (this.phase === 'lastword') {
+      /* Последнее слово кончается по времени, по кнопке «я всё сказал» или
+         сразу, если говорить некому: человек закрыл вкладку или встал из-за
+         стола. Стол не должен смотреть в тишину полминуты. */
+      const gone = this.offline.has(this.lastWordId) || this.left.has(this.lastWordId);
+      if (expired || gone) { this.endLastWord(); changed = true; }
     } else if (this.phase === 'speech') {
       /* Слово кончилось само или говорящий выбыл из партии по ходу дела. */
       const sp = this.speaker ? this.p(this.speaker) : null;
@@ -452,6 +533,7 @@ class Game {
       this.pushLog('morning', 'Утро ' + this.day + '. Этой ночью все выжили — врач успел вовремя.');
     } else if (victim) {
       this.kill(victim, 'night');
+      this.pendingLastWord = victim;
       this.pushLog('morning', 'Утро ' + this.day + '. ' + this.nameOf(victim) + ' не дожил' + '(а) до рассвета. Роль: ' +
         C.ROLE_INFO[this.p(victim).role].ru + '. ' + this.scenario.deathFlavor);
     } else {
@@ -502,6 +584,63 @@ class Game {
     this.pushLog('expert', 'Экспертиза: у ' + this.nameOf(targetId) + ' приметы «' +
       Inquest.traitShort(traitId) + '» ' + (has ? 'есть' : 'нет') + '.');
     return true;
+  }
+
+  /* --------------------------- последнее слово --------------------------- */
+
+  /**
+   * Дать последнее слово выбывшему.
+   * @param {string} id кто говорит
+   * @param {'speech'|'night'} next куда идти после
+   * @returns {boolean} началось ли слово (иначе идём дальше сразу)
+   */
+  startLastWord(id, next) {
+    if (this.finished || !this.lastWordOn) return false;
+    const p = this.p(id);
+    /* Ушедшему и потерявшему связь слова не даём: ждать нечего. */
+    if (!p || this.offline.has(id) || this.left.has(id)) return false;
+
+    this.lastWordId = id;
+    this.lastWordNext = next;
+    this.phase = 'lastword';
+    this.speaker = id;
+    this.deadline = now() + this.timing.lastWord * 1000;
+
+    /* Лучший ход достаётся только убитому первой ночью — и только если он
+       вообще был: если первую ночь никто не потерял, права на три имени ни
+       у кого нет. Днём казнённый лучшего хода не получает: он говорил весь
+       день, город его уже слышал. */
+    this.bestMoveOpen = this.bestMoveOn && !this.bestMove &&
+      this.day === 1 && p.deathCause === 'night';
+
+    this.pushLog('lastword', 'Последнее слово: ' + p.name + ' (место ' + p.seat + ').' +
+      (this.bestMoveOpen ? ' Он же называет трёх подозреваемых — лучший ход.' : ''));
+    return true;
+  }
+
+  /** Слово кончилось. Идём туда, откуда пришли. */
+  endLastWord() {
+    const next = this.lastWordNext;
+    if (this.bestMoveOpen) {
+      this.pushLog('sys', 'Лучший ход не назван: ' + this.nameOf(this.lastWordId) + ' промолчал.');
+    }
+    this.lastWordId = null;
+    this.lastWordNext = null;
+    this.bestMoveOpen = false;
+    this.speaker = null;
+    if (this.checkWin()) return;
+    if (next === 'night') return this.startNight();
+    return this.startSpeech();
+  }
+
+  /** После утра: либо последнее слово убитого, либо сразу круг речей. */
+  afterMorning() {
+    if (this.pendingLastWord) {
+      const id = this.pendingLastWord;
+      this.pendingLastWord = null;
+      if (this.startLastWord(id, 'speech')) return true;
+    }
+    return this.startSpeech();
   }
 
   /* ------------------------------ круг речей ------------------------------ */
@@ -612,11 +751,17 @@ class Game {
     const idx = top[0];
     this.kill(idx, 'vote');
     this.pushLog('execution', 'Город казнил ' + this.nameOf(idx) + '. Роль: ' + C.ROLE_INFO[this.p(idx).role].ru + '.');
+    this.pendingLastWord = idx;
     this.afterVote();
   }
 
   afterVote() {
     if (this.checkWin()) return;
+    if (this.pendingLastWord) {
+      const id = this.pendingLastWord;
+      this.pendingLastWord = null;
+      if (this.startLastWord(id, 'night')) return;
+    }
     this.startNight();
   }
 
@@ -657,6 +802,10 @@ class Game {
       ? 'Город победил: вся мафия (' + mafiaTotal + ') выбыла из игры.'
       : 'Мафия победила: её осталось ' + mafiaAlive + ', мирных — ' + townAlive +
         '. Город больше не может её переголосовать.');
+    if (this.bestMove) {
+      this.pushLog('bestmove', 'Лучший ход ' + this.bestMove.byName + ': угадано ' +
+        this.bestMove.hits + ' из 3.');
+    }
     this.pushLog('story', winner === 'town' ? this.scenario.finaleTown : this.scenario.finaleMafia);
     return true;
   }
@@ -686,6 +835,18 @@ class Game {
 
     if (this.finished) {
       return { channel: 'town', peers: ids(this.players), why: '' };
+    }
+    /* Последнее слово слышит весь стол. Это единственная минута партии,
+       когда выбывший говорит с живыми — и она же самая важная для разбора:
+       без неё половина драмы живого стола пропадает. */
+    if (this.phase === 'lastword') {
+      const mine = this.lastWordId === userId;
+      const peers = ids(this.alive().concat(
+        this.lastWordId && this.p(this.lastWordId) ? [this.p(this.lastWordId)] : []));
+      return {
+        channel: 'town', peers, mute: !mine,
+        why: mine ? 'Последнее слово у вас' : 'Последнее слово у ' + this.nameOf(this.lastWordId)
+      };
     }
     if (!me.alive) {
       return {
@@ -846,6 +1007,28 @@ class Game {
       view.mode = 'classic';
     }
 
+    view.speed = this.speed;
+    view.timing = {
+      night: this.timing.night, day: this.timing.day, speech: this.timing.speech,
+      vote: this.timing.vote, lastWord: this.timing.lastWord
+    };
+    if (this.phase === 'lastword') {
+      view.lastWordId = this.lastWordId;
+      view.lastWordName = this.nameOf(this.lastWordId);
+      /* Право на три имени видно только тому, у кого оно есть: остальным
+         это подсказка, кого сейчас будут называть. */
+      if (me && me.id === this.lastWordId) view.bestMoveOpen = this.bestMoveOpen;
+    }
+    /* Лучший ход публичен с момента, как он назван: в этом и весь смысл —
+       город получает три имени от того, кто уже не играет. Сколько из них
+       чёрные, показываем только после занавеса. */
+    if (this.bestMove) {
+      view.bestMove = {
+        by: this.bestMove.by, byName: this.bestMove.byName, bySeat: this.bestMove.bySeat,
+        picks: this.bestMove.picks,
+        hits: revealAll ? this.bestMove.hits : null
+      };
+    }
     if (this.runoffOf) view.runoffOf = this.runoffOf;
     if (this.phase === 'speech') {
       view.speakerId = this.speaker;
@@ -856,6 +1039,7 @@ class Game {
   }
 
   phaseSeconds() {
+    if (this.phase === 'lastword') return this.timing.lastWord;
     if (this.phase === 'speech') return this.timing.speech;
     if (this.phase === 'night') return this.timing.night;
     if (this.phase === 'day') return this.timing.day;
@@ -865,7 +1049,12 @@ class Game {
   }
 
   canAct(me) {
-    if (!me.alive || this.finished) return null;
+    if (this.finished) return null;
+    if (this.phase === 'lastword') {
+      if (this.lastWordId !== me.id) return 'listen';
+      return this.bestMoveOpen ? 'bestmove' : 'lastword';
+    }
+    if (!me.alive) return null;
     if (this.phase === 'night') {
       if (this.isMafia(me.id)) return 'kill';
       if (me.role === ROLE.DOCTOR) return 'heal';
